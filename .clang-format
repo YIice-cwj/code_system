@@ -1,0 +1,59 @@
+---
+# C++ AI 编码规范 - Clang-Format 配置
+# 版本: 1.0.0
+# 日期: 2026-04-27
+
+Language: Cpp
+
+# 缩进设置 - 4空格，禁用Tab
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+# 大括号风格 - 与关键字在同一行
+BreakBeforeBraces: Attach
+
+# 行长度限制
+ColumnLimit: 120
+
+# 命名空间缩进
+NamespaceIndentation: All
+
+# 类访问修饰符缩进（与类成员保持一致，缩进4空格）
+AccessModifierOffset: 0
+
+# switch case缩进
+IndentCaseLabels: true
+
+# 预处理指令不缩进
+IndentPPDirectives: None
+
+# 指针和引用左对齐
+PointerAlignment: Left
+
+# 函数参数和调用
+BinPackArguments: false
+BinPackParameters: false
+
+# 短函数保持内联
+AllowShortFunctionsOnASingleLine: Inline
+
+# 构造函数初始化列表
+BreakConstructorInitializers: BeforeColon
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+
+# 模板声明换行
+AlwaysBreakTemplateDeclarations: Yes
+
+# 空格设置
+SpaceBeforeParens: ControlStatements
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpacesBeforeTrailingComments: 2
+
+# 对齐设置
+AlignTrailingComments: true
+AlignAfterOpenBracket: Align
+
+# include排序
+SortIncludes: true
