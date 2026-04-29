@@ -32,6 +32,18 @@ namespace error_system::module {
         filter = 0x030B,           // 过滤器
         listener = 0x030C,         // 监听器
         resolver = 0x030D,         // 解析器
+        router = 0x030E,           // 路由管理
+        middleware = 0x030F,       // 中间件处理
+        serializer = 0x0310,       // 序列化器
+        deserializer = 0x0311,     // 反序列化器
+        paginator = 0x0312,        // 分页器
+        exporter = 0x0313,         // 数据导出器
+        importer = 0x0314,         // 数据导入器
+        renderer = 0x0315,         // 渲染器
+        animator = 0x0316,         // 动画引擎
+        physics = 0x0317,          // 物理引擎
+        ai_model = 0x0318,         // AI模型推理
+        shader = 0x0319,           // 着色器管理
     };
 
 }  // namespace error_system::module

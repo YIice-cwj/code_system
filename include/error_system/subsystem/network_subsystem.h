@@ -27,6 +27,22 @@ namespace error_system::subsystem {
         grpc = 0x0506,       // gRPC协议
         dns = 0x0507,        // DNS解析
         ssl_tls = 0x0508,    // SSL/TLS安全层
+        ftp = 0x0509,        // FTP协议
+        smtp = 0x050A,       // SMTP邮件协议
+        icmp = 0x050B,       // ICMP协议
+        quic = 0x050C,       // QUIC协议
+        sctp = 0x050D,       // SCTP协议
+        bluetooth = 0x050E,  // 蓝牙网络
+        zigbee = 0x050F,     // ZigBee协议
+        mqtt = 0x0510,       // MQTT协议
+        coap = 0x0511,       // CoAP协议
+        ntp = 0x0512,        // NTP时间同步
+        radius = 0x0513,     // RADIUS认证
+        vpn = 0x0514,        // VPN网络
+        sdn = 0x0515,        // 软件定义网络
+        cdn = 0x0516,        // 内容分发网络
+        proxy = 0x0517,      // 代理服务
+        firewall = 0x0518,   // 防火墙
     };
 
 }  // namespace error_system::subsystem

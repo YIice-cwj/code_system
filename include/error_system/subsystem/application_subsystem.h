@@ -18,14 +18,20 @@ namespace error_system::subsystem {
      * @details 定义应用层相关的子系统，范围 0x0300 - 0x03FF
      */
     enum class application_subsystem_t : uint16_t {
-        none = 0x0300,         // 无子系统
-        web = 0x0301,          // Web应用
-        mobile = 0x0302,       // 移动应用
-        desktop = 0x0303,      // 桌面应用
-        cli = 0x0304,          // 命令行工具
-        batch = 0x0305,        // 批处理任务
-        workflow = 0x0306,     // 工作流引擎
-        rule_engine = 0x0307,  // 规则引擎
+        none = 0x0300,          // 无子系统
+        web = 0x0301,           // Web应用
+        mobile = 0x0302,        // 移动应用
+        desktop = 0x0303,       // 桌面应用
+        cli = 0x0304,           // 命令行工具
+        batch = 0x0305,         // 批处理任务
+        workflow = 0x0306,      // 工作流引擎
+        rule_engine = 0x0307,   // 规则引擎
+        game = 0x0308,          // 游戏应用
+        embedded = 0x0309,      // 嵌入式应用
+        microservice = 0x030A,  // 微服务应用
+        serverless = 0x030B,    // 无服务器应用
+        ai = 0x030C,            // AI应用
+        ar_vr = 0x030D,         // AR/VR应用
     };
 
 }  // namespace error_system::subsystem

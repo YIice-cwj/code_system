@@ -18,21 +18,29 @@ namespace error_system::module {
      * @details 定义存储相关的功能模块，范围 0x0600 - 0x06FF
      */
     enum class storage_module_t : uint16_t {
-        none = 0x0600,          // 无模块
-        file_reader = 0x0601,   // 文件读取器
-        file_writer = 0x0602,   // 文件写入器
-        file_manager = 0x0603,  // 文件管理器
-        directory = 0x0604,     // 目录管理
-        watcher = 0x0605,       // 文件监视器
-        uploader = 0x0606,      // 上传器
-        downloader = 0x0607,    // 下载器
-        sync = 0x0608,          // 同步模块
-        backup = 0x0609,        // 备份模块
-        compressor = 0x060A,    // 压缩模块
-        encryptor = 0x060B,     // 加密模块
-        bucket = 0x060C,        // 存储桶管理
-        object = 0x060D,        // 对象管理
-        multipart = 0x060E,     // 分片上传
+        none = 0x0600,           // 无模块
+        file_reader = 0x0601,    // 文件读取器
+        file_writer = 0x0602,    // 文件写入器
+        file_manager = 0x0603,   // 文件管理器
+        directory = 0x0604,      // 目录管理
+        watcher = 0x0605,        // 文件监视器
+        uploader = 0x0606,       // 上传器
+        downloader = 0x0607,     // 下载器
+        sync = 0x0608,           // 同步模块
+        backup = 0x0609,         // 备份模块
+        compressor = 0x060A,     // 压缩模块
+        encryptor = 0x060B,      // 加密模块
+        bucket = 0x060C,         // 存储桶管理
+        object = 0x060D,         // 对象存储管理
+        multipart = 0x060E,      // 分片上传
+        snapshot = 0x060F,       // 快照管理
+        replication = 0x0610,    // 副本管理
+        deduplication = 0x0611,  // 去重管理
+        tiering = 0x0612,        // 分层存储
+        quota = 0x0613,          // 配额管理
+        lifecycle = 0x0614,      // 生命周期管理
+        versioning = 0x0615,     // 版本控制
+        trash = 0x0616,          // 回收站管理
     };
 
 }  // namespace error_system::module

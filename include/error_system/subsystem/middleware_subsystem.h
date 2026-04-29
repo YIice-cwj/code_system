@@ -26,6 +26,28 @@ namespace error_system::subsystem {
         config_center = 0x0205,    // 配置中心
         registry = 0x0206,         // 服务注册中心
         circuit_breaker = 0x0207,  // 熔断器
+        message_queue = 0x0208,    // 消息队列
+        cache = 0x0209,            // 分布式缓存
+        search_engine = 0x020A,    // 搜索引擎中间件
+        job_scheduler = 0x020B,    // 任务调度中间件
+        data_pipeline = 0x020C,    // 数据管道
+        id_generator = 0x020D,     // 分布式ID生成器
+        lock_service = 0x020E,     // 分布式锁服务
+        kafka = 0x020F,            // Kafka消息队列
+        rabbitmq = 0x0210,         // RabbitMQ消息队列
+        rocketmq = 0x0211,         // RocketMQ消息队列
+        pulsar = 0x0212,           // Pulsar消息队列
+        nats = 0x0213,             // NATS消息队列
+        memcached = 0x0214,        // Memcached缓存
+        zookeeper = 0x0215,        // Zookeeper协调服务
+        consul = 0x0216,           // Consul服务发现
+        nginx = 0x0217,            // Nginx网关
+        haproxy = 0x0218,          // HAProxy负载均衡
+        envoy = 0x0219,            // Envoy代理
+        istio = 0x021A,            // Istio服务网格
+        dapr = 0x021B,             // Dapr运行时
+        seata = 0x021C,            // Seata分布式事务
+        shardingsphere = 0x021D,   // ShardingSphere分库分表
     };
 
 }  // namespace error_system::subsystem

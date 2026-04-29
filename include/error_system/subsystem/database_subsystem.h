@@ -25,8 +25,14 @@ namespace error_system::subsystem {
         postgresql = 0x0704,     // PostgreSQL数据库
         sqlite = 0x0705,         // SQLite数据库
         elasticsearch = 0x0706,  // Elasticsearch搜索引擎
-        kafka = 0x0707,          // Kafka消息队列
-        rabbitmq = 0x0708,       // RabbitMQ消息队列
+        clickhouse = 0x0707,     // ClickHouse列式数据库
+        tidb = 0x0708,           // TiDB分布式数据库
+        oracle = 0x0709,         // Oracle数据库
+        sqlserver = 0x070A,      // SQL Server数据库
+        mariadb = 0x070B,        // MariaDB数据库
+        neo4j = 0x070C,          // Neo4j图数据库
+        influxdb = 0x070D,       // InfluxDB时序数据库
+        etcd = 0x070E,           // Etcd键值存储
     };
 
 }  // namespace error_system::subsystem

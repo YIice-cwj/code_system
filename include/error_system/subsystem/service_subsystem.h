@@ -26,6 +26,18 @@ namespace error_system::subsystem {
         notification = 0x0405,    // 通知服务
         search = 0x0406,          // 搜索服务
         recommendation = 0x0407,  // 推荐服务
+        cart = 0x0408,            // 购物车服务
+        inventory = 0x0409,       // 库存服务
+        logistics = 0x040A,       // 物流服务
+        message = 0x040B,         // 消息服务
+        file = 0x040C,            // 文件服务
+        content = 0x040D,         // 内容服务
+        media = 0x040E,           // 媒体服务
+        analytics = 0x040F,       // 分析服务
+        billing = 0x0410,         // 计费服务
+        subscription = 0x0411,    // 订阅服务
+        social = 0x0412,          // 社交服务
+        collaboration = 0x0413,   // 协作服务
     };
 
 }  // namespace error_system::subsystem

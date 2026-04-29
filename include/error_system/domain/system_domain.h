@@ -26,6 +26,14 @@ namespace error_system::domain {
         network = 5,      // 网络层
         storage = 6,      // 存储层
         database = 7,     // 数据库层
+        security = 8,     // 安全层
+        ai = 9,           // 人工智能层
+        cloud = 10,       // 云计算层
+        edge = 11,        // 边缘计算层
+        iot = 12,         // 物联网层
+        blockchain = 13,  // 区块链层
+        bigdata = 14,     // 大数据层
+        devops = 15,      // 运维开发层
     };
 
 }  // namespace error_system::domain

@@ -18,14 +18,21 @@ namespace error_system::subsystem {
      * @details 定义内核层相关的子系统，范围 0x0100 - 0x01FF
      */
     enum class kernel_subsystem_t : uint16_t {
-        none = 0x0100,       // 无子系统
-        scheduler = 0x0101,  // 任务调度器
-        interrupt = 0x0102,  // 中断管理
-        driver = 0x0103,     // 设备驱动
-        vfs = 0x0104,        // 虚拟文件系统
-        netstack = 0x0105,   // 网络协议栈
-        syscall = 0x0106,    // 系统调用
-        module = 0x0107,     // 内核模块
+        none = 0x0100,        // 无子系统
+        scheduler = 0x0101,   // 任务调度器
+        interrupt = 0x0102,   // 中断管理
+        driver = 0x0103,      // 设备驱动
+        vfs = 0x0104,         // 虚拟文件系统
+        netstack = 0x0105,    // 网络协议栈
+        syscall = 0x0106,     // 系统调用
+        module = 0x0107,      // 内核模块
+        memory = 0x0108,      // 内核内存管理
+        security = 0x0109,    // 内核安全模块
+        tracing = 0x010A,     // 内核追踪
+        cgroup = 0x010B,      // 控制组
+        namespace_ = 0x010C,  // 命名空间隔离
+        ebpf = 0x010D,        // eBPF程序
+        kprobe = 0x010E,      // 内核探测
     };
 
 }  // namespace error_system::subsystem

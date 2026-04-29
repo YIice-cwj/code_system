@@ -18,19 +18,24 @@ namespace error_system::module {
      * @details 定义系统层相关的功能模块，范围 0x0000 - 0x00FF
      */
     enum class system_module_t : uint16_t {
-        none = 0x0000,       // 无模块
-        process = 0x0001,    // 进程管理
-        thread = 0x0002,     // 线程管理
-        memory = 0x0003,     // 内存管理
-        signal = 0x0004,     // 信号处理
-        timer = 0x0005,      // 定时器
-        ipc = 0x0006,        // 进程间通信
-        io = 0x0007,         // IO管理
-        event = 0x0008,      // 事件管理
-        semaphore = 0x0009,  // 信号量
-        mutex = 0x000A,      // 互斥锁
-        rwlock = 0x000B,     // 读写锁
-        condition = 0x000C,  // 条件变量
+        none = 0x0000,        // 无模块
+        process = 0x0001,     // 进程管理
+        thread = 0x0002,      // 线程管理
+        memory = 0x0003,      // 内存管理
+        signal = 0x0004,      // 信号处理
+        timer = 0x0005,       // 定时器
+        ipc = 0x0006,         // 进程间通信
+        io = 0x0007,          // IO管理
+        event = 0x0008,       // 事件管理
+        semaphore = 0x0009,   // 信号量
+        mutex = 0x000A,       // 互斥锁
+        rwlock = 0x000B,      // 读写锁
+        condition = 0x000C,   // 条件变量
+        filesystem = 0x000D,  // 文件系统管理
+        resource = 0x000E,    // 资源管理
+        power = 0x000F,       // 电源管理
+        log = 0x0010,         // 日志管理
+        plugin = 0x0011,      // 插件管理
     };
 
 }  // namespace error_system::module

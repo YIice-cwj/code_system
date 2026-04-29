@@ -30,6 +30,12 @@ namespace error_system::module {
         dma = 0x0109,            // DMA管理
         buffer = 0x010A,         // 缓冲区管理
         cache = 0x010B,          // 缓存管理
+        security = 0x010C,       // 安全模块
+        tracing = 0x010D,        // 追踪模块
+        cgroup = 0x010E,         // 控制组管理
+        namespace_ = 0x010F,     // 命名空间管理
+        ebpf = 0x0110,           // eBPF管理
+        kprobe = 0x0111,         // 内核探测管理
     };
 
 }  // namespace error_system::module

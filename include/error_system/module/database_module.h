@@ -33,6 +33,16 @@ namespace error_system::module {
         backup = 0x070C,           // 备份恢复
         cache = 0x070D,            // 查询缓存
         orm = 0x070E,              // ORM映射
+        schema = 0x070F,           // 模式管理
+        trigger = 0x0710,          // 触发器管理
+        view = 0x0711,             // 视图管理
+        procedure = 0x0712,        // 存储过程
+        function_ = 0x0713,        // 函数管理
+        partition = 0x0714,        // 分区管理
+        vacuum = 0x0715,           // 空间回收
+        wal = 0x0716,              // 预写日志
+        cluster = 0x0717,          // 集群管理
+        monitor = 0x0718,          // 监控管理
     };
 
 }  // namespace error_system::module
