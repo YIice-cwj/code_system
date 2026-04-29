@@ -1,5 +1,8 @@
 #pragma once
 #include <filesystem>
+#include <fstream>
+#include <optional>
+#include <system_error>
 
 /**
  * @file file_util.h
@@ -16,31 +19,42 @@ namespace error_system::utils {
      * @brief 读取文件内容
      * @details 从指定文件路径读取文件内容，返回文件内容的字符串表示
      * @param path 文件路径
-     * @return std::string 文件内容的字符串表示
+     * @return std::optional<std::string> 文件内容的字符串表示，如果文件不存在则返回空可选
      */
-    std::string read_file(const std::filesystem::path& path);
+    std::optional<std::string> read_file(const std::filesystem::path& path) noexcept;
 
     /**
      * @brief 写入文件内容
      * @details 将指定字符串内容写入到指定文件路径
      * @param path 文件路径
      * @param content 要写入的字符串内容
+     * @return bool 写入成功则返回 true，否则返回 false
      */
-    void write_file(const std::filesystem::path& path, const std::string& content);
+    bool write_file(const std::filesystem::path& path, const std::string& content) noexcept;
 
     /**
      * @brief 创建文件
      * @details 创建指定文件路径的文件，如果文件路径不存在则创建
      * @param path 文件路径
+     * @return bool 创建成功则返回 true，否则返回 false
      */
-    void create_file(const std::filesystem::path& path);
+    bool create_file(const std::filesystem::path& path) noexcept;
 
     /**
      * @brief 删除文件
      * @details 删除指定文件路径的文件
      * @param path 文件路径
+     * @return bool 删除成功则返回 true，否则返回 false
      */
-    void delete_file(const std::filesystem::path& path);
+    bool delete_file(const std::filesystem::path& path) noexcept;
+
+    /**
+     * @brief 强制删除文件
+     * @details 强制删除指定文件路径的文件，如果文件不存在则返回 false
+     * @param path 文件路径
+     * @return bool 删除成功则返回 true，否则返回 false
+     */
+    bool force_delete_file(const std::filesystem::path& path) noexcept;
 
     /**
      * @brief 检查文件是否存在
@@ -48,7 +62,7 @@ namespace error_system::utils {
      * @param path 文件路径
      * @return bool 文件存在则返回 true，否则返回 false
      */
-    bool file_exists(const std::filesystem::path& path);
+    bool file_exists(const std::filesystem::path& path) noexcept;
 
     /**
      * @brief 检查文件路径是否存在
@@ -56,6 +70,6 @@ namespace error_system::utils {
      * @param path 文件路径
      * @return bool 文件路径存在则返回 true，否则返回 false
      */
-    bool file_path_exists(const std::filesystem::path& path);
+    bool file_path_exists(const std::filesystem::path& path) noexcept;
 
-}  // namespace error_system::utils
+};  // namespace error_system::utils
