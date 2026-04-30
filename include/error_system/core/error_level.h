@@ -1,4 +1,9 @@
 #pragma once
+#include "error_system/utils/string_utils.h"
+#include <cstdint>
+#include <string>
+#include <type_traits>
+
 /**
  * @file error_level.h
  * @brief 错误等级定义与转换
@@ -10,26 +15,7 @@
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */
-#include <cstdint>
-#include <string>
-#include <type_traits>
-
 namespace error_system::core {
-    namespace utils {
-        /**
-         * @brief 错误等级字符串哈希函数
-         * @details 用于将错误等级字符串转换为哈希值
-         * @param str 错误等级字符串
-         * @return size_t 错误等级字符串的哈希值
-         */
-        constexpr size_t hash_string(const char* str) noexcept {
-            size_t hash = 0;
-            while (*str) {
-                hash += hash * 31 + static_cast<size_t>(*str++);
-            }
-            return hash;
-        }
-    }  // namespace utils
 
     /**
      * @brief 错误等级分类
@@ -71,17 +57,17 @@ namespace error_system::core {
      * @param level 错误等级字符串
      * @return error_level_t 错误等级
      */
-    constexpr error_level_t from_string(const char* level) noexcept {
-        switch (utils::hash_string(level)) {
-            case utils::hash_string("debug"):
+    constexpr error_level_t from_string(const char* string) noexcept {
+        switch (utils::string_utils_t::hash(string)) {
+            case utils::string_utils_t::hash("debug"):
                 return error_level_t::debug;
-            case utils::hash_string("info"):
+            case utils::string_utils_t::hash("info"):
                 return error_level_t::info;
-            case utils::hash_string("warn"):
+            case utils::string_utils_t::hash("warn"):
                 return error_level_t::warn;
-            case utils::hash_string("error"):
+            case utils::string_utils_t::hash("error"):
                 return error_level_t::error;
-            case utils::hash_string("fatal"):
+            case utils::string_utils_t::hash("fatal"):
                 return error_level_t::fatal;
             default:
                 return error_level_t::custom;
