@@ -1,6 +1,12 @@
 #pragma once
+#include <charconv>
 #include <cstddef>
+#include <optional>
 #include <random>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <vector>
 
 /**
  * @file string_utils.h
@@ -121,7 +127,7 @@ namespace error_system::utils {
         static inline std::optional<T> parse_number(std::string_view string) noexcept {
             T value{};
             auto [pointer, error] = std::from_chars(string.data(), string.data() + string.size(), value);
-            if (error == std::errc::ok) {
+            if (error == std::errc{}) {
                 return value;
             }
             return std::nullopt;
@@ -136,9 +142,9 @@ namespace error_system::utils {
          * @param args 其他要替换的值
          */
         template <typename... Args>
-        static inline void format(std::string_view format, const Args&... args) {
+        static inline std::string format(std::string_view format, const Args&... args) {
             std::string result(format);
-            __format(result, sizeof...(args), args...);
+            __format(result, 0, args...);
             return result;
         }
 
@@ -184,7 +190,7 @@ namespace error_system::utils {
          * @param string 输入字符串
          * @return std::string 转换后的字符串
          */
-        static inline std::string to_lower(std::string_view string) noexcept;
+        static std::string to_lower(std::string_view string) noexcept;
 
         /**
          * @brief 将字符串转换为大写
@@ -192,7 +198,7 @@ namespace error_system::utils {
          * @param string 输入字符串
          * @return std::string 转换后的字符串
          */
-        static inline std::string to_upper(std::string_view string) noexcept;
+        static std::string to_upper(std::string_view string) noexcept;
     };
 
 }  // namespace error_system::utils

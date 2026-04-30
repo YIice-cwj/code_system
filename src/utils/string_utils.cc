@@ -92,7 +92,7 @@ namespace error_system::utils {
      * @param string 输入字符串
      * @return std::string 小写后的字符串
      */
-    inline std::string string_utils_t::to_lower(std::string_view string) noexcept {
+    std::string string_utils_t::to_lower(std::string_view string) noexcept {
         std::string result(string);
         std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
         return result;
@@ -104,7 +104,7 @@ namespace error_system::utils {
      * @param string 输入字符串
      * @return std::string 大写后的字符串
      */
-    inline std::string string_utils_t::to_upper(std::string_view string) noexcept {
+    std::string string_utils_t::to_upper(std::string_view string) noexcept {
         std::string result(string);
         std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::toupper(c); });
         return result;
