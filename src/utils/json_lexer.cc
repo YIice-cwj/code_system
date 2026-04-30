@@ -1,0 +1,90 @@
+#include "error_system/utils/json_lexer.h"
+
+namespace error_system::utils::detail {
+
+    /**
+     * @brief 跳过JSON字符串中的空格字符
+     * @details 跳过JSON字符串中的空格字符，直到遇到非空格字符
+     */
+    void json_lexer_t::__skip_whitespace() noexcept {
+        while (pos_ < json_str_.size() && std::isspace(static_cast<unsigned char>(json_str_[pos_]))) {
+            ++pos_;
+        }
+    }
+
+    /**
+     * @brief 解析JSON字符串中的字符串token
+     * @details 解析JSON字符串中的字符串token，直到遇到非字符串字符
+     */
+    json_lexer_t::token_t json_lexer_t::__parse_string() noexcept {
+        std::string str{};
+        ++pos_;
+
+        while (pos_ < json_str_.size() && json_str_[pos_] != '"') {
+            if (json_str_[pos_] == '\\' && pos_ + 1 < json_str_.size()) {
+                ++pos_;
+                if (json_str_[pos_] == 'n') {
+                    str += '\n';
+                } else if (json_str_[pos_] == 't') {
+                    str += '\t';
+                } else {
+                    str += json_str_[pos_];
+                }
+            } else {
+                str += json_str_[pos_];
+            }
+            ++pos_;
+        }
+
+        if (pos_ < json_str_.size() && json_str_[pos_] == '"') {
+            ++pos_;
+            return {token_type_t::string, str};
+        }
+        return {token_type_t::invalid, ""};
+    }
+
+    /**
+     * @brief 构造函数
+     * @details 构造函数，初始化JSON字符串
+     * @param json_str JSON字符串视图
+     */
+    json_lexer_t::json_lexer_t(std::string_view json_str) noexcept : json_str_(json_str), pos_(0) {}
+
+    /**
+     * @brief 获取下一个token
+     * @details 获取下一个token，直到遇到文件结束标识
+     * @return token_t 下一个token
+     */
+    json_lexer_t::token_t json_lexer_t::next() noexcept {
+        __skip_whitespace();
+        if (pos_ >= json_str_.size()) {
+            return {token_type_t::eof, ""};
+        }
+
+        char c = json_str_[pos_];
+        if (c == '{') {
+            ++pos_;
+            return {token_type_t::left_brace, "{"};
+        }
+        if (c == '}') {
+            ++pos_;
+            return {token_type_t::right_brace, "}"};
+        }
+        if (c == ':') {
+            ++pos_;
+            return {token_type_t::colon, ":"};
+        }
+        if (c == ',') {
+            ++pos_;
+            return {token_type_t::comma, ","};
+        }
+
+        if (c == '"') {
+            return __parse_string();
+        }
+
+        ++pos_;
+        return {token_type_t::invalid, ""};
+    }
+
+}  // namespace error_system::utils::detail
