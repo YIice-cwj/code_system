@@ -1,6 +1,22 @@
 #include "error_system/i18n/json_translator.h"
 
 namespace error_system::i18n {
+    /**
+     * @brief 初始化 JSON 字典
+     * @details 从 JSON 字典文件中加载 JSON 字典
+     * @return bool 是否成功加载 JSON 字典
+     */
+    bool json_translator_t::__initialized_json_dict() noexcept {
+        return false;
+    }
+
+    /**
+     * @brief 构造函数
+     * @param language 翻译器默认语言
+     */
+    json_translator_t::json_translator_t(language_t language) noexcept : language_(language), json_dict_{} {
+        __initialized_json_dict();
+    }
 
     /**
      * @brief 翻译错误码
@@ -27,6 +43,7 @@ namespace error_system::i18n {
      */
     void json_translator_t::set_language(language_t lang) noexcept {
         language_ = lang;
+        __initialized_json_dict();
     }
 
 }  // namespace error_system::i18n

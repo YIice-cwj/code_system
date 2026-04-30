@@ -1,5 +1,7 @@
 #pragma once
 #include "error_system/i18n/i_translator.h"
+#include "error_system/utils/json_utils.h"
+
 /**
  * @file json_translator.h
  * @brief JSON 翻译器
@@ -17,6 +19,15 @@ namespace error_system::i18n {
     class json_translator_t : public i_translator_t {
         private:
         language_t language_ = language_t::zh_CN;
+        utils::json_dict_t json_dict_;
+
+        private:
+        /**
+         * @brief 初始化 JSON 字典
+         * @details 从 JSON 字典文件中加载 JSON 字典
+         * @return bool 是否成功加载 JSON 字典
+         */
+        bool __initialized_json_dict() noexcept;
 
         public:
         /**
@@ -28,6 +39,12 @@ namespace error_system::i18n {
          * @brief 析构函数
          */
         virtual ~json_translator_t() = default;
+
+        /**
+         * @brief 构造函数
+         * @param language 翻译器默认语言
+         */
+        json_translator_t(language_t language) noexcept;
 
         /**
          * @brief 翻译错误码
