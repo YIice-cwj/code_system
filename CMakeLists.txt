@@ -46,3 +46,4 @@ target_include_directories(${PROJECT_NAME}
 )
 
 add_subdirectory(tests)
+add_subdirectory(examples)
