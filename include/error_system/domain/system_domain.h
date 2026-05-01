@@ -36,6 +36,7 @@ namespace error_system::domain {
         blockchain = 13,  // 区块链层
         bigdata = 14,     // 大数据层
         devops = 15,      // 运维开发层
+        _count            // 占位符：表示系统域的总数
     };
 
     /**
@@ -77,7 +78,7 @@ namespace error_system::domain {
      * @return bool 系统域整数是否有效
      */
     constexpr bool is_valid(uint8_t domain) noexcept {
-        return domain <= to_int(system_domain_t::devops);
+        return domain < to_int(system_domain_t::_count);
     }
 
     /**

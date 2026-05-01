@@ -23,7 +23,8 @@
         "iot": "物联网层",
         "blockchain": "区块链层",
         "bigdata": "大数据层",
-        "devops": "运维开发层"
+        "devops": "运维开发层",
+        "_count": "占位符：表示系统域的总数"
     },
     "subsystem": {
         "ai": {

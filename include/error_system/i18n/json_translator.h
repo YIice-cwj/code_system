@@ -18,7 +18,7 @@ namespace error_system::i18n {
      */
     class json_translator_t : public i_translator_t {
         private:
-        language_t language_ = language_t::zh_CN;
+        language_t language_ = language_t::zh_cn;
         utils::json_dict_t json_dict_;
 
         private:

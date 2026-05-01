@@ -109,7 +109,7 @@ def generate_translated_dict(en_dict, target_lang):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate i18n JSON files from C++ enum comments.")
-    parser.add_argument('--lang', default='all', help="Specify which language to generate (e.g., zh_CN, en_US, ru_RU, ja_JP, all).")
+    parser.add_argument('--lang', default='all', help="Specify which language to generate (e.g., zh_cn, en_us, ru_RU, ja_JP, all).")
     args = parser.parse_args()
 
     root = get_project_root()
@@ -156,24 +156,24 @@ def main():
     
     generated_files = []
     
-    # Always generate en_US first in memory because it acts as the translation source
+    # Always generate en_us first in memory because it acts as the translation source
     en_us = generate_en_dict(zh_cn)
 
     # Generate standard languages
-    if args.lang in ['zh_CN', 'all']:
-        zh_file = os.path.join(lang_dir, "zh_CN.json")
+    if args.lang in ['zh_cn', 'all']:
+        zh_file = os.path.join(lang_dir, "zh_cn.json")
         with open(zh_file, 'w', encoding='utf-8') as f:
             json.dump(zh_cn, f, ensure_ascii=False, indent=4)
         generated_files.append(zh_file)
         
-    if args.lang in ['en_US', 'all']:
-        en_file = os.path.join(lang_dir, "en_US.json")
+    if args.lang in ['en_us', 'all']:
+        en_file = os.path.join(lang_dir, "en_us.json")
         with open(en_file, 'w', encoding='utf-8') as f:
             json.dump(en_us, f, ensure_ascii=False, indent=4)
         generated_files.append(en_file)
 
     # Generate arbitrary translation if asked (e.g. ru_RU, ja_JP, es_ES)
-    if args.lang not in ['zh_CN', 'en_US', 'all']:
+    if args.lang not in ['zh_cn', 'en_us', 'all']:
         print(f"🌍 Starting translation for '{args.lang}' via Google Translate API...")
         # Extract the language prefix (e.g., 'ru' from 'ru_RU')
         lang_prefix = args.lang.split('_')[0].lower()

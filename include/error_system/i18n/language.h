@@ -1,7 +1,7 @@
 #pragma once
 #include "error_system/utils/string_utils.h"
-#include <string>
 #include <cstdint>
+#include <string>
 
 /**
  * @file language.h
@@ -19,15 +19,16 @@ namespace error_system::i18n {
      * @details 定义语言相关的枚举值，用于表示不同的语言
      */
     enum class language_t : uint8_t {
-        zh_CN = 0,  // 中文
-        en_US = 1   // 英文
+        zh_cn = 0,  // 中文
+        en_us = 1,  // 英文
+        _count
     };
 
     /**
      * @brief 语言字符串映射
      * @details 用于将语言枚举值转换为语言字符串
      */
-    constexpr const char* const LANGUAGE_STRING[] = {"zh_CN", "en_US"};
+    constexpr const char* const LANGUAGE_STRING[] = {"zh_cn", "en_us"};
 
     /**
      * @brief 语言枚举值转换为语言整数
@@ -46,7 +47,7 @@ namespace error_system::i18n {
      * @return bool 语言枚举值是否有效
      */
     constexpr bool is_valid(uint8_t lang) noexcept {
-        return lang <= to_int(language_t::en_US);
+        return lang < to_int(language_t::_count);
     }
 
     /**
@@ -57,7 +58,7 @@ namespace error_system::i18n {
      */
     constexpr language_t from_int(uint8_t lang) noexcept {
         if (!is_valid(lang)) {
-            return language_t::zh_CN;
+            return language_t::zh_cn;
         }
         return static_cast<language_t>(lang);
     }
@@ -70,12 +71,12 @@ namespace error_system::i18n {
      */
     constexpr language_t from_string(const std::string& lang) noexcept {
         switch (utils::string_utils_t::hash(lang.c_str())) {
-            case utils::string_utils_t::hash("zh_CN"):
-                return language_t::zh_CN;
-            case utils::string_utils_t::hash("en_US"):
-                return language_t::en_US;
+            case utils::string_utils_t::hash("zh_cn"):
+                return language_t::zh_cn;
+            case utils::string_utils_t::hash("en_us"):
+                return language_t::en_us;
             default:
-                return language_t::zh_CN;
+                return language_t::zh_cn;
         }
     }
 

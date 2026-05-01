@@ -23,7 +23,8 @@
         "iot": "IOT",
         "blockchain": "Blockchain",
         "bigdata": "Bigdata",
-        "devops": "Devops"
+        "devops": "Devops",
+        "_count": " Count"
     },
     "subsystem": {
         "ai": {

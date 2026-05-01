@@ -2,7 +2,6 @@
 #include <charconv>
 #include <cstddef>
 #include <optional>
-#include <random>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -136,10 +135,10 @@ namespace error_system::utils {
         /**
          * @brief 格式化字符串
          * @details 格式化字符串，将字符串中的占位符替换为实际值
-         * @param string 输入字符串
-         * @param start_pos 开始位置
-         * @param value 要替换的值
-         * @param args 其他要替换的值
+         * @tparam ...Args 待格式化的参数类型
+         * @param format 格式化字符串
+         * @param args 待格式化的参数
+         * @return std::string 格式化后的字符串
          */
         template <typename... Args>
         static inline std::string format(std::string_view format, const Args&... args) {
