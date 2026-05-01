@@ -220,6 +220,16 @@ def generate_dispatchers(root_dir):
             "namespace error_system::traits {",
             "",
             "    /**",
+            f"     * @brief 根据数值解析 {category} 分类类型名称 (用于 I18N 路径)",
+            f"     * @param value {category} 的整数值",
+            f"     * @return const char* 对应的分类名称字符串 (如 \"ai\", \"cache\")，若无匹配返回 \"none\"",
+            "     */",
+            f"    static constexpr const char* resolve_{category}_type(uint16_t value) noexcept {{",
+        ]
+
+        resolve_name = [
+            "",
+            "    /**",
             f"     * @brief 根据数值解析 {category} 名称",
             f"     * @param value {category} 的整数值",
             f"     * @return const char* 对应的名称字符串，若无匹配返回 \"none\"",
@@ -245,9 +255,13 @@ def generate_dispatchers(root_dir):
                 type_name = base_name.replace(f"_{category}", "")
                 enum_type = f"{category}::{base_name}_t"
                 
-                # resolve
+                # resolve_type
                 header.append(f"        if (traits::{category}_traits<{enum_type}>::is_valid(value))")
-                header.append(f"            return traits::{category}_traits<{enum_type}>::to_string(static_cast<{enum_type}>(value));")
+                header.append(f'            return "{type_name}";')
+
+                # resolve_name
+                resolve_name.append(f"        if (traits::{category}_traits<{enum_type}>::is_valid(value))")
+                resolve_name.append(f"            return traits::{category}_traits<{enum_type}>::to_string(static_cast<{enum_type}>(value));")
 
                 # from_string
                 from_string.append(f'            case utils::string_utils_t::hash("{type_name}"):')
@@ -256,6 +270,9 @@ def generate_dispatchers(root_dir):
         header.append('        return "none";')
         header.append("    }")
 
+        resolve_name.append('        return "none";')
+        resolve_name.append("    }")
+
         from_string.append("            default: return 0;")
         from_string.append("        }")
         from_string.append("    }")
@@ -263,7 +280,7 @@ def generate_dispatchers(root_dir):
         from_string.append(f"}}  // namespace error_system::traits")
 
         with open(out_file, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(header + from_string))
+            f.write('\n'.join(header + resolve_name + from_string))
         print(f"  📄 Generated {out_file}")
 
 def main():

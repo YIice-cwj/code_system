@@ -17,6 +17,39 @@
 namespace error_system::traits {
 
     /**
+     * @brief 根据数值解析 module 分类类型名称 (用于 I18N 路径)
+     * @param value module 的整数值
+     * @return const char* 对应的分类名称字符串 (如 "ai", "cache")，若无匹配返回 "none"
+     */
+    static constexpr const char* resolve_module_type(uint16_t value) noexcept {
+        if (traits::module_traits<module::ai_module_t>::is_valid(value))
+            return "ai";
+        if (traits::module_traits<module::cache_module_t>::is_valid(value))
+            return "cache";
+        if (traits::module_traits<module::common_module_t>::is_valid(value))
+            return "common";
+        if (traits::module_traits<module::compute_module_t>::is_valid(value))
+            return "compute";
+        if (traits::module_traits<module::config_module_t>::is_valid(value))
+            return "config";
+        if (traits::module_traits<module::database_module_t>::is_valid(value))
+            return "database";
+        if (traits::module_traits<module::log_module_t>::is_valid(value))
+            return "log";
+        if (traits::module_traits<module::message_module_t>::is_valid(value))
+            return "message";
+        if (traits::module_traits<module::monitor_module_t>::is_valid(value))
+            return "monitor";
+        if (traits::module_traits<module::network_module_t>::is_valid(value))
+            return "network";
+        if (traits::module_traits<module::security_module_t>::is_valid(value))
+            return "security";
+        if (traits::module_traits<module::storage_module_t>::is_valid(value))
+            return "storage";
+        return "none";
+    }
+
+    /**
      * @brief 根据数值解析 module 名称
      * @param value module 的整数值
      * @return const char* 对应的名称字符串，若无匹配返回 "none"

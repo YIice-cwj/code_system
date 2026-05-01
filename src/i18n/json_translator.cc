@@ -45,13 +45,15 @@ namespace error_system::i18n {
 
         std::string level_str  = core::to_string(code.get_level());
         std::string domain_str = domain::to_string(code.get_system());
-        std::string subsys_str = traits::resolve_subsystem(code.get_subsys());
-        std::string module_str = traits::resolve_module(code.get_module());
+        std::string subsys_type = traits::resolve_subsystem_type(code.get_subsys());
+        std::string subsys_str  = traits::resolve_subsystem(code.get_subsys());
+        std::string module_type = traits::resolve_module_type(code.get_module());
+        std::string module_str  = traits::resolve_module(code.get_module());
 
         std::string level_trans  = json_dict_.get_value_or("error_level." + level_str, level_str).value();
         std::string domain_trans = json_dict_.get_value_or("domain." + domain_str, domain_str).value();
-        std::string subsys_trans = json_dict_.get_value_or("subsystem." + domain_str + "." + subsys_str, subsys_str).value();
-        std::string module_trans = json_dict_.get_value_or("module." + domain_str + "." + module_str, module_str).value();
+        std::string subsys_trans = json_dict_.get_value_or("subsystem." + subsys_type + "." + subsys_str, subsys_str).value();
+        std::string module_trans = json_dict_.get_value_or("module." + module_type + "." + module_str, module_str).value();
 
         return utils::string_utils_t::format(
             format_,
