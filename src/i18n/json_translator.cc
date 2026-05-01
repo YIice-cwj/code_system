@@ -3,38 +3,10 @@
 #include "error_system/core/error_level.h"
 #include "error_system/domain/system_domain.h"
 #include "error_system/utils/string_utils.h"
-#include "error_system/traits/subsystem/system_subsystem_traits.h"
-#include "error_system/traits/module/system_module_traits.h"
-#include "error_system/traits/subsystem/kernel_subsystem_traits.h"
-#include "error_system/traits/module/kernel_module_traits.h"
-#include "error_system/traits/subsystem/middleware_subsystem_traits.h"
-#include "error_system/traits/module/middleware_module_traits.h"
-#include "error_system/traits/subsystem/application_subsystem_traits.h"
-#include "error_system/traits/module/application_module_traits.h"
-#include "error_system/traits/subsystem/service_subsystem_traits.h"
-#include "error_system/traits/module/service_module_traits.h"
-#include "error_system/traits/subsystem/network_subsystem_traits.h"
-#include "error_system/traits/module/network_module_traits.h"
-#include "error_system/traits/subsystem/storage_subsystem_traits.h"
-#include "error_system/traits/module/storage_module_traits.h"
-#include "error_system/traits/subsystem/database_subsystem_traits.h"
-#include "error_system/traits/module/database_module_traits.h"
-#include "error_system/traits/subsystem/security_subsystem_traits.h"
-#include "error_system/traits/module/security_module_traits.h"
-#include "error_system/traits/subsystem/ai_subsystem_traits.h"
-#include "error_system/traits/module/ai_module_traits.h"
-#include "error_system/traits/subsystem/cloud_subsystem_traits.h"
-#include "error_system/traits/module/cloud_module_traits.h"
-#include "error_system/traits/subsystem/edge_subsystem_traits.h"
-#include "error_system/traits/module/edge_module_traits.h"
-#include "error_system/traits/subsystem/iot_subsystem_traits.h"
-#include "error_system/traits/module/iot_module_traits.h"
-#include "error_system/traits/subsystem/blockchain_subsystem_traits.h"
-#include "error_system/traits/module/blockchain_module_traits.h"
-#include "error_system/traits/subsystem/bigdata_subsystem_traits.h"
-#include "error_system/traits/module/bigdata_module_traits.h"
-#include "error_system/traits/subsystem/devops_subsystem_traits.h"
-#include "error_system/traits/module/devops_module_traits.h"
+#include <cstdint>
+
+#include "error_system/traits/subsystem/subsystem_traits.h"
+#include "error_system/traits/module/module_traits.h"
 
 namespace error_system::i18n {
     /**
@@ -52,6 +24,90 @@ namespace error_system::i18n {
             return true;
         }
         return false;
+    }
+
+    /**
+     * @brief 根据子系统枚举值解析对应的子系统名称
+     * @details 遍历所有子系统的值范围（通过 is_valid 检测），找到匹配的子系统并返回其字符串名称
+     * @param subsys_val 子系统枚举值
+     * @return std::string 子系统名称，若无匹配则返回 "none"
+     */
+    std::string json_translator_t::__resolve_subsys(uint16_t subsys_val) const noexcept {
+        if (traits::subsystem_traits<subsystem::system_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::system_subsystem_t>::to_string(static_cast<subsystem::system_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::kernel_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::kernel_subsystem_t>::to_string(static_cast<subsystem::kernel_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::middleware_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::middleware_subsystem_t>::to_string(static_cast<subsystem::middleware_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::application_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::application_subsystem_t>::to_string(static_cast<subsystem::application_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::service_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::service_subsystem_t>::to_string(static_cast<subsystem::service_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::network_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::network_subsystem_t>::to_string(static_cast<subsystem::network_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::storage_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::storage_subsystem_t>::to_string(static_cast<subsystem::storage_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::database_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::database_subsystem_t>::to_string(static_cast<subsystem::database_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::security_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::security_subsystem_t>::to_string(static_cast<subsystem::security_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::ai_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::ai_subsystem_t>::to_string(static_cast<subsystem::ai_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::cloud_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::cloud_subsystem_t>::to_string(static_cast<subsystem::cloud_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::edge_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::edge_subsystem_t>::to_string(static_cast<subsystem::edge_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::iot_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::iot_subsystem_t>::to_string(static_cast<subsystem::iot_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::blockchain_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::blockchain_subsystem_t>::to_string(static_cast<subsystem::blockchain_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::bigdata_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::bigdata_subsystem_t>::to_string(static_cast<subsystem::bigdata_subsystem_t>(subsys_val));
+        if (traits::subsystem_traits<subsystem::devops_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::devops_subsystem_t>::to_string(static_cast<subsystem::devops_subsystem_t>(subsys_val));
+        return "none";
+    }
+
+    /**
+     * @brief 根据模块枚举值解析对应的模块名称
+     * @details 遍历所有模块的值范围（通过 is_valid 检测），找到匹配的模块并返回其字符串名称
+     * @param module_val 模块枚举值
+     * @return std::string 模块名称，若无匹配则返回 "none"
+     */
+    std::string json_translator_t::__resolve_module(uint16_t module_val) const noexcept {
+        if (traits::module_traits<module::system_module_t>::is_valid(module_val))
+            return traits::module_traits<module::system_module_t>::to_string(static_cast<module::system_module_t>(module_val));
+        if (traits::module_traits<module::kernel_module_t>::is_valid(module_val))
+            return traits::module_traits<module::kernel_module_t>::to_string(static_cast<module::kernel_module_t>(module_val));
+        if (traits::module_traits<module::middleware_module_t>::is_valid(module_val))
+            return traits::module_traits<module::middleware_module_t>::to_string(static_cast<module::middleware_module_t>(module_val));
+        if (traits::module_traits<module::application_module_t>::is_valid(module_val))
+            return traits::module_traits<module::application_module_t>::to_string(static_cast<module::application_module_t>(module_val));
+        if (traits::module_traits<module::service_module_t>::is_valid(module_val))
+            return traits::module_traits<module::service_module_t>::to_string(static_cast<module::service_module_t>(module_val));
+        if (traits::module_traits<module::network_module_t>::is_valid(module_val))
+            return traits::module_traits<module::network_module_t>::to_string(static_cast<module::network_module_t>(module_val));
+        if (traits::module_traits<module::storage_module_t>::is_valid(module_val))
+            return traits::module_traits<module::storage_module_t>::to_string(static_cast<module::storage_module_t>(module_val));
+        if (traits::module_traits<module::database_module_t>::is_valid(module_val))
+            return traits::module_traits<module::database_module_t>::to_string(static_cast<module::database_module_t>(module_val));
+        if (traits::module_traits<module::security_module_t>::is_valid(module_val))
+            return traits::module_traits<module::security_module_t>::to_string(static_cast<module::security_module_t>(module_val));
+        if (traits::module_traits<module::ai_module_t>::is_valid(module_val))
+            return traits::module_traits<module::ai_module_t>::to_string(static_cast<module::ai_module_t>(module_val));
+        if (traits::module_traits<module::cloud_module_t>::is_valid(module_val))
+            return traits::module_traits<module::cloud_module_t>::to_string(static_cast<module::cloud_module_t>(module_val));
+        if (traits::module_traits<module::edge_module_t>::is_valid(module_val))
+            return traits::module_traits<module::edge_module_t>::to_string(static_cast<module::edge_module_t>(module_val));
+        if (traits::module_traits<module::iot_module_t>::is_valid(module_val))
+            return traits::module_traits<module::iot_module_t>::to_string(static_cast<module::iot_module_t>(module_val));
+        if (traits::module_traits<module::blockchain_module_t>::is_valid(module_val))
+            return traits::module_traits<module::blockchain_module_t>::to_string(static_cast<module::blockchain_module_t>(module_val));
+        if (traits::module_traits<module::bigdata_module_t>::is_valid(module_val))
+            return traits::module_traits<module::bigdata_module_t>::to_string(static_cast<module::bigdata_module_t>(module_val));
+        if (traits::module_traits<module::devops_module_t>::is_valid(module_val))
+            return traits::module_traits<module::devops_module_t>::to_string(static_cast<module::devops_module_t>(module_val));
+        return "none";
     }
 
     /**
@@ -73,87 +129,18 @@ namespace error_system::i18n {
             return "Translator not initialized or dict missing";
         }
 
-        std::string level_str = core::to_string(code.get_level());
+        std::string level_str  = core::to_string(code.get_level());
         std::string domain_str = domain::to_string(code.get_system());
-        std::string subsys_str = "unknown";
-        std::string module_str = "unknown";
+        std::string subsys_str = __resolve_subsys(code.get_subsys());
+        std::string module_str = __resolve_module(code.get_module());
 
-        switch (code.get_system()) {
-            case domain::system_domain_t::system:
-                subsys_str = traits::subsystem_traits<subsystem::system_subsystem_t>::to_string(static_cast<subsystem::system_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::system_module_t>::to_string(static_cast<module::system_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::kernel:
-                subsys_str = traits::subsystem_traits<subsystem::kernel_subsystem_t>::to_string(static_cast<subsystem::kernel_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::kernel_module_t>::to_string(static_cast<module::kernel_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::middleware:
-                subsys_str = traits::subsystem_traits<subsystem::middleware_subsystem_t>::to_string(static_cast<subsystem::middleware_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::middleware_module_t>::to_string(static_cast<module::middleware_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::application:
-                subsys_str = traits::subsystem_traits<subsystem::application_subsystem_t>::to_string(static_cast<subsystem::application_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::application_module_t>::to_string(static_cast<module::application_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::service:
-                subsys_str = traits::subsystem_traits<subsystem::service_subsystem_t>::to_string(static_cast<subsystem::service_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::service_module_t>::to_string(static_cast<module::service_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::network:
-                subsys_str = traits::subsystem_traits<subsystem::network_subsystem_t>::to_string(static_cast<subsystem::network_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::network_module_t>::to_string(static_cast<module::network_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::storage:
-                subsys_str = traits::subsystem_traits<subsystem::storage_subsystem_t>::to_string(static_cast<subsystem::storage_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::storage_module_t>::to_string(static_cast<module::storage_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::database:
-                subsys_str = traits::subsystem_traits<subsystem::database_subsystem_t>::to_string(static_cast<subsystem::database_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::database_module_t>::to_string(static_cast<module::database_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::security:
-                subsys_str = traits::subsystem_traits<subsystem::security_subsystem_t>::to_string(static_cast<subsystem::security_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::security_module_t>::to_string(static_cast<module::security_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::ai:
-                subsys_str = traits::subsystem_traits<subsystem::ai_subsystem_t>::to_string(static_cast<subsystem::ai_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::ai_module_t>::to_string(static_cast<module::ai_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::cloud:
-                subsys_str = traits::subsystem_traits<subsystem::cloud_subsystem_t>::to_string(static_cast<subsystem::cloud_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::cloud_module_t>::to_string(static_cast<module::cloud_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::edge:
-                subsys_str = traits::subsystem_traits<subsystem::edge_subsystem_t>::to_string(static_cast<subsystem::edge_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::edge_module_t>::to_string(static_cast<module::edge_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::iot:
-                subsys_str = traits::subsystem_traits<subsystem::iot_subsystem_t>::to_string(static_cast<subsystem::iot_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::iot_module_t>::to_string(static_cast<module::iot_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::blockchain:
-                subsys_str = traits::subsystem_traits<subsystem::blockchain_subsystem_t>::to_string(static_cast<subsystem::blockchain_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::blockchain_module_t>::to_string(static_cast<module::blockchain_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::bigdata:
-                subsys_str = traits::subsystem_traits<subsystem::bigdata_subsystem_t>::to_string(static_cast<subsystem::bigdata_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::bigdata_module_t>::to_string(static_cast<module::bigdata_module_t>(code.get_module()));
-                break;
-            case domain::system_domain_t::devops:
-                subsys_str = traits::subsystem_traits<subsystem::devops_subsystem_t>::to_string(static_cast<subsystem::devops_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::devops_module_t>::to_string(static_cast<module::devops_module_t>(code.get_module()));
-                break;
-            default:
-                break;
-        }
-
-        std::string level_trans = json_dict_.get_value_or("error_level." + level_str, level_str).value();
+        std::string level_trans  = json_dict_.get_value_or("error_level." + level_str, level_str).value();
         std::string domain_trans = json_dict_.get_value_or("domain." + domain_str, domain_str).value();
         std::string subsys_trans = json_dict_.get_value_or("subsystem." + domain_str + "." + subsys_str, subsys_str).value();
         std::string module_trans = json_dict_.get_value_or("module." + domain_str + "." + module_str, module_str).value();
 
         return utils::string_utils_t::format(
-            "[{}] {} | {} | {} (Code: {})",
+            "[Level: {}, System: {}, Subsystem: {}, Module: {}] Code: {}",
             level_trans, domain_trans, subsys_trans, module_trans, code.get_number()
         );
     }

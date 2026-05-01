@@ -29,6 +29,22 @@ namespace error_system::i18n {
          */
         bool __initialized_json_dict() noexcept;
 
+        /**
+         * @brief 根据子系统枚举值解析对应的子系统名称
+         * @details 遍历所有子系统的值范围，找到匹配的子系统并返回其字符串名称，若无匹配则返回 "none"
+         * @param subsystem_value 子系统枚举值
+         * @return std::string 子系统名称
+         */
+        std::string __resolve_subsys(uint16_t subsystem_value) const noexcept;
+
+        /**
+         * @brief 根据模块枚举值解析对应的模块名称
+         * @details 遍历所有模块的值范围，找到匹配的模块并返回其字符串名称，若无匹配则返回 "none"
+         * @param module_value 模块枚举值
+         * @return std::string 模块名称
+         */
+        std::string __resolve_module(uint16_t module_value) const noexcept;
+
         public:
         /**
          * @brief 构造函数

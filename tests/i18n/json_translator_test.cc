@@ -1,10 +1,8 @@
 #include "error_system/core/error_builder.h"
-#include "error_system/core/error_code.h"
 #include "error_system/core/error_level.h"
 #include "error_system/domain/system_domain.h"
 #include "error_system/i18n/json_translator.h"
 #include "error_system/i18n/language.h"
-
 #include <filesystem>
 #include <gtest/gtest.h>
 
@@ -382,7 +380,6 @@ namespace error_system::i18n {
 
         EXPECT_NE(result.find("["), std::string::npos);
         EXPECT_NE(result.find("]"), std::string::npos);
-        EXPECT_NE(result.find("|"), std::string::npos);
         EXPECT_NE(result.find("Code:"), std::string::npos);
     }
 
