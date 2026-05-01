@@ -98,7 +98,7 @@ namespace error_system::traits {
                 case module_t::collaboration_room:
                     return "collaboration_room";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

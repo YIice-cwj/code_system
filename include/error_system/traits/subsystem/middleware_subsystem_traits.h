@@ -108,7 +108,7 @@ namespace error_system::traits {
                 case subsystem_t::shardingsphere:
                     return "shardingsphere";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

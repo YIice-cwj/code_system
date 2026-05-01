@@ -84,7 +84,7 @@ namespace error_system::traits {
                 case subsystem_t::industrial_iot:
                     return "industrial_iot";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

@@ -78,7 +78,7 @@ namespace error_system::traits {
                 case module_t::ota_manager:
                     return "ota_manager";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

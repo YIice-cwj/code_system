@@ -84,7 +84,7 @@ namespace error_system::traits {
                 case module_t::policy_engine:
                     return "policy_engine";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

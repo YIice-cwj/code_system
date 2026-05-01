@@ -76,7 +76,7 @@ namespace error_system::traits {
                 case subsystem_t::plugin:
                     return "plugin";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

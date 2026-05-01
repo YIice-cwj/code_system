@@ -82,7 +82,7 @@ namespace error_system::traits {
                 case module_t::catalog_manager:
                     return "catalog_manager";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

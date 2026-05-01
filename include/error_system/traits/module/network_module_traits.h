@@ -98,7 +98,7 @@ namespace error_system::traits {
                 case module_t::tunnel:
                     return "tunnel";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

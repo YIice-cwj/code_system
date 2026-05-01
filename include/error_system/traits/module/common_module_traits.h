@@ -126,7 +126,7 @@ namespace error_system::traits {
                 case module_t::logger:
                     return "logger";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

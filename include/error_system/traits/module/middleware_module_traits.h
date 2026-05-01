@@ -100,7 +100,7 @@ namespace error_system::traits {
                 case module_t::data_sink:
                     return "data_sink";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

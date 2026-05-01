@@ -88,7 +88,7 @@ namespace error_system::traits {
                 case subsystem_t::collaboration:
                     return "collaboration";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

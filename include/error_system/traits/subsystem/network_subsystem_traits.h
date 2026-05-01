@@ -98,7 +98,7 @@ namespace error_system::traits {
                 case subsystem_t::firewall:
                     return "firewall";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

@@ -86,7 +86,7 @@ namespace error_system::traits {
                 case module_t::sandbox:
                     return "sandbox";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

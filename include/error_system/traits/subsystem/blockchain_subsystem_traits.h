@@ -82,7 +82,7 @@ namespace error_system::traits {
                 case subsystem_t::layer2:
                     return "layer2";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

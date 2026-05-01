@@ -84,7 +84,7 @@ namespace error_system::traits {
                 case subsystem_t::artifact:
                     return "artifact";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

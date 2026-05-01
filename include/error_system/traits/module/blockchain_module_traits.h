@@ -80,7 +80,7 @@ namespace error_system::traits {
                 case module_t::rollup_operator:
                     return "rollup_operator";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

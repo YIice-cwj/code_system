@@ -76,7 +76,7 @@ namespace error_system::traits {
                 case subsystem_t::ar_vr:
                     return "ar_vr";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

@@ -84,7 +84,7 @@ namespace error_system::traits {
                 case module_t::kprobe:
                     return "kprobe";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

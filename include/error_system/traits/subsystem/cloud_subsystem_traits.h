@@ -84,7 +84,7 @@ namespace error_system::traits {
                 case subsystem_t::iam:
                     return "iam";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

@@ -100,7 +100,7 @@ namespace error_system::traits {
                 case module_t::shader:
                     return "shader";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

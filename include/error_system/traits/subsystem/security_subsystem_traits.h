@@ -84,7 +84,7 @@ namespace error_system::traits {
                 case subsystem_t::ddos_protection:
                     return "ddos_protection";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

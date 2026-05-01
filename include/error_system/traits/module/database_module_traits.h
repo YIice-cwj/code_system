@@ -98,7 +98,7 @@ namespace error_system::traits {
                 case module_t::monitor:
                     return "monitor";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

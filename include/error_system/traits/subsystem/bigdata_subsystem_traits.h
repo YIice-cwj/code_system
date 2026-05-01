@@ -84,7 +84,7 @@ namespace error_system::traits {
                 case subsystem_t::data_governance:
                     return "data_governance";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

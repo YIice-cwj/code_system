@@ -84,7 +84,7 @@ namespace error_system::traits {
                 case module_t::artifact_registry:
                     return "artifact_registry";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

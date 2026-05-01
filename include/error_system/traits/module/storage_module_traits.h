@@ -94,7 +94,7 @@ namespace error_system::traits {
                 case module_t::trash:
                     return "trash";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

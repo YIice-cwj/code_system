@@ -84,7 +84,7 @@ namespace error_system::traits {
                 case module_t::explainability:
                     return "explainability";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

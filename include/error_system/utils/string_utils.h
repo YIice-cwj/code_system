@@ -141,9 +141,9 @@ namespace error_system::utils {
          * @return std::string 格式化后的字符串
          */
         template <typename... Args>
-        static inline std::string format(std::string_view format, const Args&... args) {
+        static inline std::string format(std::string_view format, Args&&... args) {
             std::string result(format);
-            __format(result, 0, args...);
+            __format(result, 0, std::forward<Args>(args)...);
             return result;
         }
 

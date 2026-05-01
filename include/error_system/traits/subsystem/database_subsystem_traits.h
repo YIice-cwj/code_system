@@ -78,7 +78,7 @@ namespace error_system::traits {
                 case subsystem_t::etcd:
                     return "etcd";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

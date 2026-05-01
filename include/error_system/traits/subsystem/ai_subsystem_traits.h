@@ -82,7 +82,7 @@ namespace error_system::traits {
                 case subsystem_t::multimodal:
                     return "multimodal";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

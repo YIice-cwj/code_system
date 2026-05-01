@@ -76,7 +76,7 @@ namespace error_system::traits {
                 case subsystem_t::edge_ml:
                     return "edge_ml";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

@@ -78,7 +78,7 @@ namespace error_system::traits {
                 case module_t::shadow_manager:
                     return "shadow_manager";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

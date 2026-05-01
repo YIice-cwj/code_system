@@ -78,7 +78,7 @@ namespace error_system::traits {
                 case subsystem_t::kprobe:
                     return "kprobe";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 

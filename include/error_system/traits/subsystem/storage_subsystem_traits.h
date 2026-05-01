@@ -84,7 +84,7 @@ namespace error_system::traits {
                 case subsystem_t::block:
                     return "block";
                 default:
-                    return "unknown";
+                    return "none";
             }
         }
 
