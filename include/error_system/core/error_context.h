@@ -1,0 +1,92 @@
+#pragma once
+#include "error_system/core/error_code.h"
+#include "error_system/i18n/translator_registry.h"
+#include "error_system/utils/string_utils.h"
+#include <memory>
+#include <string>
+
+namespace error_system::core {
+    class plugin_registry_t;
+}  // forward declaration
+
+/**
+ * @file error_context.h
+ * @brief 错误上下文数据类定义
+ * @details 定义错误上下文数据结构、字段解析和访问接口
+ * @author yiice
+ * @version 1.0.0
+ * @date 2026-05-01
+ * @copyright Copyright (c) 2026
+ */
+namespace error_system::core {
+
+    struct error_context_t;
+    /**
+     * @brief 通知所有已注册插件
+     * @details 实现在 plugin_registry_t::notify_error()
+     */
+    void __notify_plugins(const error_context_t& context) noexcept;
+
+    /**
+     * @brief 错误上下文数据类
+     * @details 封装错误上下文信息，提供字段解析和访问功能
+     */
+    struct error_context_t {
+        error_code_t code{};
+        std::string message{};
+        std::shared_ptr<error_context_t> cause{nullptr};
+
+        constexpr error_context_t() noexcept = default;
+
+        /**
+         * @brief 构造函数
+         * @param code 错误码
+         * @param message 错误信息
+         */
+        template<typename... Args>
+        error_context_t(error_code_t code, std::string format = "", Args&&... args) noexcept
+            : code(code), message(utils::string_utils_t::format(format, std::forward<Args>(args)...)) {
+            if (this->code.get_code() != 0) {
+                __notify_plugins(*this);
+            }
+        }
+
+        /**
+         * @brief 检查错误上下文是否有效
+         * @return bool 有效则返回true
+         */
+        explicit operator bool() const noexcept { return code.get_code() != 0; }
+
+        /**
+         * @brief 包装底层错误上下文
+         * @param underlying 底层错误上下文
+         * @return error_context_t 包装后的错误上下文
+         */
+        error_context_t wrap(const error_context_t& underlying) const {
+            error_context_t new_code_context = *this;
+            new_code_context.cause = std::make_shared<error_context_t>(underlying);
+            return new_code_context;
+        }
+
+        /**
+         * @brief 转换为字符串
+         * @details 优先使用传入的翻译器；未传入时自动尝试全局注册的翻译器；
+         *          均无则降级输出可读英文名
+         * @param translator 可选的翻译器接口指针，默认为 nullptr
+         * @return std::string 错误上下文的字符串表示
+         */
+        std::string to_string(const i18n::i_translator_t* translator = nullptr) const {
+            if (!translator) {
+                translator = i18n::translator_registry_t::instance().get();
+            }
+
+            std::string result = utils::string_utils_t::format("{} - {}", translator->translate(code), message);
+
+            if (cause) {
+                result += "\n  ↳ Caused by: " + cause->to_string(translator);
+            }
+            return result;
+        }
+    };
+
+}  // namespace error_system::core

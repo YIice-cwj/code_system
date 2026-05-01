@@ -11,12 +11,20 @@
  */
 
 // IWYU pragma: begin_exports
+#include "error_system/module/ai_module.h"
 #include "error_system/module/application_module.h"
+#include "error_system/module/bigdata_module.h"
+#include "error_system/module/blockchain_module.h"
+#include "error_system/module/cloud_module.h"
 #include "error_system/module/common_module.h"
 #include "error_system/module/database_module.h"
+#include "error_system/module/devops_module.h"
+#include "error_system/module/edge_module.h"
+#include "error_system/module/iot_module.h"
 #include "error_system/module/kernel_module.h"
 #include "error_system/module/middleware_module.h"
 #include "error_system/module/network_module.h"
+#include "error_system/module/security_module.h"
 #include "error_system/module/service_module.h"
 #include "error_system/module/storage_module.h"
 #include "error_system/module/system_module.h"

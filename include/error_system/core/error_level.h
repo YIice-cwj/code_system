@@ -17,7 +17,7 @@ namespace error_system::core {
 
     /**
      * @brief 错误等级分类
-     * @details 定义错误系统的等级分类（debug/info/warn/error/fatal/custom），
+     * @details 定义错误系统的等级分类（debug/info/warn/error/fatal)
      *          用于表示错误等级的严重程度和处理优先级
      */
     enum class error_level_t : uint8_t {
@@ -26,7 +26,6 @@ namespace error_system::core {
         warn = 2,     // 警告
         error = 3,    // 错误
         fatal = 4,    // 致命错误
-        custom = 5,   // 自定义
     };
 
     /**
@@ -34,7 +33,7 @@ namespace error_system::core {
      * @details 用于表示错误等级的字符串
      *          与错误等级分类一一对应，用于日志打印和错误处理
      */
-    constexpr const char* ERROR_LEVEL_STRING[] = {"debug", "info", "warn", "error", "fatal", "custom"};
+    constexpr const char* ERROR_LEVEL_STRING[] = {"debug", "info", "warn", "error", "fatal"};
 
     /**
      * @brief 错误等级整数
@@ -53,7 +52,7 @@ namespace error_system::core {
      * @return bool 错误等级整数是否有效
      */
     constexpr bool is_valid(uint8_t level) noexcept {
-        return level <= to_int(error_level_t::custom);
+        return level <= to_int(error_level_t::fatal);
     }
 
     /**
@@ -64,7 +63,7 @@ namespace error_system::core {
      */
     constexpr error_level_t from_int(uint8_t level) noexcept {
         if (!is_valid(level)) {
-            return error_level_t::custom;
+            return error_level_t::fatal;
         }
         return static_cast<error_level_t>(level);
     }
@@ -88,7 +87,7 @@ namespace error_system::core {
             case utils::string_utils_t::hash("fatal"):
                 return error_level_t::fatal;
             default:
-                return error_level_t::custom;
+                return error_level_t::info;
         }
     }
 

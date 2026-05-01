@@ -1,5 +1,4 @@
 #pragma once
-#include "error_system/core/error_code.h"
 
 /**
  * @file error_registry.h

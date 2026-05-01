@@ -19,8 +19,37 @@ namespace error_system::core {
      */
     class error_builder_t {
         public:
+         /**
+         * @brief 构建错误码
+         * @details 通过枚举类型构建错误码
+         * @tparam SubSystemEnum 子系统枚举类型
+         * @tparam ModuleEnum 模块枚举类型
+         * @param level 错误等级
+         * @param system 系统域
+         * @param subsys 子系统值
+         * @param module 模块值
+         * @param number 错误编号
+         * @return error_code_t 错误码对象
+         */
+        template<typename SubSystemEnum, typename ModuleEnum>
+        static constexpr error_code_t make_error_code(error_level_t level,
+                                                      domain::system_domain_t system,
+                                                      SubSystemEnum subsys,
+                                                      ModuleEnum module,
+                                                      uint16_t number) noexcept {
+            return make_error_code(
+                level,
+                system,
+                static_cast<uint16_t>(subsys),
+                static_cast<uint16_t>(module),
+                number
+            );
+        }
+
+
         /**
          * @brief 构建错误码
+         * @details 通过原始值构建错误码
          * @param level 错误等级
          * @param system 系统域
          * @param subsys 子系统值
