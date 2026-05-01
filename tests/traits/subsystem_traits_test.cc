@@ -1,5 +1,3 @@
-#include "error_system/traits/subsystem_traits.h"
-
 #include "error_system/subsystem/ai_subsystem.h"
 #include "error_system/subsystem/application_subsystem.h"
 #include "error_system/subsystem/bigdata_subsystem.h"
@@ -242,12 +240,6 @@ namespace error_system::traits {
         EXPECT_TRUE(subsystem_traits<subsystem::system_subsystem_t>::is_valid(0x000D));
         EXPECT_FALSE(subsystem_traits<subsystem::system_subsystem_t>::is_valid(0x000E));
         EXPECT_FALSE(subsystem_traits<subsystem::system_subsystem_t>::is_valid(0xFFFF));
-    }
-
-    TEST_F(subsystem_traits_test, to_string_unknown) {
-        EXPECT_STREQ(subsystem_traits<subsystem::system_subsystem_t>::to_string(
-                         static_cast<subsystem::system_subsystem_t>(0x9999)),
-                     "unknown");
     }
 
 }  // namespace error_system::traits

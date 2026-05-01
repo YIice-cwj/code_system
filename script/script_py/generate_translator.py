@@ -31,11 +31,12 @@ def main():
     out.append('#include "error_system/core/error_code.h"')
     out.append('#include "error_system/core/error_level.h"')
     out.append('#include "error_system/domain/system_domain.h"')
-    out.append('#include <sstream>')
-    
-    for d in domains:
-        out.append(f'#include "error_system/traits/subsystem/{d}_subsystem_traits.h"')
-        out.append(f'#include "error_system/traits/module/{d}_module_traits.h"')
+    out.append('#include "error_system/utils/string_utils.h"')
+    out.append('#include <cstdint>')
+    out.append('')
+    # 使用聚合头文件，不再逐个 include
+    out.append('#include "error_system/traits/subsystem/subsystem_traits.h"')
+    out.append('#include "error_system/traits/module/module_traits.h"')
 
     out.append('\nnamespace error_system::i18n {')
     
@@ -55,6 +56,40 @@ def main():
             return true;
         }
         return false;
+    }
+''')
+
+    # __resolve_subsys
+    out.append('''    /**
+     * @brief 根据子系统枚举值解析对应的子系统名称
+     * @details 遍历所有子系统的值范围（通过 is_valid 检测），找到匹配的子系统并返回其字符串名称
+     * @param subsys_val 子系统枚举值
+     * @return std::string 子系统名称，若无匹配则返回 "none"
+     */
+    std::string json_translator_t::__resolve_subsys(uint16_t subsys_val) const noexcept {''')
+
+    for d in domains:
+        out.append(f'''        if (traits::subsystem_traits<subsystem::{d}_subsystem_t>::is_valid(subsys_val))
+            return traits::subsystem_traits<subsystem::{d}_subsystem_t>::to_string(static_cast<subsystem::{d}_subsystem_t>(subsys_val));''')
+
+    out.append('''        return "none";
+    }
+''')
+
+    # __resolve_module
+    out.append('''    /**
+     * @brief 根据模块枚举值解析对应的模块名称
+     * @details 遍历所有模块的值范围（通过 is_valid 检测），找到匹配的模块并返回其字符串名称
+     * @param module_val 模块枚举值
+     * @return std::string 模块名称，若无匹配则返回 "none"
+     */
+    std::string json_translator_t::__resolve_module(uint16_t module_val) const noexcept {''')
+
+    for d in domains:
+        out.append(f'''        if (traits::module_traits<module::{d}_module_t>::is_valid(module_val))
+            return traits::module_traits<module::{d}_module_t>::to_string(static_cast<module::{d}_module_t>(module_val));''')
+
+    out.append('''        return "none";
     }
 ''')
 
@@ -80,36 +115,20 @@ def main():
             return "Translator not initialized or dict missing";
         }
 
-        std::string level_str = core::to_string(code.get_level());
+        std::string level_str  = core::to_string(code.get_level());
         std::string domain_str = domain::to_string(code.get_system());
-        std::string subsys_str = "unknown";
-        std::string module_str = "unknown";
+        std::string subsys_str = __resolve_subsys(code.get_subsys());
+        std::string module_str = __resolve_module(code.get_module());
 
-        switch (code.get_system()) {''')
-    
-    for d in domains:
-        out.append(f'''            case domain::system_domain_t::{d}:
-                subsys_str = traits::subsystem_traits<subsystem::{d}_subsystem_t>::to_string(static_cast<subsystem::{d}_subsystem_t>(code.get_subsys()));
-                module_str = traits::module_traits<module::{d}_module_t>::to_string(static_cast<module::{d}_module_t>(code.get_module()));
-                break;''')
-
-    out.append('''            default:
-                break;
-        }
-
-        std::string level_trans = json_dict_.get_value_or("error_level." + level_str, level_str).value();
+        std::string level_trans  = json_dict_.get_value_or("error_level." + level_str, level_str).value();
         std::string domain_trans = json_dict_.get_value_or("domain." + domain_str, domain_str).value();
         std::string subsys_trans = json_dict_.get_value_or("subsystem." + domain_str + "." + subsys_str, subsys_str).value();
         std::string module_trans = json_dict_.get_value_or("module." + domain_str + "." + module_str, module_str).value();
 
-        std::ostringstream oss;
-        oss << "[" << level_trans << "] " 
-            << domain_trans << " | " 
-            << subsys_trans << " | " 
-            << module_trans << " "
-            << "(Code: " << code.get_number() << ")";
-
-        return oss.str();
+        return utils::string_utils_t::format(
+            "[Level: {}, System: {}, Subsystem: {}, Module: {}] Code: {}",
+            level_trans, domain_trans, subsys_trans, module_trans, code.get_number()
+        );
     }
 ''')
 
@@ -139,7 +158,7 @@ def main():
     with open(cc_file, 'w', encoding='utf-8') as f:
         f.write('\n'.join(out))
 
-    print(f"✅ Generated {cc_file} with Doxygen comments!")
+    print(f"\n✅ Generated {cc_file}")
 
 if __name__ == "__main__":
     main()

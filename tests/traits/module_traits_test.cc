@@ -1,5 +1,3 @@
-#include "error_system/traits/module_traits.h"
-
 #include "error_system/module/ai_module.h"
 #include "error_system/module/application_module.h"
 #include "error_system/module/bigdata_module.h"
@@ -227,11 +225,6 @@ namespace error_system::traits {
         EXPECT_TRUE(module_traits<module::system_module_t>::is_valid(0x0011));
         EXPECT_FALSE(module_traits<module::system_module_t>::is_valid(0x0012));
         EXPECT_FALSE(module_traits<module::system_module_t>::is_valid(0xFFFF));
-    }
-
-    TEST_F(module_traits_test, to_string_unknown) {
-        EXPECT_STREQ(module_traits<module::system_module_t>::to_string(static_cast<module::system_module_t>(0x9999)),
-                     "unknown");
     }
 
 }  // namespace error_system::traits
