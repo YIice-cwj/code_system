@@ -1,6 +1,6 @@
 #include "error_system/utils/file_utils.h"
-#include <gtest/gtest.h>
 #include <filesystem>
+#include <gtest/gtest.h>
 
 namespace error_system::utils {
 
@@ -8,14 +8,12 @@ namespace error_system::utils {
         protected:
         std::filesystem::path temp_dir_;
 
-        void set_up() {
+        void SetUp() override {
             temp_dir_ = std::filesystem::temp_directory_path() / "error_system_file_test";
             std::filesystem::create_directories(temp_dir_);
         }
 
-        void tear_down() {
-            std::filesystem::remove_all(temp_dir_);
-        }
+        void TearDown() override { std::filesystem::remove_all(temp_dir_); }
     };
 
     TEST_F(file_utils_test, write_file_creates_file_with_content) {

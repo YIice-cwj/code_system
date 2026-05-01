@@ -9,12 +9,12 @@ namespace error_system::utils {
         protected:
         std::filesystem::path temp_dir_;
 
-        void set_up() {
+        void SetUp() override {
             temp_dir_ = std::filesystem::temp_directory_path() / "error_system_test";
             std::filesystem::create_directories(temp_dir_);
         }
 
-        void tear_down() { std::filesystem::remove_all(temp_dir_); }
+        void TearDown() override { std::filesystem::remove_all(temp_dir_); }
     };
 
     TEST_F(json_dict_test, parse_empty_string_returns_nullopt) {
