@@ -20,23 +20,25 @@ namespace error_system::domain {
      * @details 定义错误码系统中的系统域分类，用于标识错误码所属的系统域
      */
     enum class system_domain_t : uint8_t {
-        system = 0,       // 系统层
-        kernel = 1,       // 内核层
-        middleware = 2,   // 中间件层
-        application = 3,  // 应用层
-        service = 4,      // 服务层
-        network = 5,      // 网络层
-        storage = 6,      // 存储层
-        database = 7,     // 数据库层
-        security = 8,     // 安全层
-        ai = 9,           // 人工智能层
-        cloud = 10,       // 云计算层
-        edge = 11,        // 边缘计算层
-        iot = 12,         // 物联网层
-        blockchain = 13,  // 区块链层
-        bigdata = 14,     // 大数据层
-        devops = 15,      // 运维开发层
-        _count            // 占位符：表示系统域的总数
+        system = 0,        // 系统层
+        kernel = 1,        // 内核层
+        middleware = 2,    // 中间件层
+        application = 3,   // 应用层
+        service = 4,       // 服务层
+        network = 5,       // 网络层
+        storage = 6,       // 存储层
+        database = 7,      // 数据库层
+        security = 8,      // 安全层
+        ai = 9,            // 人工智能层
+        cloud = 10,        // 云计算层
+        edge = 11,         // 边缘计算层
+        iot = 12,          // 物联网层
+        blockchain = 13,   // 区块链层
+        bigdata = 14,      // 大数据层
+        devops = 15,       // 运维开发层
+        distributed = 16,  // 分布式层
+        monitoring = 17,   // 监控告警层
+        _count             // 占位符：表示系统域的总数
     };
 
     /**
@@ -59,7 +61,9 @@ namespace error_system::domain {
                                                     "iot",
                                                     "blockchain",
                                                     "bigdata",
-                                                    "devops"};
+                                                    "devops",
+                                                    "distributed",
+                                                    "monitoring"};
 
     /**
      * @brief 系统域整数
@@ -134,6 +138,10 @@ namespace error_system::domain {
                 return system_domain_t::bigdata;
             case utils::string_utils_t::hash("devops"):
                 return system_domain_t::devops;
+            case utils::string_utils_t::hash("distributed"):
+                return system_domain_t::distributed;
+            case utils::string_utils_t::hash("monitoring"):
+                return system_domain_t::monitoring;
             default:
                 return system_domain_t::system;
         }

@@ -20,6 +20,7 @@ namespace error_system::i18n {
         private:
         language_t language_ = language_t::zh_cn;
         utils::json_dict_t json_dict_;
+        std::string format_ = "[Level: {}, System: {}, Subsystem: {}, Module: {}] Code: {}";
 
         private:
         /**
@@ -28,22 +29,6 @@ namespace error_system::i18n {
          * @return bool 是否成功加载 JSON 字典
          */
         bool __initialized_json_dict() noexcept;
-
-        /**
-         * @brief 根据子系统枚举值解析对应的子系统名称
-         * @details 遍历所有子系统的值范围，找到匹配的子系统并返回其字符串名称，若无匹配则返回 "none"
-         * @param subsystem_value 子系统枚举值
-         * @return std::string 子系统名称
-         */
-        std::string __resolve_subsys(uint16_t subsystem_value) const noexcept;
-
-        /**
-         * @brief 根据模块枚举值解析对应的模块名称
-         * @details 遍历所有模块的值范围，找到匹配的模块并返回其字符串名称，若无匹配则返回 "none"
-         * @param module_value 模块枚举值
-         * @return std::string 模块名称
-         */
-        std::string __resolve_module(uint16_t module_value) const noexcept;
 
         public:
         /**
@@ -81,5 +66,17 @@ namespace error_system::i18n {
          * @param lang 目标语言
          */
         void set_language(language_t lang) noexcept override;
+
+         /**
+         * @brief 获取翻译格式
+         * @return const std::string& 翻译格式
+         */
+        const std::string& get_format() const noexcept override;
+
+        /**
+         * @brief 设置翻译格式
+         * @param format 翻译格式
+         */
+        void set_format(const std::string& format) noexcept override;
     };
 }  // namespace error_system::i18n

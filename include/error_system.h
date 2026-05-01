@@ -30,11 +30,14 @@
 // ─── Module (聚合) ────────────────────────────────────────────────────────────
 #include "error_system/module/module.h"
 
+// ─── Plugin ─────────────────────────────────────────────────────────────────────
+#include "error_system/plugin/plugin_registry.h"
+
 // ─── Traits ───────────────────────────────────────────────────────────────────
-#include "error_system/traits/module_traits.h"
-#include "error_system/traits/subsystem_traits.h"
 #include "error_system/traits/module/module_traits.h"
+#include "error_system/traits/module_traits.h"
 #include "error_system/traits/subsystem/subsystem_traits.h"
+#include "error_system/traits/subsystem_traits.h"
 
 // ─── I18n ─────────────────────────────────────────────────────────────────────
 #include "error_system/i18n/i_translator.h"

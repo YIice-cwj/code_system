@@ -47,6 +47,19 @@ namespace error_system::i18n {
          * @param lang 目标语言
          */
         virtual void set_language(language_t lang) noexcept = 0;
+
+        /**
+         * @brief 获取翻译格式
+         * @return const std::string& 翻译格式
+         */
+        virtual const std::string& get_format() const noexcept = 0;
+
+        /**
+         * @brief 设置翻译格式
+         * @param format 翻译格式
+         */
+        virtual void set_format(const std::string& format) noexcept = 0;
+
     };
 
 }  // namespace error_system::i18n

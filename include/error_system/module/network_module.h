@@ -3,9 +3,9 @@
 
 /**
  * @file network_module.h
- * @brief 网络功能模块定义
- * @details 定义网络相关的功能模块分类
- *          范围：0x0500 - 0x05FF（与网络层系统域 0x05 对应）
+ * @brief 网络通信功能模块定义
+ * @details 定义网络通信相关的功能模块分类
+ *          范围：0x0100 - 0x01FF
  * @author yiice
  * @version 1.0.0
  * @date 2026-04-27
@@ -14,35 +14,32 @@
 namespace error_system::module {
 
     /**
-     * @brief 网络功能模块分类
-     * @details 定义网络相关的功能模块，范围 0x0500 - 0x05FF
+     * @brief 网络通信功能模块分类
+     * @details 定义网络通信相关的功能模块，范围 0x0100 - 0x01FF
      */
     enum class network_module_t : uint16_t {
-        none = 0x0500,            // 无模块
-        socket = 0x0501,          // Socket管理
-        listener = 0x0502,        // 监听器
-        acceptor = 0x0503,        // 接收器
-        connector = 0x0504,       // 连接器
-        session = 0x0505,         // 会话管理
-        channel = 0x0506,         // 通道管理
-        pipeline = 0x0507,        // 协议管道处理
-        handshake = 0x0508,       // 握手管理
-        heartbeat = 0x0509,       // 心跳管理
-        reconnection = 0x050A,    // 重连管理
-        timeout = 0x050B,         // 超时处理
-        dns_resolver = 0x050C,    // DNS解析器
-        ssl_context = 0x050D,     // SSL上下文
-        packet_encoder = 0x050E,  // 报文编码器
-        packet_decoder = 0x050F,  // 报文解码器
-        congestion = 0x0510,      // 拥塞控制
-        flow_control = 0x0511,    // 流量控制
-        nat = 0x0512,             // 网络地址转换
-        acl = 0x0513,             // 访问控制列表
-        qos = 0x0514,             // 服务质量
-        multicast = 0x0515,       // 组播管理
-        broadcast = 0x0516,       // 广播管理
-        proxy_forward = 0x0517,   // 代理转发
-        tunnel = 0x0518,          // 隧道管理
+        none = 0x0100,               // 无模块
+        socket = 0x0101,             // 套接字管理
+        tcp_stack = 0x0102,          // TCP协议栈
+        udp_stack = 0x0103,          // UDP协议栈
+        http_client = 0x0104,        // HTTP客户端
+        http_server = 0x0105,        // HTTP服务端
+        websocket = 0x0106,          // WebSocket管理
+        grpc_client = 0x0107,        // gRPC客户端
+        grpc_server = 0x0108,        // gRPC服务端
+        dns_resolver = 0x0109,       // DNS解析器
+        load_balancer = 0x010A,      // 负载均衡器
+        proxy = 0x010B,              // 网络代理器
+        gateway = 0x010C,            // 网关管理器
+        ssl_context = 0x010D,        // SSL上下文
+        tls_handshake = 0x010E,      // TLS握手器
+        connection_pool = 0x010F,    // 连接池管理
+        packet_filter = 0x0110,      // 数据包过滤
+        rate_limiter = 0x0111,       // 速率限制器
+        circuit_breaker = 0x0112,    // 熔断器管理
+        retryer = 0x0113,            // 重试机制器
+        health_checker = 0x0114,     // 健康检查器
+        service_discovery = 0x0115,  // 服务发现器
     };
 
 }  // namespace error_system::module

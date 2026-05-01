@@ -3,9 +3,9 @@
 
 /**
  * @file database_module.h
- * @brief 数据库功能模块定义
- * @details 定义数据库相关的功能模块分类
- *          范围：0x0700 - 0x07FF（与数据库层系统域 0x07 对应）
+ * @brief 数据库访问功能模块定义
+ * @details 定义数据库访问相关的功能模块分类
+ *          范围：0x0200 - 0x02FF
  * @author yiice
  * @version 1.0.0
  * @date 2026-04-27
@@ -14,35 +14,35 @@
 namespace error_system::module {
 
     /**
-     * @brief 数据库功能模块分类
-     * @details 定义数据库相关的功能模块，范围 0x0700 - 0x07FF
+     * @brief 数据库访问功能模块分类
+     * @details 定义数据库访问相关的功能模块，范围 0x0200 - 0x02FF
      */
     enum class database_module_t : uint16_t {
-        none = 0x0700,             // 无模块
-        connection = 0x0701,       // 连接管理
-        connection_pool = 0x0702,  // 连接池
-        transaction = 0x0703,      // 事务管理
-        query = 0x0704,            // 查询执行
-        statement = 0x0705,        // 语句预处理
-        cursor = 0x0706,           // 游标管理
-        index = 0x0707,            // 索引管理
-        lock = 0x0708,             // 锁管理
-        migration = 0x0709,        // 数据迁移
-        replication = 0x070A,      // 主从复制
-        sharding = 0x070B,         // 分片管理
-        backup = 0x070C,           // 备份恢复
-        cache = 0x070D,            // 查询缓存
-        orm = 0x070E,              // ORM映射
-        schema = 0x070F,           // 模式管理
-        trigger = 0x0710,          // 触发器管理
-        view = 0x0711,             // 视图管理
-        procedure = 0x0712,        // 存储过程
-        function_ = 0x0713,        // 函数管理
-        partition = 0x0714,        // 分区管理
-        vacuum = 0x0715,           // 空间回收
-        wal = 0x0716,              // 预写日志
-        cluster = 0x0717,          // 集群管理
-        monitor = 0x0718,          // 监控管理
+        none = 0x0200,               // 无模块
+        connector = 0x0201,          // 数据库连接器
+        connection_pool = 0x0202,    // 连接池管理
+        transaction = 0x0203,        // 事务管理器
+        query_executor = 0x0204,     // 查询执行器
+        statement = 0x0205,          // 语句预处理器
+        cursor = 0x0206,             // 游标管理器
+        index_manager = 0x0207,      // 索引管理器
+        lock_manager = 0x0208,       // 锁管理器
+        migration = 0x0209,          // 数据迁移器
+        replicator = 0x020A,         // 主从复制器
+        shard_manager = 0x020B,      // 分片管理器
+        backup_restore = 0x020C,     // 备份恢复器
+        cache_manager = 0x020D,      // 查询缓存器
+        orm_mapper = 0x020E,         // ORM映射器
+        schema_manager = 0x020F,     // 模式管理器
+        trigger_manager = 0x0210,    // 触发器管理
+        view_manager = 0x0211,       // 视图管理器
+        procedure = 0x0212,          // 存储过程器
+        function_manager = 0x0213,   // 函数管理器
+        partition_manager = 0x0214,  // 分区管理器
+        vacuum = 0x0215,             // 空间回收器
+        wal_manager = 0x0216,        // 预写日志管理
+        cluster_manager = 0x0217,    // 集群管理器
+        monitor = 0x0218,            // 监控管理器
     };
 
 }  // namespace error_system::module

@@ -1,40 +1,25 @@
 #pragma once
 
-/**
- * @file module_traits.h
- * @brief 模块类型萃取模板
- * @details 提供模块类型的通用转换接口（从/向整数、字符串转换及有效性校验）
- * @author yiice
- * @version 1.0.0
- * @date 2026-05-01
- * @copyright Copyright (c) 2026
- */
 namespace error_system::traits {
 
     /**
      * @brief 模块类型萃取基类模板
-     * @details 提供模块类型的通用转换接口（从/向整数、字符串转换及有效性校验）
-     * @tparam T 模块枚举类型
-     * @tparam Enable 模板使能参数
-     * @note 此模板必须被具体的模块枚举类型进行特化
      */
     template <typename T, typename Enable = void>
     struct module_traits {
-        // 下面是被特化的模板应当实现的接口约定（注释作为接口文档）：
+        // using module_t = module::system_module_t;
+        
+        // using underlying_t = std::underlying_type_t<module_t>;
+        
+        // static constexpr T from_int(underlying_t value) noexcept;
 
-        // using module_t = T;
-
-        // using underlying_t = std::underlying_type_t<T>;
-
-        // static constexpr module_t from_int(underlying_t value) noexcept;
-
-        // static constexpr module_t from_string(const char* string) noexcept;
-
-        // static constexpr underlying_t to_int(module_t module) noexcept;
-
-        // static constexpr const char* to_string(module_t module) noexcept;
-
+        //static constexpr const char* to_string(T value) noexcept;
+        
         // static constexpr bool is_valid(underlying_t value) noexcept;
+        
+        // static constexpr T from_string(const char* string) noexcept;
+        
+        // static constexpr uint16_t to_int(T value) noexcept;
     };
 
 }  // namespace error_system::traits
