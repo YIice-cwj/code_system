@@ -12,5 +12,5 @@ foreach(test_source IN LISTS TEST_SOURCES)
         GTest::gtest_main
     )
 
-    gtest_discover_tests(${test_name})
+    gtest_discover_tests(${test_name}) 
 endforeach()
