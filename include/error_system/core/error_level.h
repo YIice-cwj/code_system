@@ -1,8 +1,6 @@
 #pragma once
 #include "error_system/utils/string_utils.h"
 #include <cstdint>
-#include <string>
-#include <type_traits>
 
 /**
  * @file error_level.h
@@ -23,12 +21,12 @@ namespace error_system::core {
      *          用于表示错误等级的严重程度和处理优先级
      */
     enum class error_level_t : uint8_t {
-        debug = 0,
-        info = 1,
-        warn = 2,
-        error = 3,
-        fatal = 4,
-        custom = 5,
+        debug = 0,    // 调试
+        info = 1,     // 信息
+        warn = 2,     // 警告
+        error = 3,    // 错误
+        fatal = 4,    // 致命错误
+        custom = 5,   // 自定义
     };
 
     /**
@@ -39,13 +37,33 @@ namespace error_system::core {
     constexpr const char* ERROR_LEVEL_STRING[] = {"debug", "info", "warn", "error", "fatal", "custom"};
 
     /**
+     * @brief 错误等级整数
+     * @details 用于将错误等级转换为错误等级整数
+     * @param level 错误等级
+     * @return uint8_t 错误等级整数
+     */
+    constexpr uint8_t to_int(error_level_t level) noexcept {
+        return static_cast<uint8_t>(std::underlying_type_t<error_level_t>(level));
+    }
+
+    /**
+     * @brief 错误等级整数是否有效
+     * @details 用于判断错误等级整数是否有效
+     * @param level 错误等级整数
+     * @return bool 错误等级整数是否有效
+     */
+    constexpr bool is_valid(uint8_t level) noexcept {
+        return level <= to_int(error_level_t::custom);
+    }
+
+    /**
      * @brief 错误等级整数转换为错误等级
      * @details 用于将错误等级整数转换为错误等级
      * @param level 错误等级整数
      * @return error_level_t 错误等级
      */
     constexpr error_level_t from_int(uint8_t level) noexcept {
-        if (level >= static_cast<uint8_t>(error_level_t::custom)) {
+        if (!is_valid(level)) {
             return error_level_t::custom;
         }
         return static_cast<error_level_t>(level);
@@ -75,16 +93,6 @@ namespace error_system::core {
     }
 
     /**
-     * @brief 错误等级整数
-     * @details 用于将错误等级转换为错误等级整数
-     * @param level 错误等级
-     * @return uint8_t 错误等级整数
-     */
-    constexpr uint8_t to_int(error_level_t level) noexcept {
-        return static_cast<uint8_t>(std::underlying_type_t<error_level_t>(level));
-    }
-
-    /**
      * @brief 错误等级字符串
      * @details 用于将错误等级转换为错误等级字符串
      * @param level 错误等级
@@ -92,16 +100,6 @@ namespace error_system::core {
      */
     constexpr const char* to_string(error_level_t level) noexcept {
         return ERROR_LEVEL_STRING[to_int(level)];
-    }
-
-    /**
-     * @brief 错误等级整数是否有效
-     * @details 用于判断错误等级整数是否有效
-     * @param level 错误等级整数
-     * @return bool 错误等级整数是否有效
-     */
-    constexpr bool is_valid(uint8_t level) noexcept {
-        return level <= to_int(error_level_t::custom);
     }
 
     /**

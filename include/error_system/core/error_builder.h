@@ -33,15 +33,15 @@ namespace error_system::core {
                                                       uint16_t subsys,
                                                       uint16_t module,
                                                       uint16_t number) noexcept {
-            error_code_t::error_code_union_t error_union;
-            error_union.fields.sign = 1;
-            error_union.fields.reserved = 0;
-            error_union.fields.level = level;
-            error_union.fields.system = system;
-            error_union.fields.subsys = subsys;
-            error_union.fields.module = module;
-            error_union.fields.number = number;
-            return error_code_t(error_union.code);
+            return error_code_t(
+                (static_cast<code_t>(1) << 0) |
+                (static_cast<code_t>(0) << 1) |
+                (static_cast<code_t>(level) << 4) |
+                (static_cast<code_t>(system) << 8) |
+                (static_cast<code_t>(subsys) << 16) |
+                (static_cast<code_t>(module) << 32) |
+                (static_cast<code_t>(number) << 48)
+            );
         }
 
         /**

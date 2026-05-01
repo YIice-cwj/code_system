@@ -10,6 +10,7 @@
  * @copyright Copyright (c) 2026
  */
 
+// IWYU pragma: begin_exports
 #include "error_system/subsystem/application_subsystem.h"
 #include "error_system/subsystem/database_subsystem.h"
 #include "error_system/subsystem/kernel_subsystem.h"
@@ -18,3 +19,4 @@
 #include "error_system/subsystem/service_subsystem.h"
 #include "error_system/subsystem/storage_subsystem.h"
 #include "error_system/subsystem/system_subsystem.h"
+// IWYU pragma: end_exports

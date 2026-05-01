@@ -1,6 +1,7 @@
 #pragma once
 #include "error_system/utils/string_utils.h"
 #include <string>
+#include <cstdint>
 
 /**
  * @file language.h
@@ -29,12 +30,35 @@ namespace error_system::i18n {
     constexpr const char* const LANGUAGE_STRING[] = {"zh_CN", "en_US"};
 
     /**
+     * @brief 语言枚举值转换为语言整数
+     * @details 用于将语言枚举值转换为语言整数
+     * @param lang 语言枚举值
+     * @return uint8_t 语言整数
+     */
+    constexpr uint8_t to_int(language_t lang) noexcept {
+        return static_cast<uint8_t>(std::underlying_type_t<language_t>(lang));
+    }
+
+    /**
+     * @brief 语言枚举值是否有效
+     * @details 用于判断语言枚举值是否有效
+     * @param lang 语言枚举值
+     * @return bool 语言枚举值是否有效
+     */
+    constexpr bool is_valid(uint8_t lang) noexcept {
+        return lang <= to_int(language_t::en_US);
+    }
+
+    /**
      * @brief 语言整数转换为语言枚举值
      * @details 用于将语言整数转换为语言枚举值
      * @param lang 语言整数
      * @return language_t 语言枚举值
      */
     constexpr language_t from_int(uint8_t lang) noexcept {
+        if (!is_valid(lang)) {
+            return language_t::zh_CN;
+        }
         return static_cast<language_t>(lang);
     }
 
@@ -53,16 +77,6 @@ namespace error_system::i18n {
             default:
                 return language_t::zh_CN;
         }
-    }
-
-    /**
-     * @brief 语言枚举值转换为语言整数
-     * @details 用于将语言枚举值转换为语言整数
-     * @param lang 语言枚举值
-     * @return uint8_t 语言整数
-     */
-    constexpr uint8_t to_int(language_t lang) noexcept {
-        return static_cast<uint8_t>(std::underlying_type_t<language_t>(lang));
     }
 
     /**

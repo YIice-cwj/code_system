@@ -5,6 +5,7 @@ Debug/
 Release/
 .vscode/
 .idea/
+.cache/
 .cursorrules
 *.o
 *.obj

@@ -10,6 +10,7 @@
  * @copyright Copyright (c) 2026
  */
 
+// IWYU pragma: begin_exports
 #include "error_system/module/application_module.h"
 #include "error_system/module/common_module.h"
 #include "error_system/module/database_module.h"
@@ -19,3 +20,4 @@
 #include "error_system/module/service_module.h"
 #include "error_system/module/storage_module.h"
 #include "error_system/module/system_module.h"
+// IWYU pragma: end_exports
