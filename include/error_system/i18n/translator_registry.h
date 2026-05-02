@@ -1,5 +1,6 @@
 #pragma once
 #include "error_system/i18n/i_translator.h"
+#include <atomic>
 
 /**
  * @file translator_registry.h
@@ -19,7 +20,7 @@ namespace error_system::i18n {
      */
     class translator_registry_t {
         private:
-        mutable i_translator_t* translator_{nullptr};
+        mutable std::atomic<i_translator_t*> translator_{nullptr};
 
         private:
         translator_registry_t() = default;
@@ -35,12 +36,6 @@ namespace error_system::i18n {
         translator_registry_t& operator=(translator_registry_t&&) = delete;
 
         public:
-        /**
-         * @brief 获取单例实例
-         * @return translator_registry_t& 单例引用
-         */
-        static translator_registry_t& instance() noexcept;
-
         /**
          * @brief 注册全局翻译器
          * @details 不持有所有权，调用方需保证翻译器在整个使用期间有效
@@ -61,6 +56,13 @@ namespace error_system::i18n {
          * @return bool 是否已有显式注册
          */
         bool has_translator() const noexcept;
+
+        public:
+        /**
+         * @brief 获取单例实例
+         * @return translator_registry_t& 单例引用
+         */
+        static translator_registry_t& instance() noexcept;
     };
 
 }  // namespace error_system::i18n

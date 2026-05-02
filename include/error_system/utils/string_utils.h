@@ -6,6 +6,10 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <cstdint>
+// IWYU pragma: begin_exports
+#include <algorithm>
+// IWYU pragma: end_exports
 
 /**
  * @file string_utils.h

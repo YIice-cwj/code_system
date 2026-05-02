@@ -1,7 +1,7 @@
 #pragma once
 #include "error_system/utils/string_utils.h"
 #include <cstdint>
-#include <string>
+#include <string_view>
 
 /**
  * @file language.h
@@ -69,8 +69,8 @@ namespace error_system::i18n {
      * @param lang 语言字符串
      * @return language_t 语言枚举值
      */
-    constexpr language_t from_string(const std::string& lang) noexcept {
-        switch (utils::string_utils_t::hash(lang.c_str())) {
+    constexpr language_t from_string(const std::string_view lang) noexcept {
+        switch (utils::string_utils_t::hash(lang)) {
             case utils::string_utils_t::hash("zh_cn"):
                 return language_t::zh_cn;
             case utils::string_utils_t::hash("en_us"):

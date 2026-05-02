@@ -1,6 +1,8 @@
 #pragma once
 #include "error_system/plugin/i_error_plugin.h"
 #include <vector>
+#include <string_view>
+#include <shared_mutex>
 
 /**
  * @file plugin_registry.h
@@ -21,6 +23,7 @@ namespace error_system::plugin {
     class plugin_registry_t {
         private:
         std::vector<i_error_plugin_t*> plugins_;
+        mutable std::shared_mutex plugins_mutex_;
 
         private:
         plugin_registry_t() = default;
@@ -36,12 +39,6 @@ namespace error_system::plugin {
         plugin_registry_t& operator=(plugin_registry_t&&) = delete;
 
         public:
-        /**
-         * @brief 获取单例实例
-         * @return plugin_registry_t& 单例引用
-         */
-        static plugin_registry_t& instance() noexcept;
-
         /**
          * @brief 注册插件
          * @details 若已存在同名插件，将替换旧插件
@@ -75,6 +72,18 @@ namespace error_system::plugin {
          * @return bool 是否为空
          */
         bool empty() const noexcept;
+
+        /**
+         * @brief 清空所有已注册插件
+         */
+        void clear() noexcept;
+
+        public:
+        /**
+         * @brief 获取单例实例
+         * @return plugin_registry_t& 单例引用
+         */
+        static plugin_registry_t& instance() noexcept;
     };
 
-}  // namespace error_system::core
+}  // namespace error_system::plugin

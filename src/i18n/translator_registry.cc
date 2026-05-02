@@ -17,7 +17,7 @@ namespace error_system::i18n {
      * @param translator 翻译器指针，传入 nullptr 可清除注册
      */
     void translator_registry_t::set(i_translator_t* translator) noexcept {
-        translator_ = translator;
+        translator_.store(translator, std::memory_order_relaxed);
     }
 
     /**
@@ -26,11 +26,13 @@ namespace error_system::i18n {
      * @return i_translator_t* 全局翻译器指针
      */
     i_translator_t* translator_registry_t::get() const noexcept {
-        if (!translator_) {
+        i_translator_t* current_translator = translator_.load(std::memory_order_relaxed);
+        if (!current_translator) {
             static json_translator_t default_translator(language_t::zh_cn);
-            translator_ = &default_translator;
+            translator_.store(&default_translator, std::memory_order_relaxed);
+            return &default_translator;
         }
-        return translator_;
+        return current_translator;
     }
 
     /**
@@ -38,7 +40,7 @@ namespace error_system::i18n {
      * @return bool 是否已注册
      */
     bool translator_registry_t::has_translator() const noexcept {
-        return translator_ != nullptr;
+        return translator_.load(std::memory_order_relaxed) != nullptr;
     }
 
 }  // namespace error_system::i18n

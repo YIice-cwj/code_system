@@ -2,8 +2,10 @@
 #include "error_system/core/error_code.h"
 #include "error_system/i18n/translator_registry.h"
 #include "error_system/utils/string_utils.h"
+#include "error_system/memory/object_pool.h"
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace error_system::core {
     class plugin_registry_t;
@@ -32,8 +34,11 @@ namespace error_system::core {
      * @details 封装错误上下文信息，提供字段解析和访问功能
      */
     struct error_context_t {
+        using object_pool_t = memory::object_pool_t<error_context_t, 128>;
+        
         error_code_t code{};
         std::string message{};
+        std::unordered_map<std::string, std::string> payload{};
         std::shared_ptr<error_context_t> cause{nullptr};
 
         constexpr error_context_t() noexcept = default;
@@ -64,8 +69,67 @@ namespace error_system::core {
          */
         error_context_t wrap(const error_context_t& underlying) const {
             error_context_t new_code_context = *this;
-            new_code_context.cause = std::make_shared<error_context_t>(underlying);
+
+            object_pool_t& object_pool = object_pool_t::instance_thread_local();
+            error_context_t* context_pointer = object_pool.acquire();
+            if (context_pointer) {
+                *context_pointer = underlying;
+                new_code_context.cause = std::shared_ptr<error_context_t>(
+                    context_pointer, 
+                    [&object_pool](error_context_t* context_pointer) -> void { 
+                        object_pool.release(context_pointer);
+                    }
+                );
+            } else {
+                new_code_context.cause = std::make_shared<error_context_t>(underlying);
+            }
             return new_code_context;
+        }
+
+        /**
+         * @brief 包装底层错误上下文
+         * @param underlying 底层错误上下文
+         * @return error_context_t 包装后的错误上下文
+         */
+        error_context_t wrap(error_context_t&& underlying) const {
+            error_context_t new_code_context = *this;
+
+            object_pool_t& object_pool = object_pool_t::instance_thread_local();
+            error_context_t* context_pointer = object_pool.acquire();
+            if (context_pointer) {
+                *context_pointer = std::move(underlying);
+                new_code_context.cause = std::shared_ptr<error_context_t>(
+                    context_pointer, 
+                    [&object_pool](error_context_t* context_pointer) -> void { 
+                        object_pool.release(context_pointer);
+                    }
+                );
+            } else {
+                new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
+            }
+            return new_code_context;
+        }
+
+        /**
+         * @brief 添加字段
+         * @param key 字段名
+         * @param val 字段值
+         * @return error_context_t& 当前错误上下文的引用
+         */
+        error_context_t& with(const std::string& key, const std::string& value) {
+            payload[key] = value;
+            return *this;
+        }
+
+        /**
+         * @brief 添加字段
+         * @param key 字段名
+         * @param val 字段值
+         * @return error_context_t& 当前错误上下文的引用
+         */
+        error_context_t& with(std::string&& key, std::string&& value) {
+            payload[std::move(key)] = std::move(value);
+            return *this;
         }
 
         /**
@@ -81,6 +145,19 @@ namespace error_system::core {
             }
 
             std::string result = utils::string_utils_t::format("{} - {}", translator->translate(code), message);
+            
+            if (!payload.empty()) {
+                result += " {";
+                bool first = true;
+                for (const auto& [key, value] : payload) {
+                    if (!first) {
+                        result += ", ";
+                    }
+                    result += key + "=" + value;
+                    first = false;
+                }
+                result += "}";
+            }
 
             if (cause) {
                 result += "\n  ↳ Caused by: " + cause->to_string(translator);
