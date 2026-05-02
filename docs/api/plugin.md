@@ -47,7 +47,7 @@ public:
 
 **头文件**：`error_system/plugin/plugin_registry.h`
 
-插件单例注册表，管理多个插件的生命周期绑定与事件广播。
+插件单例注册表，管理多个插件的生命周期绑定与事件广播。使用 `std::shared_mutex` 保证线程安全的并发访问。
 
 > **注意**：不持有插件所有权，调用方需保证插件对象在使用期间始终有效。
 
@@ -71,6 +71,9 @@ size_t size() const noexcept;
 
 // 是否没有插件
 bool empty() const noexcept;
+
+// 清空所有已注册插件
+void clear() noexcept;
 ```
 
 ---
@@ -138,6 +141,9 @@ error_context_t ctx{some_error_code, "操作失败"};
 
 // 动态注销
 reg.unregister_plugin("logger");
+
+// 清空所有插件
+reg.clear();
 ```
 
 ---

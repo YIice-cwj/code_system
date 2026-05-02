@@ -30,6 +30,7 @@ Core 层是整个错误系统的基础，定义了错误码数据结构、错误
 |------|--------|------|
 | `get_code()` | `uint64_t` | 获取原始 64 位码 |
 | `get_sign()` | `uint8_t` | 获取符号位 |
+| `get_reserved()` | `uint8_t` | 获取预留位 |
 | `get_level()` | `error_level_t` | 获取错误等级 |
 | `get_system()` | `system_domain_t` | 获取系统域 |
 | `get_subsys()` | `uint16_t` | 获取子系统编号 |
@@ -62,7 +63,6 @@ if (code.get_sign() == 1) {
 | `warn` | 2 | 警告 |
 | `error` | 3 | 错误 |
 | `fatal` | 4 | 致命错误 |
-| `custom` | 5 | 自定义 |
 
 ### 辅助函数
 
@@ -74,6 +74,10 @@ constexpr error_level_t from_string(const char* str);
 // 枚举 ↔ 整数
 constexpr uint8_t to_int(error_level_t level);
 constexpr error_level_t from_int(uint8_t value);
+
+// 相邻等级
+constexpr error_level_t next_level(error_level_t level);
+constexpr error_level_t prev_level(error_level_t level);
 
 // 等级过滤
 constexpr bool should_log(error_level_t current, error_level_t min_level);
@@ -90,7 +94,17 @@ constexpr bool should_log(error_level_t current, error_level_t min_level);
 ### 方法
 
 ```cpp
-// 按字段构建
+// 按字段构建（支持枚举类型的子系统和模块）
+template<typename SubSystemEnum, typename ModuleEnum>
+static constexpr error_code_t make_error_code(
+    error_level_t level,
+    domain::system_domain_t system,
+    SubSystemEnum subsys,
+    ModuleEnum module,
+    uint16_t number
+) noexcept;
+
+// 按原始值构建
 static constexpr error_code_t make_error_code(
     error_level_t level,
     domain::system_domain_t system,
@@ -122,7 +136,7 @@ constexpr auto db_conn_err = error_builder_t::make_error_code(
 
 **头文件**：`error_system/core/error_context.h`
 
-错误上下文，封装错误码、消息文本及因果链（cause chain）。
+错误上下文，封装错误码、消息文本、结构化负载及因果链（cause chain）。
 
 ### 成员
 
@@ -130,6 +144,7 @@ constexpr auto db_conn_err = error_builder_t::make_error_code(
 |------|------|------|
 | `code` | `error_code_t` | 错误码 |
 | `message` | `std::string` | 错误描述文本 |
+| `payload` | `std::unordered_map<std::string, std::string>` | 结构化键值对负载 |
 | `cause` | `shared_ptr<error_context_t>` | 上级原因（可选） |
 
 ### 方法
@@ -139,7 +154,13 @@ constexpr auto db_conn_err = error_builder_t::make_error_code(
 explicit operator bool() const noexcept;
 
 // 包装因果链：将 underlying 作为 this 的 cause
+// 优先使用线程局部对象池分配，池满时回退到堆分配
 error_context_t wrap(const error_context_t& underlying) const;
+error_context_t wrap(error_context_t&& underlying) const;
+
+// 添加结构化键值对，支持链式调用
+error_context_t& with(const std::string& key, const std::string& value);
+error_context_t& with(std::string&& key, std::string&& value);
 
 // 转为可读字符串
 // translator 优先级：传入参数 > 全局注册翻译器 > 降级英文名
@@ -155,13 +176,16 @@ std::string to_string(const i18n::i_translator_t* translator = nullptr) const;
 ```cpp
 error_context_t ctx{db_err, "数据库连接超时"};
 
+// 添加结构化负载
+ctx.with("host", "192.168.1.1").with("port", "3306");
+
 // 包装因果链
 error_context_t outer{app_err, "请求处理失败"};
 auto chained = outer.wrap(ctx);
 
 // 转字符串（使用全局翻译器）
 std::cout << chained.to_string() << std::endl;
-// [Level: fatal, System: database, ...] Code: 404 - 数据库连接超时
+// [Level: fatal, System: database, ...] Code: 404 - 数据库连接超时 {host=192.168.1.1, port=3306}
 //   ↳ Caused by: ...
 ```
 

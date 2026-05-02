@@ -27,9 +27,11 @@
 *   **零开销位域封装**: 采用 `union` 与位域结合的设计，直接在寄存器层面完成 64 位整数与各错误字段的转换。
 *   **丰富的错误上下文**: 统一的 64 位错误码结构，包含了等级（Level）、系统域（Domain）、子系统（Subsystem）、模块（Module）和错误编号（Number），轻松实现问题的快速定位。
 *   **多语言支持 (i18n)**: 内置 `json_translator`，支持动态加载 JSON 字典，将冷冰冰的错误码转换为对用户友好的多语言文本。
-*   **模块化预定义**: 已经内置了 16 大系统域（Kernel、Network、Database、Middleware、AI、Cloud 等），每个域下包含丰富的子系统和模块枚举，开箱即用。
+*   **插件系统 (Plugin)**: 提供可扩展的插件接口，支持日志、统计、告警等自定义错误处理能力的接入。
+*   **模块化预定义**: 已经内置了 18 大系统域（Kernel、Network、Database、Middleware、AI、Cloud 等），每个域下包含丰富的子系统和模块枚举，开箱即用。
 *   **Traits 类型萃取**: 为所有子系统和模块提供统一的 `traits` 接口，支持编译期枚举与字符串的双向转换。
-*   **完备的测试**: 深度集成 GoogleTest，142+ 单元测试确保核心逻辑坚如磐石。
+*   **对象池优化**: `error_context_t` 的因果链包装使用线程局部对象池，减少高频场景下的堆分配开销。
+*   **完备的测试**: 深度集成 GoogleTest，160+ 单元测试确保核心逻辑坚如磐石。
 
 ---
 
@@ -124,9 +126,28 @@ constexpr auto value = subsystem_traits<database_subsystem_t>::to_int(database_s
 using namespace error_system::i18n;
 
 json_translator_t translator(language_t::zh_cn);
-// translator.load_dict("path/to/dict.json"); // 加载字典
-
 std::string error_msg = translator.translate(db_err);
+```
+
+### 5. 注册插件
+
+通过插件系统接入自定义的错误处理能力：
+
+```cpp
+#include "error_system/plugin/i_error_plugin.h"
+#include "error_system/plugin/plugin_registry.h"
+
+class log_plugin_t : public error_system::plugin::i_error_plugin_t {
+public:
+    std::string_view name() const noexcept override { return "logger"; }
+    void on_error(const error_system::core::error_context_t& ctx) noexcept override {
+        std::cerr << "[LOG] " << ctx.to_string() << "\n";
+    }
+};
+
+// 注册插件
+log_plugin_t logger;
+plugin_registry_t::instance().register_plugin(&logger);
 ```
 
 ---
@@ -141,13 +162,15 @@ std::string error_msg = translator.translate(db_err);
 │  ├── error_code_t    (64位错误码数据类)                      │
 │  ├── error_builder_t (编译期错误码构建器)                    │
 │  ├── error_level_t   (错误等级枚举)                          │
+│  ├── error_context_t (错误上下文：码+消息+因果链+结构化负载) │
+│  ├── result_t<T>     (类Rust Result，替代异常传递错误)       │
 │  └── error_registry_t(错误码注册器)                          │
 ├─────────────────────────────────────────────────────────────┤
 │  Domain Layer                                                │
-│  └── system_domain_t (16大系统域定义)                        │
+│  └── system_domain_t (18大系统域定义)                        │
 ├─────────────────────────────────────────────────────────────┤
 │  Subsystem / Module Layer                                    │
-│  ├── 16 个子系统枚举 (kernel, network, database, ai...)     │
+│  ├── 18 个子系统枚举 (kernel, network, database, ai...)     │
 │  └── 17 个模块枚举   (kernel, network, database..., common) │
 ├─────────────────────────────────────────────────────────────┤
 │  Traits Layer                                                │
@@ -157,7 +180,15 @@ std::string error_msg = translator.translate(db_err);
 │  i18n Layer                                                  │
 │  ├── i_translator_t     (翻译器接口)                         │
 │  ├── json_translator_t  (JSON字典翻译实现)                   │
+│  ├── translator_registry_t(全局翻译器单例注册表)             │
 │  └── language_t         (支持语言枚举)                       │
+├─────────────────────────────────────────────────────────────┤
+│  Plugin Layer                                                │
+│  ├── i_error_plugin_t   (插件抽象接口)                       │
+│  └── plugin_registry_t  (插件单例注册表，负责广播)           │
+├─────────────────────────────────────────────────────────────┤
+│  Memory Layer                                                │
+│  └── object_pool_t<T>   (线程局部对象池，优化高频分配)       │
 ├─────────────────────────────────────────────────────────────┤
 │  Utils Layer                                                 │
 │  ├── string_utils_t     (字符串处理: hash, trim, format...) │
@@ -186,6 +217,8 @@ std::string error_msg = translator.translate(db_err);
 | `blockchain` | 0x0D | 区块链 |
 | `bigdata` | 0x0E | 大数据 |
 | `devops` | 0x0F | DevOps |
+| `distributed` | 0x10 | 分布式系统 |
+| `monitoring` | 0x11 | 监控告警 |
 
 ---
 
@@ -203,10 +236,10 @@ constexpr auto h = utils::string_utils_t::hash("hello");
 std::string msg = utils::string_utils_t::format("Error: {}", "connection failed");
 
 // 修剪空白
-std::string trimmed = utils::string_utils_t::trim("  hello  ");
+std::string_view trimmed = utils::string_utils_t::trim("  hello  ");
 
 // 分割字符串
-auto parts = utils::string_utils_t::split("a,b,c", ',');
+auto parts = utils::string_utils_t::split("a,b,c", ",");
 ```
 
 ### json_utils_t
@@ -215,7 +248,7 @@ auto parts = utils::string_utils_t::split("a,b,c", ',');
 
 ```cpp
 auto dict = utils::json_dict_t::parse(R"({"user": {"name": "Alice"}})");
-std::string name = dict->get_value_or("user.name", "Unknown");
+std::string name = dict->get_value_or("user.name", "Unknown").value();
 ```
 
 ### file_utils_t
@@ -241,7 +274,7 @@ utils::file_utils::write_file("output.txt", "Hello, World!");
 
 ```bash
 # 1. 克隆项目
-git clone <repo-url>
+git clone https://github.com/YIice-cwj/error_system.git
 cd error_system
 
 # 2. 生成构建文件
@@ -270,22 +303,29 @@ target_link_libraries(your_target PRIVATE error_system::error_system)
 error_system/
 ├── CMakeLists.txt              # CMake 配置
 ├── include/error_system/       # 对外公开的头文件
-│   ├── core/                   # 核心定义 (error_code_t, error_builder_t, error_level_t)
+│   ├── core/                   # 核心定义 (error_code_t, error_builder_t, error_level_t, error_context_t, result_t)
 │   ├── domain/                 # 系统域定义 (system_domain_t)
 │   ├── module/                 # 17 个模块枚举定义
-│   ├── subsystem/              # 16 个子系统枚举定义
+│   ├── subsystem/              # 18 个子系统枚举定义
 │   ├── traits/                 # 类型萃取
 │   │   ├── module/             # 模块 traits (枚举↔字符串↔整数)
 │   │   └── subsystem/          # 子系统 traits
 │   ├── i18n/                   # 多语言翻译接口与实现
-│   │   └── languages/          # JSON 翻译字典 (zh_CN.json, en_US.json)
+│   │   └── languages/          # JSON 翻译字典 (zh_cn.json, en_us.json)
+│   ├── plugin/                 # 插件系统接口
+│   ├── memory/                 # 内存管理 (对象池)
 │   └── utils/                  # 辅助工具 (string, json, file)
 ├── src/                        # 核心实现代码
-│   ├── i18n/                   # json_translator 实现
+│   ├── core/                   # error_context 实现
+│   ├── i18n/                   # json_translator, translator_registry 实现
+│   ├── plugin/                 # plugin_registry 实现
 │   └── utils/                  # 工具函数实现
 ├── tests/                      # GoogleTest 单元测试
-│   ├── traits/                 # traits 测试 (46 个用例)
-│   └── utils/                  # 工具库测试 (96 个用例)
+│   ├── core/                   # 核心层测试
+│   ├── i18n/                   # i18n 层测试
+│   ├── plugin/                 # 插件层测试
+│   ├── traits/                 # traits 测试
+│   └── utils/                  # 工具库测试
 ├── script/                     # 代码生成脚本
 │   ├── generate_i18n.sh        # 生成翻译字典
 │   └── generate_traits.sh      # 生成 traits 文件

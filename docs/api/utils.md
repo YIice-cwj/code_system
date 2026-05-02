@@ -36,7 +36,7 @@ switch (string_utils_t::hash(input)) {
 
 ```cpp
 template<typename... Args>
-static std::string format(std::string_view fmt, const Args&... args);
+static std::string format(std::string_view fmt, Args&&... args);
 
 // 示例
 std::string msg = string_utils_t::format(
@@ -97,20 +97,26 @@ static std::string to_upper(std::string_view str) noexcept;
 
 ```cpp
 // 从文件加载
-static std::optional<json_dict_t> from_file(const std::string& path);
+static std::optional<json_dict_t> from_file(const std::filesystem::path& json_path) noexcept;
 
 // 从字符串解析
-static std::optional<json_dict_t> parse(std::string_view json);
+static std::optional<json_dict_t> parse(const std::string& json_content) noexcept;
 
 // 获取值，key 支持点分隔嵌套路径
-std::optional<std::string> get_value(const std::string& key) const;
+std::optional<std::string> get_value(const std::string& key) const noexcept;
 
 // 获取值，若不存在则返回 default_value
 std::optional<std::string> get_value_or(const std::string& key,
-                                         const std::string& default_value) const;
+                                         const std::string& default_value) const noexcept;
+
+// 检查字典是否包含指定键
+bool contains(const std::string& key) const noexcept;
 
 // 判断字典是否为空
 bool empty() const noexcept;
+
+// 获取字典大小
+size_t size() const noexcept;
 
 // 示例
 auto dict = json_dict_t::from_file("zh_cn.json");
@@ -123,12 +129,27 @@ std::string text = dict->get_value_or("domain.database", "database").value();
 
 **头文件**：`error_system/utils/file_utils.h`
 
-跨平台文件读写工具函数。
+跨平台文件读写工具类。
 
 ```cpp
 // 读取整个文件内容
-std::optional<std::string> read_file(const std::string& path);
+static std::optional<std::string> read_file(const std::filesystem::path& path) noexcept;
 
 // 写入文件（覆盖）
-bool write_file(const std::string& path, std::string_view content);
+static bool write_file(const std::filesystem::path& path, const std::string& content) noexcept;
+
+// 创建文件
+static bool create_file(const std::filesystem::path& path) noexcept;
+
+// 删除文件
+static bool delete_file(const std::filesystem::path& path) noexcept;
+
+// 强制删除文件
+static bool force_delete_file(const std::filesystem::path& path) noexcept;
+
+// 检查文件是否存在
+static bool file_exists(const std::filesystem::path& path) noexcept;
+
+// 检查文件路径是否存在
+static bool file_path_exists(const std::filesystem::path& path) noexcept;
 ```
