@@ -26,12 +26,14 @@
 *   **现代 C++17**: 大量使用 `constexpr`，支持编译期错误码构建，提供极致性能。
 *   **零开销位域封装**: 采用 `union` 与位域结合的设计，直接在寄存器层面完成 64 位整数与各错误字段的转换。
 *   **丰富的错误上下文**: 统一的 64 位错误码结构，包含了等级（Level）、系统域（Domain）、子系统（Subsystem）、模块（Module）和错误编号（Number），轻松实现问题的快速定位。
+*   **结构化负载 (Payload)**: `error_context_t` 支持键值对形式的结构化负载，方便附加任意调试信息。
+*   **自动堆栈跟踪**: 可配置的错误等级阈值，当错误等级达到阈值时自动捕获当前调用栈，加速问题定位。
 *   **多语言支持 (i18n)**: 内置 `json_translator`，支持动态加载 JSON 字典，将冷冰冰的错误码转换为对用户友好的多语言文本。
 *   **插件系统 (Plugin)**: 提供可扩展的插件接口，支持日志、统计、告警等自定义错误处理能力的接入。
 *   **模块化预定义**: 已经内置了 18 大系统域（Kernel、Network、Database、Middleware、AI、Cloud 等），每个域下包含丰富的子系统和模块枚举，开箱即用。
 *   **Traits 类型萃取**: 为所有子系统和模块提供统一的 `traits` 接口，支持编译期枚举与字符串的双向转换。
 *   **对象池优化**: `error_context_t` 的因果链包装使用线程局部对象池，减少高频场景下的堆分配开销。
-*   **完备的测试**: 深度集成 GoogleTest，160+ 单元测试确保核心逻辑坚如磐石。
+*   **完备的测试**: 深度集成 GoogleTest，180+ 单元测试确保核心逻辑坚如磐石。
 
 ---
 
@@ -92,7 +94,61 @@ if (code.get_sign() == 1) { // 判断是否为错误
 }
 ```
 
-### 3. 使用 Traits 进行枚举转换
+### 3. 使用错误上下文 (error_context_t)
+
+`error_context_t` 封装了完整的错误信息，支持消息格式化、结构化负载、堆栈跟踪和因果链：
+
+```cpp
+#include "error_system/core/error_context.h"
+
+using namespace error_system::core;
+
+// 设置堆栈捕获阈值（WARN 及以上自动捕获堆栈）
+error_config::set_stacktrace_level(error_level_t::warn);
+
+// 创建错误上下文
+auto code = error_builder_t::make_error_code(
+    error_level_t::error, domain::system_domain_t::database, 0, 0, 1001);
+
+error_context_t ctx(code, "数据库连接失败: {}", "timeout");
+
+// 添加结构化负载
+ctx.with("host", "192.168.1.100")
+   .with("port", "3306")
+   .with("database", "user_db");
+
+// 输出完整错误信息（含堆栈和负载）
+std::cout << ctx.to_string() << "\n";
+```
+
+### 4. 使用 result_t 进行错误传递
+
+`result_t<T>` 提供类似 Rust Result 的类型安全错误处理，无需异常：
+
+```cpp
+#include "error_system/core/result_t.h"
+
+using namespace error_system::core;
+
+result_t<int> divide(int a, int b) {
+    if (b == 0) {
+        auto code = error_builder_t::make_error_code(
+            error_level_t::error, domain::system_domain_t::application, 0, 0, 1);
+        return error_context_t(code, "除数不能为零");
+    }
+    return a / b;
+}
+
+// 使用
+auto result = divide(10, 0);
+if (result.is_error()) {
+    std::cerr << result.error().to_string() << "\n";
+} else {
+    std::cout << "结果: " << result.value() << "\n";
+}
+```
+
+### 5. 使用 Traits 进行枚举转换
 
 系统为所有子系统和模块提供了类型萃取，支持编译期枚举与字符串的双向转换：
 
@@ -116,20 +172,26 @@ constexpr auto value = subsystem_traits<database_subsystem_t>::to_int(database_s
 // 结果: 0x0701
 ```
 
-### 4. 多语言翻译 (i18n)
+### 6. 多语言翻译 (i18n)
 
 内置的 `json_translator_t` 支持将错误码映射为具体语言的字符串：
 
 ```cpp
 #include "error_system/i18n/json_translator.h"
+#include "error_system/i18n/translator_registry.h"
 
 using namespace error_system::i18n;
 
+// 创建翻译器
 json_translator_t translator(language_t::zh_cn);
 std::string error_msg = translator.translate(db_err);
+
+// 或使用全局注册表
+translator_registry_t::instance().set(&translator);
+std::string msg = ctx.to_string(); // 自动使用全局翻译器
 ```
 
-### 5. 注册插件
+### 7. 注册插件
 
 通过插件系统接入自定义的错误处理能力：
 
@@ -162,7 +224,8 @@ plugin_registry_t::instance().register_plugin(&logger);
 │  ├── error_code_t    (64位错误码数据类)                      │
 │  ├── error_builder_t (编译期错误码构建器)                    │
 │  ├── error_level_t   (错误等级枚举)                          │
-│  ├── error_context_t (错误上下文：码+消息+因果链+结构化负载) │
+│  ├── error_context_t (错误上下文：码+消息+因果链+负载+堆栈)  │
+│  ├── error_config_t  (全局错误配置：堆栈阈值、默认语言)      │
 │  ├── result_t<T>     (类Rust Result，替代异常传递错误)       │
 │  └── error_registry_t(错误码注册器)                          │
 ├─────────────────────────────────────────────────────────────┤
@@ -170,7 +233,7 @@ plugin_registry_t::instance().register_plugin(&logger);
 │  └── system_domain_t (18大系统域定义)                        │
 ├─────────────────────────────────────────────────────────────┤
 │  Subsystem / Module Layer                                    │
-│  ├── 18 个子系统枚举 (kernel, network, database, ai...)     │
+│  ├── 36+ 个子系统枚举 (kernel_cpu, database_sql, ai_llm...) │
 │  └── 17 个模块枚举   (kernel, network, database..., common) │
 ├─────────────────────────────────────────────────────────────┤
 │  Traits Layer                                                │
@@ -193,7 +256,8 @@ plugin_registry_t::instance().register_plugin(&logger);
 │  Utils Layer                                                 │
 │  ├── string_utils_t     (字符串处理: hash, trim, format...) │
 │  ├── json_utils_t       (JSON解析与字典)                     │
-│  └── file_utils_t       (文件读写操作)                       │
+│  ├── file_utils_t       (文件读写操作)                       │
+│  └── stack_trace_utils_t(跨平台堆栈跟踪)                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -260,6 +324,18 @@ auto content = utils::file_utils::read_file("config.json");
 utils::file_utils::write_file("output.txt", "Hello, World!");
 ```
 
+### stack_trace_utils_t
+
+跨平台堆栈跟踪工具，支持 Linux/macOS/Windows：
+
+```cpp
+// 抓取当前调用栈（跳过前1帧）
+auto frames = utils::stack_trace_utils_t::generate(1, 64);
+for (const auto& frame : frames) {
+    std::cout << frame << "\n";
+}
+```
+
 ---
 
 ## 编译与安装 (Build & Install)
@@ -291,8 +367,10 @@ ctest --output-on-failure
 ### 作为子项目使用
 
 ```cmake
-add_subdirectory(error_system)
-target_link_libraries(your_target PRIVATE error_system::error_system)
+find_package(error_system 1.0.0 REQUIRED)
+
+add_executable(my_business_app main.cpp)
+target_link_libraries(my_business_app PRIVATE error_system::error_system)
 ```
 
 ---
@@ -302,11 +380,12 @@ target_link_libraries(your_target PRIVATE error_system::error_system)
 ```text
 error_system/
 ├── CMakeLists.txt              # CMake 配置
+├── README.md                   # 项目说明
 ├── include/error_system/       # 对外公开的头文件
-│   ├── core/                   # 核心定义 (error_code_t, error_builder_t, error_level_t, error_context_t, result_t)
+│   ├── core/                   # 核心定义 (error_code_t, error_builder_t, error_level_t, error_context_t, result_t, error_config)
 │   ├── domain/                 # 系统域定义 (system_domain_t)
 │   ├── module/                 # 17 个模块枚举定义
-│   ├── subsystem/              # 18 个子系统枚举定义
+│   ├── subsystem/              # 36+ 个子系统枚举定义
 │   ├── traits/                 # 类型萃取
 │   │   ├── module/             # 模块 traits (枚举↔字符串↔整数)
 │   │   └── subsystem/          # 子系统 traits
@@ -314,7 +393,7 @@ error_system/
 │   │   └── languages/          # JSON 翻译字典 (zh_cn.json, en_us.json)
 │   ├── plugin/                 # 插件系统接口
 │   ├── memory/                 # 内存管理 (对象池)
-│   └── utils/                  # 辅助工具 (string, json, file)
+│   └── utils/                  # 辅助工具 (string, json, file, stack_trace)
 ├── src/                        # 核心实现代码
 │   ├── core/                   # error_context 实现
 │   ├── i18n/                   # json_translator, translator_registry 实现
@@ -326,6 +405,9 @@ error_system/
 │   ├── plugin/                 # 插件层测试
 │   ├── traits/                 # traits 测试
 │   └── utils/                  # 工具库测试
+├── examples/                   # 示例代码
+│   ├── demo_01.cc              # 基础功能演示
+│   └── demo_02.cc              # 高级功能演示
 ├── script/                     # 代码生成脚本
 │   ├── generate_i18n.sh        # 生成翻译字典
 │   └── generate_traits.sh      # 生成 traits 文件
