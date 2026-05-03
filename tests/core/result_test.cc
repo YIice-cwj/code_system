@@ -96,4 +96,234 @@ namespace error_system::core {
         EXPECT_EQ(result.error().cause->message, "root cause");
     }
 
+    TEST_F(result_t_test, and_then_success_lvalue) {
+        result_t<int> result(42);
+        auto next = result.and_then([](int value) -> result_t<double> {
+            return static_cast<double>(value) / 2.0;
+        });
+
+        EXPECT_TRUE(next.is_success());
+        EXPECT_DOUBLE_EQ(next.value(), 21.0);
+    }
+
+    TEST_F(result_t_test, and_then_error_lvalue) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<int> result(code, "original error");
+        auto next = result.and_then([](int value) -> result_t<double> {
+            return static_cast<double>(value) / 2.0;
+        });
+
+        EXPECT_TRUE(next.is_error());
+        EXPECT_EQ(next.error().message, "original error");
+    }
+
+    TEST_F(result_t_test, and_then_success_rvalue) {
+        result_t<int> result(42);
+        auto next = std::move(result).and_then([](int value) -> result_t<double> {
+            return static_cast<double>(value) / 2.0;
+        });
+
+        EXPECT_TRUE(next.is_success());
+        EXPECT_DOUBLE_EQ(next.value(), 21.0);
+    }
+
+    TEST_F(result_t_test, and_then_error_rvalue) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<int> result(code, "original error");
+        auto next = std::move(result).and_then([](int value) -> result_t<double> {
+            return static_cast<double>(value) / 2.0;
+        });
+
+        EXPECT_TRUE(next.is_error());
+        EXPECT_EQ(next.error().message, "original error");
+    }
+
+    TEST_F(result_t_test, and_then_chained) {
+        result_t<int> result(10);
+        auto final_result = result
+            .and_then([](int v) -> result_t<int> { return v * 2; })
+            .and_then([](int v) -> result_t<int> { return v + 5; });
+
+        EXPECT_TRUE(final_result.is_success());
+        EXPECT_EQ(final_result.value(), 25);
+    }
+
+    TEST_F(result_t_test, and_then_chained_error_propagation) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<int> result(code, "step 1 error");
+        auto final_result = result
+            .and_then([](int v) -> result_t<int> { return v * 2; })
+            .and_then([](int v) -> result_t<int> { return v + 5; });
+
+        EXPECT_TRUE(final_result.is_error());
+        EXPECT_EQ(final_result.error().message, "step 1 error");
+    }
+
+    TEST_F(result_t_test, or_else_success_lvalue) {
+        result_t<int> result(42);
+        auto next = result.or_else([](const error_context_t& /*ctx*/) -> result_t<int> {
+            return 0;
+        });
+
+        EXPECT_TRUE(next.is_success());
+        EXPECT_EQ(next.value(), 42);
+    }
+
+    TEST_F(result_t_test, or_else_error_lvalue) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<int> result(code, "original error");
+        auto next = result.or_else([](const error_context_t& /*ctx*/) -> result_t<int> {
+            return 100;
+        });
+
+        EXPECT_TRUE(next.is_success());
+        EXPECT_EQ(next.value(), 100);
+    }
+
+    TEST_F(result_t_test, or_else_success_rvalue) {
+        result_t<int> result(42);
+        auto next = std::move(result).or_else([](const error_context_t& /*ctx*/) -> result_t<int> {
+            return 0;
+        });
+
+        EXPECT_TRUE(next.is_success());
+        EXPECT_EQ(next.value(), 42);
+    }
+
+    TEST_F(result_t_test, or_else_error_rvalue) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<int> result(code, "original error");
+        auto next = std::move(result).or_else([](const error_context_t& /*ctx*/) -> result_t<int> {
+            return 100;
+        });
+
+        EXPECT_TRUE(next.is_success());
+        EXPECT_EQ(next.value(), 100);
+    }
+
+    TEST_F(result_t_test, or_else_recover_with_error) {
+        auto code1 = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<int> result(code1, "original error");
+        auto code2 = error_builder_t::make_error_code(error_level_t::warn, domain::system_domain_t::database, 0, 0, 2);
+        auto next = result.or_else([&](const error_context_t& /*ctx*/) -> result_t<int> {
+            return result_t<int>(code2, "recovered error");
+        });
+
+        EXPECT_TRUE(next.is_error());
+        EXPECT_EQ(next.error().message, "recovered error");
+    }
+
+    TEST_F(result_t_test, and_then_void_success_lvalue) {
+        result_t<void> result;
+        auto next = result.and_then([]() -> result_t<int> {
+            return 42;
+        });
+
+        EXPECT_TRUE(next.is_success());
+        EXPECT_EQ(next.value(), 42);
+    }
+
+    TEST_F(result_t_test, and_then_void_error_lvalue) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<void> result(code, "void error");
+        auto next = result.and_then([]() -> result_t<int> {
+            return 42;
+        });
+
+        EXPECT_TRUE(next.is_error());
+        EXPECT_EQ(next.error().message, "void error");
+    }
+
+    TEST_F(result_t_test, and_then_void_success_rvalue) {
+        result_t<void> result;
+        auto next = std::move(result).and_then([]() -> result_t<int> {
+            return 42;
+        });
+
+        EXPECT_TRUE(next.is_success());
+        EXPECT_EQ(next.value(), 42);
+    }
+
+    TEST_F(result_t_test, and_then_void_error_rvalue) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<void> result(code, "void error");
+        auto next = std::move(result).and_then([]() -> result_t<int> {
+            return 42;
+        });
+
+        EXPECT_TRUE(next.is_error());
+        EXPECT_EQ(next.error().message, "void error");
+    }
+
+    TEST_F(result_t_test, or_else_void_success_lvalue) {
+        result_t<void> result;
+        auto next = result.or_else([](const error_context_t& /*ctx*/) -> result_t<void> {
+            return result_t<void>();
+        });
+
+        EXPECT_TRUE(next.is_success());
+    }
+
+    TEST_F(result_t_test, or_else_void_error_lvalue) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<void> result(code, "void error");
+        auto next = result.or_else([](const error_context_t& /*ctx*/) -> result_t<void> {
+            return result_t<void>();
+        });
+
+        EXPECT_TRUE(next.is_success());
+    }
+
+    TEST_F(result_t_test, or_else_void_success_rvalue) {
+        result_t<void> result;
+        auto next = std::move(result).or_else([](const error_context_t& /*ctx*/) -> result_t<void> {
+            return result_t<void>();
+        });
+
+        EXPECT_TRUE(next.is_success());
+    }
+
+    TEST_F(result_t_test, or_else_void_error_rvalue) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<void> result(code, "void error");
+        auto next = std::move(result).or_else([](const error_context_t& /*ctx*/) -> result_t<void> {
+            return result_t<void>();
+        });
+
+        EXPECT_TRUE(next.is_success());
+    }
+
+    TEST_F(result_t_test, and_then_with_move_only_type) {
+        result_t<std::unique_ptr<int>> result(std::make_unique<int>(42));
+        auto next = std::move(result).and_then([](std::unique_ptr<int> ptr) -> result_t<int> {
+            return *ptr;
+        });
+
+        EXPECT_TRUE(next.is_success());
+        EXPECT_EQ(next.value(), 42);
+    }
+
+    TEST_F(result_t_test, combined_and_then_or_else) {
+        result_t<int> result(5);
+        auto final_result = result
+            .and_then([](int v) -> result_t<int> { return v * 2; })
+            .or_else([](const error_context_t& /*ctx*/) -> result_t<int> { return 0; })
+            .and_then([](int v) -> result_t<int> { return v + 3; });
+
+        EXPECT_TRUE(final_result.is_success());
+        EXPECT_EQ(final_result.value(), 13);
+    }
+
+    TEST_F(result_t_test, combined_error_and_then_or_else) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        result_t<int> result(code, "initial error");
+        auto final_result = result
+            .and_then([](int v) -> result_t<int> { return v * 2; })
+            .or_else([](const error_context_t& /*ctx*/) -> result_t<int> { return 99; })
+            .and_then([](int v) -> result_t<int> { return v + 1; });
+
+        EXPECT_TRUE(final_result.is_success());
+        EXPECT_EQ(final_result.value(), 100);
+    }
+
 }  // namespace error_system::core
