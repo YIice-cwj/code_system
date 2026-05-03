@@ -1,5 +1,6 @@
 #pragma once
 #include <variant>
+#include <functional>
 #include "error_system/core/error_context.h"
 
 /**
@@ -52,7 +53,8 @@ namespace error_system::core {
          */
         result_t(error_code_t code, const std::string& message = "") 
             : value_or_error_(error_context_t{code, message}) {}
-        
+
+        public:        
         /**
          * @brief 检查结果是否为错误
          * @return bool 如果结果为错误则返回true
@@ -82,6 +84,69 @@ namespace error_system::core {
          * @return value_type& 成功值
          */
         value_type& value() noexcept { return std::get<value_type>(value_or_error_); }
+
+        /**
+         * @brief 对结果进行链式操作（右值引用版本）
+         * @param function 要执行的操作函数
+         * @return decltype(std::invoke(std::forward<Function>(function), std::move(value_))) 操作结果
+         * @details 如果当前结果为成功，则调用 function 处理值并返回其结果；
+         *          如果当前结果为错误，则返回包含当前错误的新结果（移动语义）
+        */
+        template <typename Function>
+        auto and_then(Function&& function) && -> decltype(std::invoke(std::forward<Function>(function), std::move(value()))) {
+            using return_type = decltype(std::invoke(std::forward<Function>(function), std::move(value())));
+            if (is_error()) {
+                return return_type(std::move(error())); 
+            }
+            return std::invoke(std::forward<Function>(function), std::move(value()));
+        }
+
+        
+        /**
+         * @brief 对结果进行链式操作（左值引用版本）
+         * @param function 要执行的操作函数
+         * @return decltype(std::invoke(std::forward<Function>(function), value())) 操作结果
+         * @details 如果当前结果为成功，则调用 function 处理值并返回其结果；
+         *          如果当前结果为错误，则返回包含当前错误的新结果
+        */
+        template <typename Function>
+        auto and_then(Function&& function) & -> decltype(std::invoke(std::forward<Function>(function), value())) {
+            using return_type = decltype(std::invoke(std::forward<Function>(function), value()));
+            if (is_error()) {
+                return return_type(error());
+            }
+            return std::invoke(std::forward<Function>(function), value());
+        }
+
+        /**
+         * @brief 对错误结果进行链式操作（右值引用版本）
+         * @param function 要执行的操作函数
+         * @return result_t<value_type> 操作结果
+         * @details 如果当前结果为错误，则调用 function 处理错误并返回其结果；
+         *          如果当前结果为成功，则返回当前对象（移动语义）
+         */
+        template <typename Function>
+        result_t<value_type> or_else(Function&& function) && {
+            if (is_error()) {
+                return std::invoke(std::forward<Function>(function), std::move(error()));
+            }
+            return std::move(*this);
+        }
+        
+        /**
+         * @brief 对错误结果进行链式操作（左值引用版本）
+         * @param function 要执行的操作函数
+         * @return result_t<value_type> 操作结果
+         * @details 如果当前结果为错误，则调用 function 处理错误并返回其结果；
+         *          如果当前结果为成功，则返回当前对象的副本
+         */
+        template <typename Function>
+        result_t<value_type> or_else(Function&& function) & {
+            if (is_error()) {
+                return std::invoke(std::forward<Function>(function), error());
+            }
+            return *this;
+        }
     };
 
     /** 
@@ -133,6 +198,68 @@ namespace error_system::core {
          * @return const error_context_t& 错误上下文
          */
         const error_context_t& error() const noexcept { return error_context_; }
+
+        /**
+         * @brief 对结果进行链式操作（右值引用版本）
+         * @param function 要执行的操作函数
+         * @return decltype(std::invoke(std::forward<Function>(function))) 操作结果
+         * @details 如果当前结果为成功，则调用 function 并返回其结果；
+         *          如果当前结果为错误，则返回包含当前错误上下文的新结果（移动语义）
+         */
+        template <typename Function>
+        auto and_then(Function&& function) && -> decltype(std::invoke(std::forward<Function>(function))) {
+            using return_type = decltype(std::invoke(std::forward<Function>(function)));
+            if (is_error()) {
+                return return_type(std::move(error_context_)); 
+            }
+            return std::invoke(std::forward<Function>(function));
+        }
+
+        /**
+         * @brief 对结果进行链式操作（左值引用版本）
+         * @param function 要执行的操作函数
+         * @return decltype(std::invoke(std::forward<Function>(function))) 操作结果
+         * @details 如果当前结果为成功，则调用 function 并返回其结果；
+         *          如果当前结果为错误，则返回包含当前错误上下文的新结果
+         */
+        template <typename Function>
+        auto and_then(Function&& function) & -> decltype(std::invoke(std::forward<Function>(function))) {
+            using return_type = decltype(std::invoke(std::forward<Function>(function)));
+            if (is_error()) {
+                return return_type(error_context_);
+            }
+            return std::invoke(std::forward<Function>(function));
+        }
+
+        /**
+         * @brief 对错误结果进行链式操作（右值引用版本）
+         * @param function 要执行的操作函数
+         * @return result_t<void> 操作结果
+         * @details 如果当前结果为错误，则调用 function 处理错误上下文并返回其结果；
+         *          如果当前结果为成功，则返回当前对象（移动语义）
+         */
+        template <typename Function>
+        result_t<void> or_else(Function&& function) && {
+            if (is_error()) {
+                return std::invoke(std::forward<Function>(function), std::move(error_context_));
+            }
+            return std::move(*this);
+        }
+        
+        /**
+         * @brief 对错误结果进行链式操作（左值引用版本）
+         * @param function 要执行的操作函数
+         * @return result_t<void> 操作结果
+         * @details 如果当前结果为错误，则调用 function 处理错误上下文并返回其结果；
+         *          如果当前结果为成功，则返回当前对象的副本
+         */
+        template <typename Function>
+        result_t<void> or_else(Function&& function) & {
+            if (is_error()) {   
+                return std::invoke(std::forward<Function>(function), error_context_);
+            }
+            return *this;
+        }
     };
 
 }
