@@ -2,7 +2,7 @@
 
 > 命名空间：`error_system::core`
 
-Core 层是整个错误系统的基础，定义了错误码数据结构、错误等级、错误上下文及构建器。
+Core 层是整个错误系统的基础，定义了错误码数据结构、错误等级、错误上下文、构建器、全局配置及结果封装。
 
 ---
 
@@ -132,20 +132,78 @@ constexpr auto db_conn_err = error_builder_t::make_error_code(
 
 ---
 
+## error_config
+
+**头文件**：`error_system/core/error_config.h`
+
+全局错误配置类，提供进程级的错误行为配置。所有方法均为 `static`，不可实例化。
+
+### 配置项
+
+| 配置项 | 类型 | 默认值 | 描述 |
+|--------|------|--------|------|
+| `min_stacktrace_level_` | `error_level_t` | `error` | 自动捕获堆栈的最低错误等级 |
+| `default_language_` | `std::string` | `"zh_cn"` | 默认语言标识 |
+
+### 方法
+
+```cpp
+// 设置自动捕获堆栈的最低错误等级
+// 当 error_context_t 的 code.level >= level 时，构造函数自动抓取调用栈
+static void set_stacktrace_level(error_level_t level) noexcept;
+
+// 获取当前堆栈捕获阈值
+static error_level_t get_stacktrace_level() noexcept;
+
+// 设置默认语言（影响 translator_registry 自动创建的默认翻译器）
+static void set_default_language(const std::string& language);
+
+// 获取当前默认语言
+static std::string get_default_language();
+```
+
+### 示例
+
+```cpp
+// 设置 WARN 及以上自动捕获堆栈
+error_config::set_stacktrace_level(error_level_t::warn);
+
+// 设置默认语言为英文
+error_config::set_default_language("en_us");
+
+// 创建错误上下文时，若等级 >= warn 则自动抓取堆栈
+error_context_t ctx(code, "连接超时");  // 可能自动包含 stack_frames
+```
+
+---
+
 ## error_context_t
 
 **头文件**：`error_system/core/error_context.h`
 
-错误上下文，封装错误码、消息文本、结构化负载及因果链（cause chain）。
+错误上下文，封装错误码、消息文本、格式化参数、结构化负载、堆栈跟踪及因果链（cause chain）。
 
 ### 成员
 
 | 成员 | 类型 | 描述 |
 |------|------|------|
 | `code` | `error_code_t` | 错误码 |
-| `message` | `std::string` | 错误描述文本 |
+| `message` | `std::string` | 错误描述文本（已格式化） |
 | `payload` | `std::unordered_map<std::string, std::string>` | 结构化键值对负载 |
+| `stack_frames` | `std::vector<std::string>` | 调用栈帧列表（可选，由 error_config 控制） |
 | `cause` | `shared_ptr<error_context_t>` | 上级原因（可选） |
+
+### 构造函数
+
+```cpp
+// 默认构造（code = 0，表示无错误）
+constexpr error_context_t() noexcept = default;
+
+// 带格式化参数的构造
+// 若 code.get_level() >= error_config::get_stacktrace_level()，自动抓取调用栈
+template<typename... Args>
+error_context_t(error_code_t code, std::string format = "", Args&&... args) noexcept;
+```
 
 ### 方法
 
@@ -164,6 +222,7 @@ error_context_t& with(std::string&& key, std::string&& value);
 
 // 转为可读字符串
 // translator 优先级：传入参数 > 全局注册翻译器 > 降级英文名
+// 输出格式包含：翻译后的错误码信息、message、payload、stack_frames、cause chain
 std::string to_string(const i18n::i_translator_t* translator = nullptr) const;
 ```
 
@@ -171,10 +230,18 @@ std::string to_string(const i18n::i_translator_t* translator = nullptr) const;
 
 构造 `error_context_t` 时（`code != 0`），会自动调用 `plugin::plugin_registry_t::instance().notify_error()`，通知所有已注册插件。
 
+### 堆栈跟踪
+
+当构造时的错误等级满足 `code.get_level() >= error_config::get_stacktrace_level()` 时，构造函数内部自动调用 `utils::stack_trace_utils_t::generate(1)` 抓取当前调用栈，存储到 `stack_frames` 中。
+
 ### 示例
 
 ```cpp
-error_context_t ctx{db_err, "数据库连接超时"};
+// 设置堆栈捕获阈值
+error_config::set_stacktrace_level(error_level_t::warn);
+
+// 创建错误上下文（自动抓取堆栈，因为 error >= warn）
+error_context_t ctx{db_err, "数据库连接超时: {}", "timeout"};
 
 // 添加结构化负载
 ctx.with("host", "192.168.1.1").with("port", "3306");
@@ -185,7 +252,10 @@ auto chained = outer.wrap(ctx);
 
 // 转字符串（使用全局翻译器）
 std::cout << chained.to_string() << std::endl;
-// [Level: fatal, System: database, ...] Code: 404 - 数据库连接超时 {host=192.168.1.1, port=3306}
+// [Level: fatal, System: database, ...] Code: 404 - 数据库连接超时: timeout {host=192.168.1.1, port=3306}
+//   [Stacktrace]:
+//     #0  some_function
+//     #1  caller_function
 //   ↳ Caused by: ...
 ```
 
@@ -210,4 +280,73 @@ r1.value();      // int&
 // void 特化（无成功值）
 result_t<void> r3;                              // 成功（code == 0）
 result_t<void> r4 = {some_code, "操作失败"};   // 错误
+```
+
+### 链式操作
+
+```cpp
+// and_then: 成功时继续执行，失败时短路传递错误
+template <typename Function>
+auto and_then(Function&& function) &&;
+
+// or_else: 失败时执行恢复逻辑
+template <typename Function>
+auto or_else(Function&& function) &&;
+```
+
+### 示例
+
+```cpp
+result_t<int> divide(int a, int b) {
+    if (b == 0) {
+        auto code = error_builder_t::make_error_code(
+            error_level_t::error, domain::system_domain_t::application, 0, 0, 1);
+        return error_context_t(code, "除数不能为零");
+    }
+    return a / b;
+}
+
+auto result = divide(10, 0);
+if (result.is_error()) {
+    std::cerr << result.error().to_string() << "\n";
+}
+```
+
+---
+
+## error_registry_t
+
+**头文件**：`error_system/core/error_registry.h`
+
+错误码注册表，用于注册和查询错误码的元信息（预留扩展）。
+
+### 方法
+
+```cpp
+// 获取单例
+static error_registry_t& instance() noexcept;
+
+// 注册错误码信息
+void register_error(error_code_t code, std::string_view name, std::string_view description) noexcept;
+
+// 查询错误码名称
+std::string_view get_name(error_code_t code) const noexcept;
+
+// 查询错误码描述
+std::string_view get_description(error_code_t code) const noexcept;
+
+// 是否包含指定错误码
+bool contains(error_code_t code) const noexcept;
+```
+
+### 使用示例
+
+```cpp
+// 注册错误码元信息
+error_registry_t::instance().register_error(
+    db_conn_err, "DB_CONNECTION_TIMEOUT", "数据库连接超时");
+
+// 查询
+auto name = error_registry_t::instance().get_name(db_conn_err);
+// → "DB_CONNECTION_TIMEOUT"
 ```

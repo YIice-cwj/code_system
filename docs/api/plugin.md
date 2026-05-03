@@ -20,6 +20,8 @@ error_context_t 构造（code != 0）
  i_error_plugin_t::on_error()  × N  ← 依次通知每个插件
 ```
 
+> **注意**：插件收到的 `error_context_t` 可能包含 `stack_frames`（如果错误等级满足 `error_config::get_stacktrace_level()` 阈值），插件可以利用堆栈信息进行更详细的日志记录或监控。
+
 ---
 
 ## i_error_plugin_t
@@ -37,6 +39,7 @@ public:
     virtual std::string_view name() const noexcept = 0;
 
     // 错误事件回调，error_context_t 创建时触发
+    // context 包含完整的错误信息：code, message, payload, stack_frames, cause chain
     virtual void on_error(const core::error_context_t& context) noexcept = 0;
 };
 ```
@@ -123,21 +126,50 @@ public:
 };
 ```
 
+## 实现带堆栈分析的监控插件示例
+
+```cpp
+#include "error_system/plugin/i_error_plugin.h"
+#include <iostream>
+
+class stacktrace_plugin_t : public error_system::plugin::i_error_plugin_t {
+public:
+    std::string_view name() const noexcept override {
+        return "stacktrace_analyzer";
+    }
+
+    void on_error(const error_system::core::error_context_t& ctx) noexcept override {
+        // 只处理包含堆栈的严重错误
+        if (ctx.code.get_level() >= error_system::core::error_level_t::error &&
+            !ctx.stack_frames.empty()) {
+            std::cerr << "[ALERT] 严重错误: " << ctx.message << "\n";
+            std::cerr << "[STACK] 调用栈:\n";
+            for (const auto& frame : ctx.stack_frames) {
+                std::cerr << "  " << frame << "\n";
+            }
+        }
+    }
+};
+```
+
 ## 注册与使用
 
 ```cpp
 // 程序启动时初始化（保证对象生命周期覆盖整个运行期）
 log_plugin_t  logger;
 stats_plugin_t stats;
+stacktrace_plugin_t analyzer;
 
 auto& reg = plugin_registry_t::instance();
 reg.register_plugin(&logger);
 reg.register_plugin(&stats);
+reg.register_plugin(&analyzer);
 
 // 之后任何 error_context_t 创建都会自动触发
 error_context_t ctx{some_error_code, "操作失败"};
 // → logger 打印日志
 // → stats 计数 +1
+// → analyzer 分析堆栈（如果包含）
 
 // 动态注销
 reg.unregister_plugin("logger");

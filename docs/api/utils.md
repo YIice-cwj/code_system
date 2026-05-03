@@ -2,7 +2,7 @@
 
 > 命名空间：`error_system::utils`
 
-Utils 层提供字符串处理、JSON 解析和文件操作等通用工具，被系统各层广泛使用。
+Utils 层提供字符串处理、JSON 解析、文件操作和堆栈跟踪等通用工具，被系统各层广泛使用。
 
 ---
 
@@ -152,4 +152,60 @@ static bool file_exists(const std::filesystem::path& path) noexcept;
 
 // 检查文件路径是否存在
 static bool file_path_exists(const std::filesystem::path& path) noexcept;
+```
+
+---
+
+## stack_trace_utils_t
+
+**头文件**：`error_system/utils/stack_trace_utils.h`
+
+跨平台堆栈跟踪工具类，支持 Linux、macOS 和 Windows。自动处理符号解析（demangle C++ 函数名）。
+
+### 方法
+
+```cpp
+// 抓取当前线程的函数调用栈
+// skip_frames: 跳过的顶部栈帧数（默认跳过 generate 自身）
+// max_frames: 最大抓取深度（默认 64）
+static std::vector<std::string> generate(int skip_frames = 1, int max_frames = 64) noexcept;
+```
+
+### 平台支持
+
+| 平台 | 实现方式 | 符号解析 |
+|------|----------|----------|
+| Linux | `backtrace` + `backtrace_symbols` | `abi::__cxa_demangle` |
+| macOS | `backtrace` + `backtrace_symbols` | `abi::__cxa_demangle` |
+| Windows | `CaptureStackBackTrace` + `SymFromAddr` | `DbgHelp` / `abi::__cxa_demangle` (MinGW) |
+
+### 示例
+
+```cpp
+#include "error_system/utils/stack_trace_utils.h"
+
+// 抓取当前调用栈（跳过 generate 自身）
+auto frames = utils::stack_trace_utils_t::generate(1, 32);
+
+for (size_t i = 0; i < frames.size(); ++i) {
+    std::cout << "#" << i << " " << frames[i] << "\n";
+}
+// 输出示例：
+// #0 some_function() at /path/to/file.cc:42
+// #1 caller_function() at /path/to/file.cc:56
+// #2 main at /path/to/main.cc:10
+```
+
+### 在 error_context_t 中的使用
+
+`error_context_t` 的构造函数内部自动调用 `stack_trace_utils_t::generate(1)` 来抓取堆栈。捕获行为由 `error_config::set_stacktrace_level()` 控制：
+
+```cpp
+// 设置 WARN 及以上自动捕获堆栈
+error_config::set_stacktrace_level(error_level_t::warn);
+
+// 此错误等级为 error，会自动抓取堆栈
+auto code = error_builder_t::make_error_code(
+    error_level_t::error, domain::system_domain_t::database, 0, 0, 500);
+error_context_t ctx(code, "数据库错误");  // ctx.stack_frames 自动填充
 ```

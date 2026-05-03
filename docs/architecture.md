@@ -14,7 +14,7 @@
 │  核心数据结构 │  多语言翻译  │  可扩展插件    │  通用工具        │
 ├──────────────┴──────────────┴────────────────┴──────────────────┤
 │  Domain / Subsystem / Module / Traits 层                         │
-│  预定义的 18 大系统域、子系统枚举、模块枚举及 Traits 转换        │
+│  预定义的 18 大系统域、36+ 子系统枚举、模块枚举及 Traits 转换    │
 ├─────────────────────────────────────────────────────────────────┤
 │  Memory 层                                                       │
 │  线程局部对象池 (object_pool_t)，优化高频内存分配                │
@@ -26,7 +26,7 @@
 ```
 Utils  ←─────────────────────────────── 被所有层使用
   ↑
-Core (error_code_t, error_level_t)
+Core (error_code_t, error_level_t, error_config)
   ↑                  ↑
 Domain/Traits      error_context_t  ←─── Plugin 层监听
                         ↑
@@ -46,7 +46,8 @@ Domain/Traits      error_context_t  ←─── Plugin 层监听
 | `error_code.h` | `error_code_t` | 64 位错误码的存储与字段解析 |
 | `error_level.h` | `error_level_t` | 错误等级枚举及转换函数 |
 | `error_builder.h` | `error_builder_t` | 编译期错误码构建工厂 |
-| `error_context.h` | `error_context_t` | 错误上下文（码+消息+因果链+结构化负载） |
+| `error_context.h` | `error_context_t` | 错误上下文（码+消息+因果链+结构化负载+堆栈跟踪） |
+| `error_config.h` | `error_config` | 全局错误配置（堆栈阈值、默认语言） |
 | `result_t.h` | `result_t<T>` | 类 Rust Result，替代异常传递错误 |
 | `error_registry.h` | `error_registry_t` | 错误码注册（预留扩展） |
 
@@ -83,6 +84,7 @@ Domain/Traits      error_context_t  ←─── Plugin 层监听
 | `string_utils.h` | `string_utils_t` | 哈希、格式化、分割、修剪等 |
 | `json_utils.h` | `json_dict_t` | JSON 字典加载与点路径访问 |
 | `file_utils.h` | `file_utils` | 文件读写、创建、删除、存在性检查 |
+| `stack_trace_utils.h` | `stack_trace_utils_t` | 跨平台堆栈跟踪（Linux/macOS/Windows） |
 
 ---
 
@@ -148,6 +150,34 @@ if (ptr) {
 } else {
     new_code_context.cause = std::make_shared<error_context_t>(underlying);
 }
+```
+
+### 7. 自动堆栈跟踪
+
+`error_context_t` 构造函数根据 `error_config::get_stacktrace_level()` 阈值自动决定是否抓取调用栈：
+
+```cpp
+// 设置 WARN 及以上自动捕获堆栈
+error_config::set_stacktrace_level(error_level_t::warn);
+
+// 构造时自动判断：code.level >= warn ? 抓取堆栈 : 跳过
+error_context_t ctx(code, "错误信息");  // 若 code.level >= warn，ctx.stack_frames 自动填充
+```
+
+底层使用 `stack_trace_utils_t::generate()` 实现跨平台堆栈抓取，支持 Linux (`backtrace`)、macOS (`backtrace`) 和 Windows (`CaptureStackBackTrace`)。
+
+### 8. 全局错误配置
+
+`error_config` 提供进程级的错误行为配置：
+- **堆栈捕获阈值**：控制自动堆栈跟踪的触发等级
+- **默认语言**：影响 `translator_registry_t` 自动创建的默认翻译器语言
+
+```cpp
+// 配置堆栈捕获阈值
+error_config::set_stacktrace_level(error_level_t::error);
+
+// 配置默认语言
+error_config::set_default_language("en_us");
 ```
 
 ---
