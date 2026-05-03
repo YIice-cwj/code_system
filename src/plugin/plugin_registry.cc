@@ -1,5 +1,4 @@
 #include "error_system/plugin/plugin_registry.h"
-#include <algorithm>
 
 namespace error_system::plugin {
 

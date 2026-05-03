@@ -3,6 +3,7 @@
 #include <vector>
 #include <string_view>
 #include <shared_mutex>
+#include <mutex>
 
 /**
  * @file plugin_registry.h
