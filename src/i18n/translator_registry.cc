@@ -1,5 +1,6 @@
 #include "error_system/i18n/translator_registry.h"
-#include "error_system/i18n/json_translator.h"
+#include "error_system/core/error_config.h"
+#include "error_system/i18n/language.h"
 
 namespace error_system::i18n {
 
@@ -28,7 +29,7 @@ namespace error_system::i18n {
     i_translator_t* translator_registry_t::get() const noexcept {
         i_translator_t* current_translator = translator_.load(std::memory_order_relaxed);
         if (!current_translator) {
-            static json_translator_t default_translator(language_t::zh_cn);
+            static json_translator_t default_translator(i18n::from_string(core::error_config::get_default_language()));
             translator_.store(&default_translator, std::memory_order_relaxed);
             return &default_translator;
         }

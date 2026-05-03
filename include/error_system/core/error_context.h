@@ -3,6 +3,8 @@
 #include "error_system/i18n/translator_registry.h"
 #include "error_system/utils/string_utils.h"
 #include "error_system/memory/object_pool.h"
+#include "error_system/utils/stack_trace_utils.h"
+#include "error_system/core/error_config.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -39,6 +41,7 @@ namespace error_system::core {
         error_code_t code{};
         std::string message{};
         std::unordered_map<std::string, std::string> payload{};
+        std::vector<std::string> stack_frames{};
         std::shared_ptr<error_context_t> cause{nullptr};
 
         constexpr error_context_t() noexcept = default;
@@ -51,7 +54,12 @@ namespace error_system::core {
         template<typename... Args>
         error_context_t(error_code_t code, std::string format = "", Args&&... args) noexcept
             : code(code), message(utils::string_utils_t::format(format, std::forward<Args>(args)...)) {
-            if (this->code.get_code() != 0) {
+
+            if (code.get_level() >= error_config::get_stacktrace_level()) {
+                stack_frames = utils::stack_trace_utils_t::generate(1);
+            }
+           
+            if (code.get_code() != 0) {
                 __notify_plugins(*this);
             }
         }
@@ -157,6 +165,13 @@ namespace error_system::core {
                     first = false;
                 }
                 result += "}";
+            }
+
+            if (!stack_frames.empty()) {
+                result += "\n  [Stacktrace]:";
+                for (size_t i = 0; i < stack_frames.size(); ++i) {
+                    result += "\n    #" + std::to_string(i) + "  " + stack_frames[i];
+                }
             }
 
             if (cause) {

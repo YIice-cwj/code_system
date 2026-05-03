@@ -1,6 +1,10 @@
 #pragma once
 #include "error_system/i18n/i_translator.h"
 #include <atomic>
+// IWYU pragma: begin_exports
+#include "error_system/i18n/json_translator.h"
+#include "error_system/core/error_config.h"
+// IWYU pragma: end_exports
 
 /**
  * @file translator_registry.h
