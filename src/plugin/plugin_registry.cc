@@ -47,7 +47,10 @@ namespace error_system::plugin {
 
     /**
      * @brief 构造函数
-     * @details 初始化通知通道，将通知回调绑定到本对象的 notify_error 方法
+     * @details 初始化通知通道，将通知回调绑定到本对象的 notify_error 方法。
+     * @note noexcept 风险：notification_channel_ 内部 std::function 构造可能抛出 std::bad_alloc，
+     *       一旦抛出将触发 std::terminate（构造函数标记为 noexcept）。该风险仅在单例首次构造时存在，
+     *       且内存不足场景下系统已无法正常工作，可接受。
      */
     plugin_registry_t::plugin_registry_t() noexcept
         : notification_channel_([this](const core::error_context_t& context) {
@@ -57,7 +60,7 @@ namespace error_system::plugin {
     /**
      * @brief 注册插件（转移所有权）
      * @details 将插件包装为 shared_ptr 并加入 snapshot，同名插件替换旧条目。
-     *          所有权由 owned 列表持有，保证 snapshot 中的裸指针/弱引用有效。
+     *          快照内 shared_ptr 共享插件所有权，保证 unregister 后旧快照读者仍能安全调用 on_error。
      * @param plugin 待注册的插件 unique_ptr，空指针将被忽略
      */
     void plugin_registry_t::register_plugin(std::unique_ptr<i_error_plugin_t> plugin) noexcept {
@@ -87,11 +90,16 @@ namespace error_system::plugin {
     void plugin_registry_t::register_plugin_ref(i_error_plugin_t& plugin) noexcept {
         auto non_owning = std::shared_ptr<i_error_plugin_t>(&plugin, [](i_error_plugin_t*){});
         update_snapshot_([&non_owning](plugin_list_t& snapshot,
-                                       std::vector<shared_plugin_ptr_t>&) {
+                                       std::vector<shared_plugin_ptr_t>& owned) {
             auto name = non_owning->name();
             auto it = std::find_if(snapshot.begin(), snapshot.end(),
                 [&name](const shared_plugin_ptr_t& plugin) { return plugin->name() == name; });
             if (it != snapshot.end()) {
+                // 若被替换的旧条目是 owning 插件，同步从 owned 中移除，避免悬挂所有权
+                auto* old_ptr = it->get();
+                owned.erase(std::remove_if(owned.begin(), owned.end(),
+                                [old_ptr](const shared_plugin_ptr_t& p) { return p.get() == old_ptr; }),
+                            owned.end());
                 *it = non_owning;
             } else {
                 snapshot.push_back(non_owning);
@@ -118,14 +126,8 @@ namespace error_system::plugin {
         auto snapshot = std::atomic_load(&plugins_snapshot_);
         for (const auto& plugin : *snapshot) {
             if (context.get_code().get_level() >= plugin->min_level()) {
-                try {
-                    plugin->on_error(context);
-                } catch (const std::exception& e) {
-                    auto name = plugin->name();
-                    std::fprintf(stderr,
-                                 "[plugin_registry] plugin '%.*s' on_error threw exception: %s\n",
-                                 static_cast<int>(name.size()), name.data(), e.what());
-                }
+                // on_error 为 noexcept override，插件实现必须保证不抛异常，否则 std::terminate
+                plugin->on_error(context);
             }
         }
     }
@@ -156,7 +158,7 @@ namespace error_system::plugin {
         /**
          * @brief 向所有插件分发单个延迟错误上下文
          * @details 遍历插件快照，按 min_level 过滤后调用 on_error。
-         *          插件回调抛出的异常被捕获并记录日志，不影响其他插件。
+         *          on_error 为 noexcept override，插件实现必须保证不抛异常，否则 std::terminate。
          */
         void dispatch_to_plugins(const core::error_context_t& context,
                                  const std::vector<std::shared_ptr<i_error_plugin_t>>& plugins) noexcept {
@@ -164,14 +166,7 @@ namespace error_system::plugin {
                 if (context.get_code().get_level() < plugin->min_level()) {
                     continue;
                 }
-                try {
-                    plugin->on_error(context);
-                } catch (const std::exception& e) {
-                    auto name = plugin->name();
-                    std::fprintf(stderr,
-                                 "[plugin_registry] deferred plugin '%.*s' on_error threw: %s\n",
-                                 static_cast<int>(name.size()), name.data(), e.what());
-                }
+                plugin->on_error(context);
             }
         }
 

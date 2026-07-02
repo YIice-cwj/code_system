@@ -78,7 +78,7 @@ namespace error_system::plugin {
         std::vector<shared_plugin_ptr_t> owned_plugins_{};
 
         /**
-         * @brief 异步通知通道（仅在 async_queue 模式下使用）
+         * @brief 异步通知通道，仅在调用 enqueue_notification 时启动后台线程
          * @details 封装 async_queue_t，自动管理后台线程生命周期。
          *          出队上下文通过注入的回调转发至 notify_error。
          */
@@ -126,7 +126,7 @@ namespace error_system::plugin {
          * @brief 注册插件（转移所有权）
          * @details 注册表接管插件所有权，插件生命周期由注册表管理。
          *          若已存在同名插件，旧插件将被替换并自动释放。
-         * @param plugin 插件 unique_ptr，不能为 nullptr
+         * @param plugin 插件 unique_ptr，空指针将被忽略
          */
         void register_plugin(unique_plugin_ptr_t plugin) noexcept;
 
@@ -147,8 +147,9 @@ namespace error_system::plugin {
 
         /**
          * @brief 同步通知所有插件发生了错误事件
-         * @details 通过 RCU 快照无锁读取插件列表，依次调用每个插件的 on_error()，
-         *          异常不会向外传播。在 sync 模式下由 error_context_t 构造时直接调用。
+         * @details 通过 RCU 快照无锁读取插件列表，依次调用每个插件的 on_error()。
+         *          on_error 为 noexcept，插件实现必须保证不抛异常，否则 std::terminate。
+         *          在 sync 模式下由 error_context_t 构造时直接调用。
          *          同时作为异步通道出队上下文的处理回调。
          *          实现 core::i_error_notifier_t 接口。
          * @param context 错误上下文

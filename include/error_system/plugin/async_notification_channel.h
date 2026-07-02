@@ -61,7 +61,10 @@ namespace error_system::plugin {
         /**
          * @brief 构造函数
          * @details 注入通知回调，回调由后台工作线程对每个出队上下文调用一次。
-         * @param callback 通知回调，不可为空（为空时出队上下文将被丢弃）
+         *          callback 允许为空，为空时出队上下文被静默丢弃；建议调用方传入有效回调。
+         * @note noexcept 风险：context_processor_t 内 std::function 构造可能抛出 std::bad_alloc，
+         *       一旦抛出将触发 std::terminate（构造函数标记为 noexcept）。
+         * @param callback 通知回调，允许为空
          */
         explicit async_notification_channel_t(notify_callback_t callback) noexcept
             : async_queue_(context_processor_t{std::move(callback)}) {}

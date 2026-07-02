@@ -12,7 +12,7 @@
 /**
  * @file error_router_plugin.h
  * @brief 错误路由插件
- * @details 错误路由插件负责将错误事件路由到对应的插件进行处理，
+ * @details 将错误事件按 码 > 模块组 > 域 三级优先级路由到已注册的处理函数，
  *          例如：日志记录、统计分析、告警通知等
  * @author yiice
  * @version 2.3.0

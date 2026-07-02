@@ -45,11 +45,11 @@ namespace error_system::i18n {
                                                                 std::string_view module_name) noexcept {
         std::unique_lock<std::shared_mutex> lock(mutex_);
         const uint32_t key = make_catalog_key_(subsystem_id, module_id);
-        auto& locale_map = catalog_[key];
-        if (locale_map.find(locale) != locale_map.end()) {
-            return; 
-        }
         try {
+            auto& locale_map = catalog_[key];
+            if (locale_map.find(locale) != locale_map.end()) {
+                return;
+            }
             locale_map.emplace(locale,
                                subsystem_module_info_t{std::string(subsystem_name), std::string(module_name)});
         } catch (const std::bad_alloc&) {
@@ -92,9 +92,15 @@ namespace error_system::i18n {
             }
         }
 
-        return subsystem_module_info_t{};
+        static const subsystem_module_info_t default_info{};
+        return default_info;
     }
 
+    /**
+     * @brief 清空所有子系统/模块名称映射
+     * @details swap 实现，释放底层内存：用空容器交换 catalog_，
+     *          旧内存在锁作用域内随临时对象析构释放。
+     */
     void subsystem_module_catalog_t::clear() noexcept {
         std::unique_lock<std::shared_mutex> lock(mutex_);
         decltype(catalog_)().swap(catalog_);

@@ -35,7 +35,7 @@ namespace error_system::plugin {
     void error_router_plugin_t::on_error(const core::error_context_t& context) noexcept {
         error_handler_t handler;
 
-        {
+        try {
             std::shared_lock<std::shared_mutex> lock(mutex_);
 
             if (auto it_specific = specific_handlers_.find(context.get_code().get_code()); it_specific != specific_handlers_.end()) {
@@ -47,6 +47,9 @@ namespace error_system::plugin {
                        it_domain != domain_handlers_.end()) {
                 handler = it_domain->second;
             }
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_router_plugin] on_error: handler copy std::bad_alloc\n");
+            return;
         }
 
         if (handler) {
@@ -117,8 +120,12 @@ namespace error_system::plugin {
      * @param code 错误码
      */
     void error_router_plugin_t::unregister_handler_by_code(const core::error_code_t& code) noexcept {
-        std::unique_lock<std::shared_mutex> lock(mutex_);
-        specific_handlers_.erase(code.get_code());
+        try {
+            std::unique_lock<std::shared_mutex> lock(mutex_);
+            specific_handlers_.erase(code.get_code());
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_router_plugin] unregister_handler_by_code: std::bad_alloc\n");
+        }
     }
 
     /**
@@ -127,8 +134,12 @@ namespace error_system::plugin {
      */
     void
     error_router_plugin_t::unregister_handler_by_module_group_id(core::module_group_id_t module_group_id) noexcept {
-        std::unique_lock<std::shared_mutex> lock(mutex_);
-        module_group_handlers_.erase(module_group_id);
+        try {
+            std::unique_lock<std::shared_mutex> lock(mutex_);
+            module_group_handlers_.erase(module_group_id);
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_router_plugin] unregister_handler_by_module_group_id: std::bad_alloc\n");
+        }
     }
 
     /**
@@ -136,8 +147,12 @@ namespace error_system::plugin {
      * @param domain 系统域
      */
     void error_router_plugin_t::unregister_handler_by_domain(domain::system_domain_t domain) noexcept {
-        std::unique_lock<std::shared_mutex> lock(mutex_);
-        domain_handlers_.erase(domain);
+        try {
+            std::unique_lock<std::shared_mutex> lock(mutex_);
+            domain_handlers_.erase(domain);
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_router_plugin] unregister_handler_by_domain: std::bad_alloc\n");
+        }
     }
 
     /**

@@ -126,7 +126,8 @@ namespace error_system::i18n {
         /**
          * @brief 使用当前输出 locale 查询
          * @details 从 config::i18n_config_t 解析最终输出 locale（output_locale 优先，
-         *          未设置则回退 default_locale），未命中时再回退 default_locale。
+         *          未设置则回退 default_locale）。两参版本内部已完成 default_locale 回退，
+         *          本重载无需再次显式回退。
          * @param code 错误码
          * @return std::string 本地化描述，未命中返回空 string
          */

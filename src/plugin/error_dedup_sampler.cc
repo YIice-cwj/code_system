@@ -11,6 +11,7 @@
  * @copyright Copyright (c) 2026
  */
 
+#include <algorithm>
 #include <chrono>
 #include <limits>
 #include <mutex>
@@ -25,7 +26,7 @@ namespace error_system::plugin {
 
     /**
      * @brief 清理去重表中过期的表项
-     * @details 在持锁状态下调用，遍历删除超过 dedup_window_ms_ 未命中的项
+     * @details 在持锁状态下调用，遍历删除 last_forwarded 距 now 超过 dedup_window_ms_ 的过期项
      * @param now 当前时间点
      */
     void error_dedup_sampler_t::cleanup_expired_(time_point_t now) noexcept {
@@ -68,7 +69,9 @@ namespace error_system::plugin {
         } else if (rate >= 1.0) {
             sample_interval_ = 0;
         } else {
-            sample_interval_ = static_cast<uint64_t>(1.0 / rate);
+            // 对 1.0/rate 做上限钳制，避免 rate 极小时结果超出 uint64_t 表示范围导致转换 UB
+            const double interval = std::min<double>(1.0 / rate, double(UINT64_MAX));
+            sample_interval_ = static_cast<uint64_t>(interval);
             if (sample_interval_ < 1) {
                 sample_interval_ = 1;
             }
@@ -123,7 +126,7 @@ namespace error_system::plugin {
         try {
             dedup_map_[identity].last_forwarded = now;
         } catch (const std::bad_alloc&) {
-            ++forwarded_count_;
+            // 分配失败时不计入 forwarded_count_，由调用方 should_be_forwarded 统一计数
             return false;
         }
         if (dedup_map_.size() > DEDUP_CLEANUP_THRESHOLD) {
@@ -189,8 +192,8 @@ namespace error_system::plugin {
      * @brief 重置所有统计计数与采样计数器
      * @details 将 deduped/sampled/forwarded 计数归零，并重置采样计数器，
      *          使后续采样从 seq=0 开始（保证测试可重复）。
-     *          注意：并发调用时重置后的计数可能与正在进行的 should_be_forwarded 产生竞争，
-     *          仅建议在无并发或测试场景下使用。
+     * @note 仅适用于无并发场景：并发调用时重置后的计数可能与正在进行的
+     *       should_be_forwarded 产生竞争，仅建议在测试或无并发场景下使用。
      */
     void error_dedup_sampler_t::reset_stats() noexcept {
         std::lock_guard<std::mutex> lock(mutex_);

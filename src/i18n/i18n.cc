@@ -64,11 +64,11 @@ namespace error_system::i18n {
      */
     size_t i18n_t::register_messages(locale_t locale,
                                      const std::vector<std::pair<error_code_t, std::string_view>>& entries) noexcept {
+        size_t count = 0;
         try {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             auto& locale_map = catalog_[locale];
             locale_map.reserve(locale_map.size() + entries.size());
-            size_t count = 0;
             for (const auto& [code, message] : entries) {
                 locale_map[code.get_identity_code()] = std::string(message);
                 ++count;
@@ -76,7 +76,7 @@ namespace error_system::i18n {
             return count;
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[i18n] register_messages: std::bad_alloc\n");
-            return 0;
+            return count;
         }
     }
 
@@ -88,48 +88,44 @@ namespace error_system::i18n {
      * @return std::string 本地化描述，未命中返回空 string
      */
     std::string i18n_t::get_message(locale_t locale, error_code_t code) const noexcept {
-        std::shared_lock<std::shared_mutex> lock(mutex_);
-        const auto identity = code.get_identity_code();
+        try {
+            std::shared_lock<std::shared_mutex> lock(mutex_);
+            const auto identity = code.get_identity_code();
 
-        auto loc_it = catalog_.find(locale);
-        if (loc_it != catalog_.end()) {
-            auto msg_it = loc_it->second.find(identity);
-            if (msg_it != loc_it->second.end()) {
-                return msg_it->second;
-            }
-        }
-
-        const auto default_locale = config::i18n_config_t::get_default_locale();
-        if (locale != default_locale) {
-            auto def_it = catalog_.find(default_locale);
-            if (def_it != catalog_.end()) {
-                auto msg_it = def_it->second.find(identity);
-                if (msg_it != def_it->second.end()) {
+            auto loc_it = catalog_.find(locale);
+            if (loc_it != catalog_.end()) {
+                auto msg_it = loc_it->second.find(identity);
+                if (msg_it != loc_it->second.end()) {
                     return msg_it->second;
                 }
             }
-        }
 
+            const auto default_locale = config::i18n_config_t::get_default_locale();
+            if (locale != default_locale) {
+                auto def_it = catalog_.find(default_locale);
+                if (def_it != catalog_.end()) {
+                    auto msg_it = def_it->second.find(identity);
+                    if (msg_it != def_it->second.end()) {
+                        return msg_it->second;
+                    }
+                }
+            }
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[i18n] get_message: std::bad_alloc\n");
+        }
         return {};
     }
 
     /**
      * @brief 使用当前输出 locale 查询
-     * @details 从 config::i18n_config_t 解析最终输出 locale，未命中时回退默认 locale。
+     * @details 从 config::i18n_config_t 解析最终输出 locale，委托两参版本完成
+     *          output locale → default locale → 空字符串 的回退查询。
      * @param code 错误码
      * @return std::string 本地化描述，未命中返回空 string
      */
     std::string i18n_t::get_message(error_code_t code) const noexcept {
         const auto output_locale = config::i18n_config_t::resolve_output_locale();
-        const auto message = get_message(output_locale, code);
-        if (!message.empty()) {
-            return message;
-        }
-        const auto default_locale = config::i18n_config_t::get_default_locale();
-        if (default_locale != output_locale) {
-            return get_message(default_locale, code);
-        }
-        return {};
+        return get_message(output_locale, code);
     }
 
     /**
@@ -205,9 +201,9 @@ namespace error_system::i18n {
      * @return std::vector<locale_t> locale 列表
      */
     std::vector<locale_t> i18n_t::get_locales() const noexcept {
-        std::shared_lock<std::shared_mutex> lock(mutex_);
         std::vector<locale_t> locales;
         try {
+            std::shared_lock<std::shared_mutex> lock(mutex_);
             locales.reserve(catalog_.size());
             for (const auto& [locale, _] : catalog_) {
                 locales.push_back(locale);

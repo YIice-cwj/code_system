@@ -142,7 +142,7 @@ namespace error_system::plugin {
 
         /**
          * @brief 判定错误上下文是否应放行
-         * @details 先过采样（廉价，原子操作），再过去重（需锁）。
+         * @details 采样与去重均在同一互斥锁内串行执行；采样计数器为原子量，统计字段需锁保护。
          *          两关都通过才返回 true。任何一关失败都更新对应统计。
          * @param context 错误上下文
          * @return bool true=放行，false=抑制
