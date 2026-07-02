@@ -17,34 +17,37 @@ namespace error_system::core {
 
     template <typename T>
     result_t<T> result_t<T>::make_error(error_code_t code, const std::string& message,
-                                        utils::source_location_t location) noexcept {
+                                        utils::source_location_t location) noexcept(std::is_nothrow_move_constructible_v<error_context_t>) {
         return result_t(error_context_t{located_code_t{code, location}, message});
     }
 
     template <typename T>
     result_t<T> result_t<T>::make_error(error_code_t code, std::string&& message,
-                                        utils::source_location_t location) noexcept {
+                                        utils::source_location_t location) noexcept(std::is_nothrow_move_constructible_v<error_context_t>) {
         return result_t(error_context_t{located_code_t{code, location}, std::move(message)});
     }
 
     template <typename T>
-    result_t<T> result_t<T>::make_error(const error_context_t& context) noexcept {
+    result_t<T> result_t<T>::make_error(const error_context_t& context) noexcept(std::is_nothrow_copy_constructible_v<error_context_t>) {
         return result_t(context);
     }
 
     template <typename T>
-    result_t<T> result_t<T>::make_success(value_type_t value) noexcept {
+    result_t<T> result_t<T>::make_success(value_type_t value) noexcept(std::is_nothrow_move_constructible_v<value_type_t>) {
         return result_t(std::move(value));
     }
 
     template <typename T>
-    result_t<T>::result_t(const value_type_t& value) noexcept : value_or_error_(value) {}
+    result_t<T>::result_t(const value_type_t& value) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>) : value_or_error_(value) {}
 
     template <typename T>
-    result_t<T>::result_t(value_type_t&& value) noexcept : value_or_error_(std::move(value)) {}
+    result_t<T>::result_t(value_type_t&& value) noexcept(std::is_nothrow_move_constructible_v<value_type_t>) : value_or_error_(std::move(value)) {}
 
     template <typename T>
-    result_t<T>::result_t(const error_context_t& error_context) noexcept : value_or_error_(error_context) {}
+    result_t<T>::result_t(const error_context_t& error_context) noexcept(std::is_nothrow_copy_constructible_v<error_context_t>) : value_or_error_(error_context) {}
+
+    template <typename T>
+    result_t<T>::result_t(error_context_t&& error_context) noexcept(std::is_nothrow_move_constructible_v<error_context_t>) : value_or_error_(std::move(error_context)) {}
 
     template <typename T>
     bool result_t<T>::is_error() const noexcept {
@@ -158,7 +161,7 @@ namespace error_system::core {
         }
         try {
             return result_t<new_type>(std::invoke(std::forward<Function>(function), value()));
-        } catch (const std::exception&) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[result_t] map: std::invoke threw exception\n");
             return result_t<new_type>(detail::make_invoke_exception_context("map: function threw exception"));
         }
@@ -175,7 +178,7 @@ namespace error_system::core {
         }
         try {
             return result_t<new_type>(std::invoke(std::forward<Function>(function), std::move(value())));
-        } catch (const std::exception&) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[result_t] map(&&): std::invoke threw exception\n");
             return result_t<new_type>(detail::make_invoke_exception_context("map(&&): function threw exception"));
         }
@@ -187,7 +190,7 @@ namespace error_system::core {
         if (is_error()) {
             try {
                 return result_t<value_type_t>(std::invoke(std::forward<Function>(function), error()));
-            } catch (const std::exception&) {
+            } catch (const std::bad_alloc&) {
                 std::fprintf(stderr, "[result_t] map_error: std::invoke threw exception\n");
                 return result_t<value_type_t>(error());
             }
@@ -199,11 +202,12 @@ namespace error_system::core {
     template <typename Function>
     result_t<T> result_t<T>::map_error(Function&& function) && noexcept {
         if (is_error()) {
+            auto error_copy = error();
             try {
                 return result_t<value_type_t>(std::invoke(std::forward<Function>(function), std::move(error())));
-            } catch (const std::exception&) {
-                std::fprintf(stderr, "[result_t] map_error(&&): std::invoke threw exception\n");
-                return result_t<value_type_t>(detail::make_invoke_exception_context("map_error(&&): function threw exception"));
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[result_t] map_error(&&): std::invoke threw bad_alloc\n");
+                return result_t<value_type_t>(error_copy);
             }
         }
         return std::move(*this);
@@ -219,7 +223,7 @@ namespace error_system::core {
         }
         try {
             return std::invoke(std::forward<Function>(function), std::move(value()));
-        } catch (const std::exception&) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[result_t] and_then(&&): std::invoke threw exception\n");
             return return_type(detail::make_invoke_exception_context("and_then(&&): function threw exception"));
         }
@@ -235,7 +239,7 @@ namespace error_system::core {
         }
         try {
             return std::invoke(std::forward<Function>(function), value());
-        } catch (const std::exception&) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[result_t] and_then(&): std::invoke threw exception\n");
             return return_type(detail::make_invoke_exception_context("and_then(&): function threw exception"));
         }
@@ -251,7 +255,7 @@ namespace error_system::core {
         }
         try {
             return std::invoke(std::forward<Function>(function), value());
-        } catch (const std::exception&) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[result_t] and_then(const&): std::invoke threw exception\n");
             return return_type(detail::make_invoke_exception_context("and_then(const&): function threw exception"));
         }
@@ -261,11 +265,12 @@ namespace error_system::core {
     template <typename Function>
     result_t<T> result_t<T>::or_else(Function&& function) && noexcept {
         if (is_error()) {
+            auto error_copy = error();
             try {
                 return std::invoke(std::forward<Function>(function), std::move(error()));
-            } catch (const std::exception&) {
-                std::fprintf(stderr, "[result_t] or_else(&&): std::invoke threw exception\n");
-                return std::move(*this);
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[result_t] or_else(&&): std::invoke threw bad_alloc\n");
+                return result_t<value_type_t>(error_copy);
             }
         }
         return std::move(*this);
@@ -277,7 +282,7 @@ namespace error_system::core {
         if (is_error()) {
             try {
                 return std::invoke(std::forward<Function>(function), error());
-            } catch (const std::exception&) {
+            } catch (const std::bad_alloc&) {
                 std::fprintf(stderr, "[result_t] or_else(&): std::invoke threw exception\n");
                 return *this;
             }
@@ -332,6 +337,9 @@ namespace error_system::core {
     inline result_t<void>::result_t(const error_context_t& error_context) noexcept
         : storage_(error_context) {}
 
+    inline result_t<void>::result_t(error_context_t&& error_context) noexcept(std::is_nothrow_move_constructible_v<error_context_t>)
+        : storage_(std::move(error_context)) {}
+
     inline result_t<void> result_t<void>::make_error(error_code_t code, const std::string& message,
                                                      utils::source_location_t location) noexcept {
         return result_t<void>(error_context_t{located_code_t{code, location}, message});
@@ -363,11 +371,22 @@ namespace error_system::core {
     }
 
     inline const error_context_t& result_t<void>::error() const noexcept {
+        assert(is_error() && "result_t<void>::error() called on a success result");
         auto* ptr = std::get_if<error_context_t>(&storage_);
         if (ptr) {
             return *ptr;
         }
         static thread_local const error_context_t sentinel{};
+        return sentinel;
+    }
+
+    inline error_context_t& result_t<void>::error() noexcept {
+        assert(is_error() && "result_t<void>::error() called on a success result");
+        auto* ptr = std::get_if<error_context_t>(&storage_);
+        if (ptr) {
+            return *ptr;
+        }
+        static thread_local error_context_t sentinel{};
         return sentinel;
     }
 
@@ -383,7 +402,7 @@ namespace error_system::core {
         }
         try {
             return std::invoke(std::forward<Function>(function));
-        } catch (const std::exception&) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[result_t<void>] and_then(&&): std::invoke threw exception\n");
             return return_type(detail::make_invoke_exception_context("and_then(&&): function threw exception"));
         }
@@ -401,7 +420,7 @@ namespace error_system::core {
         }
         try {
             return std::invoke(std::forward<Function>(function));
-        } catch (const std::exception&) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[result_t<void>] and_then(&): std::invoke threw exception\n");
             return return_type(detail::make_invoke_exception_context("and_then(&): function threw exception"));
         }
@@ -414,7 +433,7 @@ namespace error_system::core {
             if (ptr) {
                 try {
                     return result_t<void>(std::invoke(std::forward<Function>(function), *ptr));
-                } catch (const std::exception&) {
+                } catch (const std::bad_alloc&) {
                     std::fprintf(stderr, "[result_t<void>] map_error: std::invoke threw exception\n");
                     return result_t<void>(*ptr);
                 }
@@ -430,7 +449,7 @@ namespace error_system::core {
             if (ptr) {
                 try {
                     return result_t<void>(std::invoke(std::forward<Function>(function), std::move(*ptr)));
-                } catch (const std::exception&) {
+                } catch (const std::bad_alloc&) {
                     std::fprintf(stderr, "[result_t<void>] map_error(&&): std::invoke threw exception\n");
                     return result_t<void>(detail::make_invoke_exception_context("map_error(&&): function threw exception"));
                 }
@@ -446,7 +465,7 @@ namespace error_system::core {
             if (ptr) {
                 try {
                     return std::invoke(std::forward<Function>(function), std::move(*ptr));
-                } catch (const std::exception&) {
+                } catch (const std::bad_alloc&) {
                     std::fprintf(stderr, "[result_t<void>] or_else(&&): std::invoke threw exception\n");
                     return std::move(*this);
                 }
@@ -462,7 +481,7 @@ namespace error_system::core {
             if (ptr) {
                 try {
                     return std::invoke(std::forward<Function>(function), *ptr);
-                } catch (const std::exception&) {
+                } catch (const std::bad_alloc&) {
                     std::fprintf(stderr, "[result_t<void>] or_else(&): std::invoke threw exception\n");
                     return *this;
                 }

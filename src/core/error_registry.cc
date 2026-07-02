@@ -12,6 +12,7 @@
  */
 
 #include <array>
+#include <cassert>
 #include <mutex>
 #include <new>
 
@@ -22,7 +23,6 @@ namespace error_system::core {
 
     namespace {
         constexpr size_t MODULE_BUCKET_ESTIMATE_DIVISOR = 8;    ///< 模块组桶数量估算除数
-        constexpr uint16_t SUBSYSTEM_ID_MASK = 0xFFFF;          ///< 从 module_group_id 提取 subsystem_id 的掩码
 
         /**
          * @brief 线程本地元数据缓存（环形缓冲）
@@ -142,9 +142,13 @@ namespace error_system::core {
             return;
         }
 
-        primary_index_.reserve(primary_index_.size() + additional_entries);
-        name_index_.reserve(name_index_.size() + additional_entries);
-        module_index_.reserve(module_index_.size() + (additional_entries / 8) + 1);
+        try {
+            primary_index_.reserve(primary_index_.size() + additional_entries);
+            name_index_.reserve(name_index_.size() + additional_entries);
+            module_index_.reserve(module_index_.size() + (additional_entries / 8) + 1);
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_registry] reserve_for_registration_: std::bad_alloc\n");
+        }
     }
 
     void error_registry_t::erase_from_module_index_(module_group_id_t module_group_id, code_t identity_code) noexcept {
@@ -212,9 +216,11 @@ namespace error_system::core {
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_registry] register_error: module_index std::bad_alloc\n");
         }
-        {
+        try {
             uint16_t subsystem_id = code.get_subsys();
             subsystem_index_[subsystem_id].insert(code.get_module_group_id());
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_registry] register_error: subsystem_index std::bad_alloc\n");
         }
         bump_epoch_();
     }
@@ -228,9 +234,14 @@ namespace error_system::core {
      */
     void error_registry_t::preallocate_module_buckets_(const std::vector<error_code_t>& codes) noexcept {
         std::unordered_map<module_group_id_t, size_t> module_group_counts;
-        module_group_counts.reserve((codes.size() / MODULE_BUCKET_ESTIMATE_DIVISOR) + 1);
-        for (const auto& code : codes) {
-            ++module_group_counts[code.get_module_group_id()];
+        try {
+            module_group_counts.reserve((codes.size() / MODULE_BUCKET_ESTIMATE_DIVISOR) + 1);
+            for (const auto& code : codes) {
+                ++module_group_counts[code.get_module_group_id()];
+            }
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_registry] preallocate_module_buckets_: module_group_counts std::bad_alloc\n");
+            return;
         }
         try {
             for (const auto& [module_group_id, count] : module_group_counts) {
@@ -268,8 +279,12 @@ namespace error_system::core {
             std::fprintf(stderr, "[error_registry] register_single_entry_: std::bad_alloc\n");
             return false;
         }
-        module_index_[code.get_module_group_id()].push_back(identity_code);
-        subsystem_index_[code.get_subsys()].insert(code.get_module_group_id());
+        try {
+            module_index_[code.get_module_group_id()].push_back(identity_code);
+            subsystem_index_[code.get_subsys()].insert(code.get_module_group_id());
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_registry] register_single_entry_: index std::bad_alloc\n");
+        }
         return true;
     }
 
@@ -307,12 +322,12 @@ namespace error_system::core {
         if (it == primary_index_.end()) {
             return;
         }
-        uint64_t group_id = code.get_module_group_id();
+        uint64_t group_id = error_code_t{identity_code}.get_module_group_id();
         name_index_.erase(it->second.name);
         erase_from_module_index_(group_id, identity_code);
 
         if (module_index_.find(group_id) == module_index_.end()) {
-            erase_from_subsystem_index_(code.get_subsys(), group_id);
+            erase_from_subsystem_index_(error_code_t{identity_code}.get_subsys(), group_id);
         }
 
         primary_index_.erase(it);
@@ -373,7 +388,7 @@ namespace error_system::core {
                 primary_index_.erase(primary_it);
             }
         }
-        uint16_t subsystem_id = static_cast<uint16_t>((module_group_id >> 32) & SUBSYSTEM_ID_MASK);
+        uint16_t subsystem_id = error_code_t{module_group_id}.get_subsys();
         erase_from_subsystem_index_(subsystem_id, module_group_id);
 
         module_index_.erase(mod_it);
@@ -534,6 +549,7 @@ namespace error_system::core {
             static error_registry_t instance;
             instance_ptr = &instance;
         });
+        assert(instance_ptr != nullptr && "error_registry_t::instance() called before initialization");
         return *instance_ptr;
     }
 

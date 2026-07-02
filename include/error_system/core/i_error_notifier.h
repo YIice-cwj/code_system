@@ -26,6 +26,10 @@ namespace error_system::core {
      *          error_context_initializer_t::set_error_notifier() 注入具体实现，
      *          避免直接依赖 plugin 层（依赖倒置原则）。
      *          实现类必须保证所有方法 noexcept 安全，内部异常不应向外传播。
+     * @warning 所有方法声明为 noexcept。实现类必须在内部 try-catch 所有可能抛异常的代码
+     *          （如内存分配、插件回调、字符串构造等），因为方法声明为 noexcept，
+     *          未捕获的异常将导致 std::terminate，使整个进程崩溃。
+     *          建议在实现中捕获 std::bad_alloc 等具体异常并记录日志后静默继续。
      * @see error_context_initializer_t::set_error_notifier
      * @see plugin_registry_t
      */

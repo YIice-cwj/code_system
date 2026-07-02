@@ -25,13 +25,21 @@ namespace error_system::core {
          * @brief 构造用户函数抛出异常时的错误上下文
          * @details 在 map/and_then 中，当用户函数抛出异常时统一构造 fatal 错误上下文。
          *          错误码固定为 (fatal, none, 0, 0, FATAL_ERROR_NUMBER)。
+         *          error_context_t 构造函数为 noexcept，内部已捕获 bad_alloc；
+         *          此处 try-catch 为额外防御，确保任何意外异常不会突破 noexcept。
          * @param message 错误消息
          * @return error_context_t fatal 错误上下文
          */
         inline error_context_t make_invoke_exception_context(const char* message) noexcept {
-            return error_context_t{
-                located_code_t{error_code_t(error_level_t::fatal, domain::system_domain_t::none, subsystem_id_t{0}, module_id_t{0}, error_number_t{FATAL_ERROR_NUMBER})},
-                message};
+            try {
+                return error_context_t{
+                    located_code_t{error_code_t(error_level_t::fatal, domain::system_domain_t::none, subsystem_id_t{0}, module_id_t{0}, error_number_t{FATAL_ERROR_NUMBER})},
+                    message};
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[result_t] make_invoke_exception_context: std::bad_alloc\n");
+                static thread_local error_context_t fallback{};
+                return fallback;
+            }
         }
     }  // namespace detail
 
@@ -63,7 +71,7 @@ namespace error_system::core {
          * return result_t<int>::make_error(ERR_DB_FAIL, "数据库操作失败");
          */
         [[nodiscard]] static result_t make_error(error_code_t code, const std::string& message = "",
-                                                 utils::source_location_t location = utils::source_location_t::current()) noexcept;
+                                                 utils::source_location_t location = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<error_context_t>);
 
         /**
          * @brief 错误构造工厂函数（移动消息版本）
@@ -73,14 +81,14 @@ namespace error_system::core {
          * @return result_t 包装了错误的结果对象
          */
         [[nodiscard]] static result_t make_error(error_code_t code, std::string&& message,
-                                                 utils::source_location_t location = utils::source_location_t::current()) noexcept;
+                                                 utils::source_location_t location = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<error_context_t>);
 
         /**
          * @brief 错误构造工厂函数（从已有 error_context_t）
          * @param context 错误上下文
          * @return result_t 包装了错误的结果对象
          */
-        [[nodiscard]] static result_t make_error(const error_context_t& context) noexcept;
+        [[nodiscard]] static result_t make_error(const error_context_t& context) noexcept(std::is_nothrow_copy_constructible_v<error_context_t>);
 
         /**
          * @brief 创建成功结果
@@ -88,25 +96,31 @@ namespace error_system::core {
          * @param value 成功值
          * @return result_t 成功结果
          */
-        [[nodiscard]] static result_t make_success(value_type_t value) noexcept;
+        [[nodiscard]] static result_t make_success(value_type_t value) noexcept(std::is_nothrow_move_constructible_v<value_type_t>);
 
         /**
          * @brief 构造函数
          * @param value 成功值
          */
-        explicit result_t(const value_type_t& value) noexcept;
+        explicit result_t(const value_type_t& value) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>);
 
         /**
          * @brief 移动构造函数
          * @param value 成功值
          */
-        explicit result_t(value_type_t&& value) noexcept;
+        explicit result_t(value_type_t&& value) noexcept(std::is_nothrow_move_constructible_v<value_type_t>);
 
         /**
          * @brief 构造函数
          * @param error_context 错误上下文
          */
-        explicit result_t(const error_context_t& error_context) noexcept;
+        explicit result_t(const error_context_t& error_context) noexcept(std::is_nothrow_copy_constructible_v<error_context_t>);
+
+        /**
+         * @brief 移动构造函数（从错误上下文右值）
+         * @param error_context 错误上下文右值
+         */
+        explicit result_t(error_context_t&& error_context) noexcept(std::is_nothrow_move_constructible_v<error_context_t>);
 
         /**
          * @brief 拷贝构造，noexcept 性跟随 value_type_t 与 error_context_t
@@ -140,7 +154,7 @@ namespace error_system::core {
 
         /**
          * @brief 获取错误上下文
-         * @details 使用 std::get_if 安全获取，若当前为成功状态则返回静态哨兵值（空 error_context_t）。
+         * @details 使用 std::get_if 安全获取，若当前为成功状态则返回线程局部哨兵值（空 error_context_t）。
          *          调用方应在调用前通过 is_error() 检查，否则返回的哨兵值 is_error() 为 false。
          * @return const error_context_t& 错误上下文
          */
@@ -156,7 +170,7 @@ namespace error_system::core {
 
         /**
          * @brief 获取成功值
-         * @details 使用 std::get_if 安全获取，若当前为错误状态则返回静态哨兵值（T{}）。
+         * @details 使用 std::get_if 安全获取，若当前为错误状态则返回线程局部哨兵值（T{}）。
          *          调用方应在调用前通过 is_success() 检查，否则返回的哨兵值可能无意义。
          *          要求 T 必须可默认构造，若 T 不可默认构造请使用 value_pointer() 替代。
          * @return const value_type_t& 成功值
@@ -206,7 +220,7 @@ namespace error_system::core {
 
         /**
          * @brief 箭头访问成功值成员
-         * @details 与 std::expected::operator-> 语义一致。错误时返回线程局部哨兵地址，
+         * @details 与 std::expected::operator-> 语义一致。错误时返回 nullptr，
          *          调用方应先通过 operator bool / is_success() 检查。
          * @return const value_type_t* 成功值地址
          */
@@ -417,6 +431,12 @@ namespace error_system::core {
         explicit result_t(const error_context_t& error_context) noexcept;
 
         /**
+         * @brief 移动构造函数（从错误上下文右值）
+         * @param error_context 错误上下文右值
+         */
+        explicit result_t(error_context_t&& error_context) noexcept(std::is_nothrow_move_constructible_v<error_context_t>);
+
+        /**
          * @brief 布尔转换运算符
          * @return bool 如果结果为成功则返回 true
          */
@@ -436,9 +456,21 @@ namespace error_system::core {
 
         /**
          * @brief 获取错误上下文
+         * @details 使用 std::get_if 安全获取，若当前为成功状态则返回线程局部哨兵值（空 error_context_t）。
+         *          前置条件：调用方应先通过 is_error() 检查，否则返回的哨兵值 is_error() 为 false，
+         *          且 debug 构建会触发 assert。
          * @return const error_context_t& 错误上下文
          */
         [[nodiscard]] const error_context_t& error() const noexcept;
+
+        /**
+         * @brief 获取错误上下文（可变引用）
+         * @details 使用 std::get_if 安全获取，若当前为成功状态则返回线程局部哨兵值。
+         *          前置条件：调用方应先通过 is_error() 检查，否则返回的哨兵值无意义，
+         *          且 debug 构建会触发 assert。
+         * @return error_context_t& 错误上下文可变引用
+         */
+        [[nodiscard]] error_context_t& error() noexcept;
 
         /**
          * @brief 对结果进行链式操作（右值引用版本）

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <type_traits>
 
 #include "error_system/core/error_code.h"
 
@@ -13,6 +14,13 @@
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
+
+    /**
+     * @brief 约束枚举类型大小不超过 2 字节（uint16_t 可容纳）
+     * @details concept 是编译期谓词，不加 _t 后缀（规范 10.3）
+     */
+    template<typename E>
+    concept uint16_enum = std::is_enum_v<E> && sizeof(E) <= 2;
 
     /**
      * @brief 错误码构建器
@@ -35,8 +43,9 @@ namespace error_system::core {
          * @details 相比 error_code_t 构造函数直接传 uint16_t，使用强类型枚举可防止
          *          subsystem_id 和 module_id 传反。内部通过 static_cast 转换为 uint16_t
          *          后委托 error_code_t 构造函数。
-         * @tparam SubSystemEnum 子系统枚举类型
-         * @tparam ModuleEnum 模块枚举类型
+         *          模板参数受 uint16_enum concept 约束，仅接受大小 ≤ 2 字节的枚举类型。
+         * @tparam SubSystemEnum 子系统枚举类型（受 uint16_enum 约束）
+         * @tparam ModuleEnum 模块枚举类型（受 uint16_enum 约束）
          * @param level 错误等级
          * @param system 系统域
          * @param subsys 子系统值（枚举）
@@ -51,7 +60,7 @@ namespace error_system::core {
          *     error_level_t::error, system_domain_t::database,
          *     subsys_t::db_conn, module_t::timeout, 0x0001);
          */
-        template <typename SubSystemEnum, typename ModuleEnum>
+        template <uint16_enum SubSystemEnum, uint16_enum ModuleEnum>
         [[nodiscard]] static constexpr error_code_t make_error_code(error_level_t level,
                                                       domain::system_domain_t system,
                                                       SubSystemEnum subsystem,

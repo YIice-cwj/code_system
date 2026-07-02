@@ -96,6 +96,8 @@ namespace error_system::core {
 
         /**
          * @brief 为批量注册提前预留索引容量
+         * @details noexcept 函数，内部捕获 bad_alloc 后静默继续。reserve 失败不影响正确性，
+         *          仅影响性能（后续 emplace/push_back 仍可正常工作，可能触发重分配）。
          * @param additional_entries 新增条目数量
          */
         void reserve_for_registration_(size_t additional_entries) noexcept;
@@ -181,7 +183,7 @@ namespace error_system::core {
 
         /**
          * @brief 注销模块组的所有错误码
-         * @details 同步清除 code_index_/name_index_/module_index_ 中该模块的所有条目，
+         * @details 同步清除 primary_index_/name_index_/module_index_ 中该模块的所有条目，
          *          已注册的错误码数量不影响性能（O(模块内错误数)）
          * @param module_group_id 模块组 ID
          */
@@ -214,7 +216,7 @@ namespace error_system::core {
          * @param module_group_id 模块组 ID
          * @return std::vector<error_metadata_t> 模块下所有错误码的元数据副本
          */
-        std::vector<error_metadata_t>
+        [[nodiscard]] std::vector<error_metadata_t>
         get_errors_by_module(const module_group_id_t module_group_id) const noexcept;
 
         /**
@@ -223,7 +225,7 @@ namespace error_system::core {
          * @param subsystem_id 子系统 ID
          * @return std::vector<error_metadata_t> 子系统下所有错误码的元数据副本
          */
-        std::vector<error_metadata_t>
+        [[nodiscard]] std::vector<error_metadata_t>
         get_errors_by_subsystem(uint16_t subsystem_id) const noexcept;
 
         /**
@@ -262,10 +264,10 @@ namespace error_system::core {
 
         /**
          * @brief 获取当前重复注册警告回调
-         * @return const duplicate_warn_callback_t& 当前回调
+         * @return duplicate_warn_callback_t 当前回调的拷贝（锁内拷贝，线程安全）
          * @note 转发至 duplicate_handler_，保留接口以最小化调用方改动
          */
-        const duplicate_warn_callback_t& get_duplicate_warn_callback() const noexcept {
+        duplicate_warn_callback_t get_duplicate_warn_callback() const noexcept {
             return duplicate_handler_.get_warn_callback();
         }
 
