@@ -37,7 +37,7 @@ namespace error_system::core {
 
             auto overflow = std::make_unique<std::unordered_map<std::string, std::string>>();
             for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
-                overflow->emplace(payload_small_[i].first, payload_small_[i].second);
+                overflow->emplace(std::move(payload_small_[i].first), std::move(payload_small_[i].second));
             }
             overflow->insert_or_assign(std::forward<K>(key), std::forward<V>(value));
             payload_overflow_ = std::move(overflow);
@@ -59,7 +59,7 @@ namespace error_system::core {
      *          3. 根据全局配置校验错误码、抓取堆栈、通知插件
      *          若错误码 sign=1（成功），则跳过步骤 3
      * @tparam Args 格式化参数类型包
-     * @param located_code 携带源位置的错误码（需显式构造 located_code_t{code}）
+     * @param located_code 携带源位置的错误码（支持从 error_code_t 隐式构造）
      * @param message_format 错误信息格式化字符串（支持 {} 占位符）
      * @param args 格式化参数列表
      */

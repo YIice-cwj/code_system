@@ -108,7 +108,7 @@ namespace error_system::core {
     public:
         /**
          * @brief 默认构造函数
-         * @details 默认构造为成功码（sign=1），所有字段为 0
+         * @details 默认构造为成功码（sign=1），其余字段均为 0
          */
         constexpr error_code_t() noexcept : code_(1ULL << SIGN_SHIFT) {}
         constexpr error_code_t(const error_code_t&) noexcept = default;

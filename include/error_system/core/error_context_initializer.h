@@ -40,25 +40,25 @@ namespace error_system::core {
         static i_error_notifier_t* notifier_;
 
         /**
-         * @brief 校验错误码并填充校验相关字段
-         * @details 根据全局配置（is_validation_enabled）决定是否对 context 中的错误码
-         *          进行合法性校验，并将校验结果写入 context 的元数据字段。
+         * @brief 执行错误码合法性校验
+         * @details 查询注册表，若错误码未注册则标记为 fatal 并附加 "[UNREGISTERED CODE]" 前缀。
+         *          是否调用由 initialize() 根据 is_validation_enabled 决定。
          * @param context 待初始化的错误上下文
          */
         static void fill_validation_fields_(error_context_t& context) noexcept;
 
         /**
-         * @brief 捕获并填充堆栈跟踪
-         * @details 根据全局配置（is_stacktrace_enabled）和 stacktrace_level 决定
-         *          是否抓取当前线程的调用栈，并将栈帧写入 context 的元数据字段。
+         * @brief 抓取当前线程调用栈
+         * @details 通过 utils::stack_trace_utils_t::generate 抓取调用栈并写入 context.stack_frames。
+         *          是否调用由 initialize() 根据 is_stacktrace_enabled 与 stacktrace_level 决定。
          * @param context 待初始化的错误上下文
          */
         static void fill_stacktrace_(error_context_t& context) noexcept;
 
         /**
-         * @brief 记录源位置信息
-         * @details 将当前源文件名、函数名、行号写入 context 的元数据字段。
-         *          short_filename_enabled 为 true 时仅保留文件名部分（去掉目录路径）。
+         * @brief 根据 short_filename_enabled 设置 context.file_name
+         * @details 指向 source_location.file_name() 或其短文件名形式（通过 extract_short_filename）。
+         *          是否调用由 initialize() 根据 is_source_location_enabled 决定。
          * @param context 待初始化的错误上下文
          * @param short_filename_enabled 是否使用短文件名
          */

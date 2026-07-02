@@ -74,7 +74,9 @@ namespace error_system::core {
 
         try {
             context.with("illegal_raw_code", std::to_string(context.code_.get_code()));
-            context.message = "[UNREGISTERED CODE] " + std::move(context.message);
+            std::string prefixed_message = "[UNREGISTERED CODE] ";
+            prefixed_message += context.message;
+            context.message = std::move(prefixed_message);
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context_initializer] fill_validation_fields_: std::bad_alloc\n");
         }
@@ -99,6 +101,9 @@ namespace error_system::core {
     }
 
     void error_context_initializer_t::initialize(error_context_t& context) noexcept {
+        if (context.is_success()) {
+            return;
+        }
         const bool validation_enabled = feature_flags_t::is_validation_enabled();
         const bool stacktrace_enabled = feature_flags_t::is_stacktrace_enabled();
         const bool location_enabled = feature_flags_t::is_source_location_enabled();

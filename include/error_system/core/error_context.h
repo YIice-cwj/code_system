@@ -207,7 +207,7 @@ namespace error_system::core {
 
         /**
          * @brief 拷贝构造函数
-         * @details 深拷贝 SSO payload、溢出 map 和因果链。
+         * @details 深拷贝 SSO payload、溢出 map，共享因果链（shared_ptr 引用计数）。
          *          POD 字段在初始化列表完成，string/容器拷贝放入 try 块，
          *          避免 bad_alloc 突破 noexcept 触发 terminate（规范 14）。
          *          分配失败时对象处于部分构造状态，但调用方仍可安全析构。
@@ -220,7 +220,7 @@ namespace error_system::core {
         /**
          * @brief 移动赋值运算符
          * @details 提供移动赋值以允许复用变量（此前为 = delete 导致必须每次声明新变量）。
-         *          自赋值安全：先释放自身溢出存储与 cause，再从源对象移动。
+         *          自赋值安全：移动赋值过程中隐式释放自身溢出存储与 cause，再从源对象移动。
          * @param other 源对象（移动后处于有效但未指定状态）
          * @return error_context_t& 自身引用
          * @note 实现见 error_context.cc
@@ -355,14 +355,14 @@ namespace error_system::core {
          * @param other 另一个错误上下文
          * @return bool 是否相等
          */
-        bool operator==(const error_context_t& other) const noexcept;
+        [[nodiscard]] bool operator==(const error_context_t& other) const noexcept;
 
         /**
          * @brief 不等比较运算符
          * @param other 另一个错误上下文
          * @return bool 是否不等
          */
-        bool operator!=(const error_context_t& other) const noexcept { return !(*this == other); }
+        [[nodiscard]] bool operator!=(const error_context_t& other) const noexcept { return !(*this == other); }
 
         /**
          * @brief 添加多类型负载字段（模板版本）
@@ -445,11 +445,13 @@ namespace error_system::core {
          * @brief 严格相等比较（含 cause 链与 stack_frames 深比较）
          * @details operator== 仅比较 code/message/payload；本方法额外比较 cause 链与堆栈，
          *          适用于完整状态比对（如测试断言、缓存键）。
+         *          超过 MAX_CAUSE_DEPTH(32) 时停止递归返回 false，防止循环引用导致栈溢出。
          * @param other 另一个错误上下文
+         * @param depth 递归深度（内部使用，调用方无需指定）
          * @return bool 是否严格相等
          * @note 实现见 error_context.cc
          */
-        [[nodiscard]] bool equals_strict(const error_context_t& other) const noexcept;
+        [[nodiscard]] bool equals_strict(const error_context_t& other, size_t depth = 0) const noexcept;
 
         /**
          * @brief 遍历所有 payload 项
@@ -525,7 +527,7 @@ namespace error_system::core {
      *          避免调用方反复重试。聚合策略：主错误取第一个，其余以
      *          `joined_error_N` 为键作为 payload 附加，value 为被聚合错误的 message。
      *          空列表返回默认成功上下文；单元素直接返回，零开销。
-     * @param errors 待聚合的错误上下文列表（右值引用，内部移动消费）
+     * @param errors 待聚合的错误上下文列表（右值引用，内部移动消费首个元素，其余元素仅读取 message）
      * @return error_context_t 聚合后的错误上下文
      *
      * @example

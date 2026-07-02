@@ -65,7 +65,7 @@ namespace error_system::core {
 
         /**
          * @brief 递归实现 to_string，按深度缩进渲染 cause 链
-         * @details 从 error_registry_t 获取元数据，根据 enable_text_output 配置决定
+         * @details 使用 context.metadata_（构造时已从 error_registry_t 缓存），根据 enable_text_output 配置决定
          *          输出子系统/模块名称或原始 ID。包含：源位置、错误等级、系统域、
          *          子系统/模块、错误编号、消息、描述、payload、堆栈和因果链。
          *          depth 用于控制 cause 链各层级的缩进。
@@ -89,6 +89,7 @@ namespace error_system::core {
          * @brief 递归实现 to_binary，按深度序列化 cause 链
          * @details 使用小端序编码，适合高性能 RPC 或持久化存储。
          *          cause 链通过递归调用自身追加到二进制流末尾。
+         *          超过 MAX_CAUSE_DEPTH 的 cause 链被截断。
          * @param context 错误上下文
          * @param depth 因果链递归深度（顶层为 0）
          * @return std::string 错误上下文的二进制表示
@@ -98,13 +99,14 @@ namespace error_system::core {
         /**
          * @brief 从二进制数据反序列化（递归实现，不含魔数/版本头）
          * @details 从指定偏移开始解析单个 error_context_t 节点，递归处理 cause 链。
-         *          成功时 offset 更新为已消费字节数。
+         *          成功时 offset 更新为已消费字节数。超过 MAX_CAUSE_DEPTH 返回 std::nullopt。
          * @param data 二进制数据
          * @param offset 当前解析偏移（输入输出参数）
+         * @param depth 当前递归深度（顶层为 0）
          * @return std::optional<error_context_t> 反序列化结果，失败返回 std::nullopt
          */
         static std::optional<error_context_t> from_binary_node_(
-            std::string_view data, size_t& offset) noexcept;
+            std::string_view data, size_t& offset, size_t depth) noexcept;
 
         /**
          * @brief 解析二进制 location 字段到 context.loc_file_storage_ /
@@ -136,19 +138,22 @@ namespace error_system::core {
          * @param context 目标上下文
          * @param data 二进制数据
          * @param offset 当前解析偏移（输入输出参数，将越过字段值）
+         * @param depth 当前递归深度
          * @return bool true=成功，false=格式错误
          */
         static bool parse_binary_cause_field_(error_context_t& context,
-                                              std::string_view data, size_t& offset) noexcept;
+                                              std::string_view data, size_t& offset, size_t depth) noexcept;
 
         /**
          * @brief 从 JSON 词法分析器递归反序列化单个 error_context_t 节点
          * @details 流式解析（不构建中间 JSON 树），通过 json_lexer_t 消费 token，
          *          直接填充 error_context_t 私有字段，递归处理 cause 链。
+         *          超过 MAX_CAUSE_DEPTH 返回 std::nullopt。
          * @param lexer JSON 词法分析器
+         * @param depth 当前递归深度（顶层为 0）
          * @return std::optional<error_context_t> 反序列化结果，失败返回 std::nullopt
          */
-        static std::optional<error_context_t> from_json_node_(json_lexer_t& lexer) noexcept;
+        static std::optional<error_context_t> from_json_node_(json_lexer_t& lexer, size_t depth) noexcept;
 
         /**
          * @brief 解析 JSON "code" 字段到 context.code_ / context.metadata_
@@ -200,9 +205,10 @@ namespace error_system::core {
          * @details 递归调用 from_json_node_ 解析 cause 子对象
          * @param context 目标上下文
          * @param lexer JSON 词法分析器
+         * @param depth 当前递归深度
          * @return bool true=成功，false=格式错误
          */
-        static bool parse_json_cause_field_(error_context_t& context, json_lexer_t& lexer) noexcept;
+        static bool parse_json_cause_field_(error_context_t& context, json_lexer_t& lexer, size_t depth) noexcept;
 
         /**
          * @brief 解析 payload 对象中的单个键值对
@@ -249,6 +255,7 @@ namespace error_system::core {
          * @details 默认 nullptr，首次使用文本输出时绑定到 i18n 默认解析器。
          *          调用方可通过 set_subsystem_module_resolver() 注入自定义实现，
          *          用于测试或替换名称来源。
+         * @warning 裸指针非线程安全，预期在初始化阶段调用
          */
         static const error_system::i18n::i_subsystem_module_resolver_t* subsystem_module_resolver_;
 
@@ -317,6 +324,7 @@ namespace error_system::core {
          * @brief 从 JSON 字符串反序列化错误上下文
          * @details 解析 to_json 产生的 JSON，还原 code/message/location/payload/
          *          stack_frames/cause 链。code 字段接受字符串形式（与 to_json 自洽）。
+         *          stack_frames 仅在 STACKTRACE_ENABLED 开启时还原。
          *          任何格式错误或分配失败均返回 std::nullopt，不抛异常。
          * @param json JSON 字符串视图
          * @return std::optional<error_context_t> 反序列化结果，失败返回 std::nullopt

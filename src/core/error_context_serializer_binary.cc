@@ -157,7 +157,7 @@ namespace error_system::core {
             write_location_binary(buf, context);
             write_payload_binary(buf, context);
 
-            if (context.cause && depth < MAX_CAUSE_DEPTH) {
+            if (context.cause && depth + 1 < MAX_CAUSE_DEPTH) {
                 buf.push_back(1);
                 std::string cause_binary = to_binary_impl_(*context.cause, depth + 1);
                 write_string_len_prefixed(buf, cause_binary);
@@ -191,7 +191,7 @@ namespace error_system::core {
         if (version != BINARY_VERSION) {
             return std::nullopt;
         }
-        auto result = from_binary_node_(data, offset);
+        auto result = from_binary_node_(data, offset, 0);
         if (!result) {
             return std::nullopt;
         }
@@ -248,7 +248,7 @@ namespace error_system::core {
     }
 
     bool error_context_serializer_t::parse_binary_cause_field_(
-        error_context_t& context, std::string_view data, size_t& offset) noexcept {
+        error_context_t& context, std::string_view data, size_t& offset, size_t depth) noexcept {
         uint8_t has_cause = 0;
         if (!read_byte(data, offset, has_cause)) {
             return false;
@@ -256,12 +256,15 @@ namespace error_system::core {
         if (has_cause == 0) {
             return true;
         }
+        if (depth >= MAX_CAUSE_DEPTH) {
+            return false;
+        }
         std::string cause_blob;
         if (!read_string_len_prefixed(data, offset, cause_blob)) {
             return false;
         }
         size_t cause_offset = 0;
-        auto cause_ctx = from_binary_node_(cause_blob, cause_offset);
+        auto cause_ctx = from_binary_node_(cause_blob, cause_offset, depth + 1);
         if (!cause_ctx) {
             return false;
         }
@@ -278,7 +281,10 @@ namespace error_system::core {
     }
 
     std::optional<error_context_t> error_context_serializer_t::from_binary_node_(
-        std::string_view data, size_t& offset) noexcept {
+        std::string_view data, size_t& offset, size_t depth) noexcept {
+        if (depth >= MAX_CAUSE_DEPTH) {
+            return std::nullopt;
+        }
         error_context_t context;
 
         uint64_t raw_code = 0;
@@ -303,7 +309,7 @@ namespace error_system::core {
             return std::nullopt;
         }
 
-        if (!parse_binary_cause_field_(context, data, offset)) {
+        if (!parse_binary_cause_field_(context, data, offset, depth)) {
             return std::nullopt;
         }
 

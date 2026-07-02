@@ -6,7 +6,7 @@
 /**
  * @file error_level.h
  * @brief 错误等级定义与转换
- * @details 定义错误系统的等级分类（debug/info/warn/error/fatal/custom），
+ * @details 定义错误系统的等级分类（debug/info/warn/error/fatal），
  *          提供错误等级与整数、字符串之间的相互转换功能，
  *          支持编译期常量计算，用于日志过滤和错误处理决策
  * @author yiice
@@ -76,6 +76,9 @@ namespace error_system::core {
      * @return error_level_t 错误等级
      */
     [[nodiscard]] constexpr error_level_t from_string(const char* string) noexcept {
+        if (string == nullptr) {
+            return error_level_t::info;
+        }
         switch (utils::string_utils_t::hash(string)) {
             case utils::string_utils_t::hash("debug"):
                 return error_level_t::debug;
@@ -109,7 +112,7 @@ namespace error_system::core {
 
     /**
      * @brief 错误等级整数的下一个错误等级
-     * @details 用于获取错误等级整数的下一个错误等级
+     * @details 用于获取错误等级整数的下一个错误等级。超过 fatal 时 clamp 为 fatal
      * @param level 错误等级整数
      * @return error_level_t 错误等级整数的下一个错误等级
      */
@@ -119,12 +122,13 @@ namespace error_system::core {
 
     /**
      * @brief 错误等级整数的上一个错误等级
-     * @details 用于获取错误等级整数的上一个错误等级
+     * @details 用于获取错误等级整数的上一个错误等级。debug 下溢时回绕为 fatal（无更低级别）
      * @param level 错误等级整数
      * @return error_level_t 错误等级整数的上一个错误等级
      */
     [[nodiscard]] constexpr error_level_t prev_level(error_level_t level) noexcept {
-        return from_int(to_int(level) - 1);
+        const uint8_t idx = to_int(level);
+        return idx == 0 ? error_level_t::fatal : from_int(idx - 1);
     }
 
     /**

@@ -24,9 +24,14 @@
  */
 namespace error_system::core {
 
+    namespace {
+        /** cause 链最大递归深度，防止循环引用导致栈溢出 */
+        constexpr size_t MAX_CAUSE_DEPTH = 32;
+    }
+
     /**
      * @brief 拷贝构造函数
-     * @details 深拷贝 SSO payload、溢出 map 和因果链。
+     * @details 深拷贝 SSO payload、溢出 map，共享因果链（shared_ptr 引用计数）。
      *          POD 字段在初始化列表完成，string/容器拷贝放入 try 块，
      *          避免 bad_alloc 突破 noexcept 触发 terminate（规范 14）。
      *          分配失败时对象处于部分构造状态，但调用方仍可安全析构。
@@ -44,13 +49,15 @@ namespace error_system::core {
             repair_source_location_pointers_();
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context] copy constructor: std::bad_alloc\n");
+            file_name = nullptr;
+            source_location = {};
         }
     }
 
     /**
      * @brief 移动赋值运算符
      * @details 提供移动赋值以允许复用变量（此前为 = delete 导致必须每次声明新变量）。
-     *          自赋值安全：先释放自身溢出存储与 cause，再从源对象移动。
+     *          自赋值安全：移动赋值过程中隐式释放自身溢出存储与 cause，再从源对象移动。
      * @param other 源对象（移动后处于有效但未指定状态）
      * @return error_context_t& 自身引用
      */
@@ -172,6 +179,11 @@ namespace error_system::core {
         return code_.is_success_code();
     }
 
+    /**
+     * @brief 包装底层错误为当前错误的直接原因
+     * @details 拷贝自身后分配 shared_ptr 持有 underlying。
+     *          分配失败时 cause 保持原值并记录日志，不抛异常。
+     */
     error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
         error_context_t new_code_context = *this;
         try {
@@ -182,6 +194,11 @@ namespace error_system::core {
         return new_code_context;
     }
 
+    /**
+     * @brief 包装底层错误为当前错误的直接原因（移动语义版本）
+     * @details 拷贝自身后分配 shared_ptr 持有移动后的 underlying。
+     *          分配失败时 cause 保持原值并记录日志，不抛异常。
+     */
     error_context_t error_context_t::wrap(error_context_t&& underlying) const noexcept {
         error_context_t new_code_context = *this;
         try {
@@ -278,8 +295,12 @@ namespace error_system::core {
      * @brief 严格相等比较（含 cause 链与 stack_frames 深比较）
      * @details operator== 仅比较 code/message/payload；本方法额外比较 cause 链与堆栈，
      *          适用于完整状态比对（如测试断言、缓存键）。
+     *          超过 MAX_CAUSE_DEPTH(32) 时停止递归返回 false，防止循环引用导致栈溢出。
      */
-    bool error_context_t::equals_strict(const error_context_t& other) const noexcept {
+    bool error_context_t::equals_strict(const error_context_t& other, size_t depth) const noexcept {
+        if (depth >= MAX_CAUSE_DEPTH) {
+            return false;
+        }
         if (!(*this == other)) {
             return false;
         }
@@ -289,7 +310,7 @@ namespace error_system::core {
             }
         }
         if (cause && other.cause) {
-            return cause->equals_strict(*other.cause);
+            return cause->equals_strict(*other.cause, depth + 1);
         }
         return !cause && !other.cause;
     }

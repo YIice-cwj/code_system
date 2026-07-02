@@ -49,9 +49,9 @@ namespace error_system::core {
             const auto* resolver = get_subsystem_module_resolver_();
             const auto output_locale = i18n_config_t::resolve_output_locale();
             const auto default_locale = i18n_config_t::get_default_locale();
-            const auto sm_info = resolver->resolve_subsystem_module(
-                output_locale, default_locale, code.get_subsys(), code.get_module());
             try {
+                const auto sm_info = resolver->resolve_subsystem_module(
+                    output_locale, default_locale, code.get_subsys(), code.get_module());
                 subsys_module_str.reserve(sm_info.subsystem_name.size() + sm_info.module_name.size() + 3);
                 subsys_module_str.append(sm_info.subsystem_name).append(" / ").append(sm_info.module_name);
             } catch (const std::bad_alloc&) {
@@ -101,7 +101,7 @@ namespace error_system::core {
         /**
          * @brief 追加源位置信息文本（[Location: file:line @ function]）
          */
-        void append_location_text(std::string& result, const error_context_t& context) noexcept {
+        void append_location_text(std::string& result, const error_context_t& context) {
             if constexpr (feature_flags_t::LOCATION_ENABLED) {
                 if (feature_flags_t::is_source_location_enabled() && context.file_name != nullptr) {
                     result.append(" [Location: ").append(context.file_name).append(":");
@@ -115,7 +115,7 @@ namespace error_system::core {
          * @brief 追加签名/等级/系统域/子系统/模块/错误编号子头部
          */
         void append_subheader_text(std::string& result, const error_context_t& context,
-                                   const std::string& subsys_module_str) noexcept {
+                                   const std::string& subsys_module_str) {
             result.append("[Sign: ")
                 .append(context.is_error() ? "Error" : "Success")
                 .append(" Level: ")
@@ -131,7 +131,7 @@ namespace error_system::core {
         /**
          * @brief 追加 payload 文本段（{key=value, ...}）
          */
-        void append_payload_text(std::string& result, const error_context_t& context) noexcept {
+        void append_payload_text(std::string& result, const error_context_t& context) {
             if (context.payload_size() == 0) {
                 return;
             }
@@ -150,7 +150,7 @@ namespace error_system::core {
         /**
          * @brief 追加堆栈跟踪文本段（\n  [Stacktrace]:\n    #0  frame...）
          */
-        void append_stacktrace_text(std::string& result, const error_context_t& context) noexcept {
+        void append_stacktrace_text(std::string& result, const error_context_t& context) {
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
                 if (context.stack_frames.empty()) {
                     return;
@@ -197,8 +197,10 @@ namespace error_system::core {
             append_payload_text(result, context);
             append_stacktrace_text(result, context);
 
-            if (context.cause && depth < MAX_CAUSE_DEPTH) {
+            if (context.cause && depth + 1 < MAX_CAUSE_DEPTH) {
                 result.append("\n  ↳ Caused by: ").append(to_string_impl_(*context.cause, depth + 1));
+            } else if (context.cause) {
+                result.append("\n  ↳ ... (cause chain truncated)");
             }
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context_serializer] to_string: std::bad_alloc\n");

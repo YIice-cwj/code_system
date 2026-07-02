@@ -143,9 +143,9 @@ namespace error_system::core {
 
         /**
          * @brief 获取当前重复注册警告回调
-         * @return const duplicate_warn_callback_t& 当前回调
+         * @return duplicate_warn_callback_t 当前回调的拷贝（锁内拷贝，线程安全）
          */
-        [[nodiscard]] const duplicate_warn_callback_t& get_warn_callback() const noexcept {
+        [[nodiscard]] duplicate_warn_callback_t get_warn_callback() const noexcept {
             std::shared_lock<std::shared_mutex> lock(mutex_);
             return warn_callback_;
         }

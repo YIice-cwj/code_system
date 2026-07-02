@@ -51,7 +51,7 @@ namespace error_system::core {
             size_t capacity = 64 + context.message.size();
 
             context.for_each_payload([&](const std::string& key, const std::string& value) {
-                capacity += key.size() + value.size() + 8;
+                capacity += (key.size() * 2 + 2) + (value.size() * 2 + 2) + 8;
             });
 
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
@@ -95,7 +95,7 @@ namespace error_system::core {
         /**
          * @brief 追加 payload 字段（"payload":{"k":"v",...}）
          */
-        void append_payload_json(std::string& json, const error_context_t& context) noexcept {
+        void append_payload_json(std::string& json, const error_context_t& context) {
             if (context.payload_size() == 0) {
                 return;
             }
@@ -116,7 +116,7 @@ namespace error_system::core {
         /**
          * @brief 追加 stack_frames 字段（"stack_frames":["frame1","frame2"]）
          */
-        void append_stacktrace_json(std::string& json, const error_context_t& context) noexcept {
+        void append_stacktrace_json(std::string& json, const error_context_t& context) {
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
                 if (context.stack_frames.empty()) {
                     return;
@@ -153,6 +153,8 @@ namespace error_system::core {
                 return false;
             } catch (const std::out_of_range&) {
                 return false;
+            } catch (const std::bad_alloc&) {
+                return false;
             }
         }
 
@@ -179,6 +181,8 @@ namespace error_system::core {
             } catch (const std::invalid_argument&) {
                 return false;
             } catch (const std::out_of_range&) {
+                return false;
+            } catch (const std::bad_alloc&) {
                 return false;
             }
         }
@@ -407,7 +411,7 @@ namespace error_system::core {
             append_payload_json(json, context);
             append_stacktrace_json(json, context);
 
-            if (context.cause && depth < MAX_CAUSE_DEPTH) {
+            if (context.cause && depth + 1 < MAX_CAUSE_DEPTH) {
                 json.append(",\"cause\":").append(to_json_impl_(*context.cause, depth + 1));
             }
 
@@ -423,7 +427,7 @@ namespace error_system::core {
             return std::nullopt;
         }
         utils::detail::json_lexer_t lexer(json);
-        auto result = from_json_node_(lexer);
+        auto result = from_json_node_(lexer, 0);
         if (!result) {
             return std::nullopt;
         }
@@ -442,12 +446,14 @@ namespace error_system::core {
             {"location",     &error_context_serializer_t::parse_json_location_field_},
             {"payload",      &error_context_serializer_t::parse_json_payload_field_},
             {"stack_frames", &error_context_serializer_t::parse_json_stack_frames_field_},
-            {"cause",        &error_context_serializer_t::parse_json_cause_field_},
         };
         return table;
     }
 
-    std::optional<error_context_t> error_context_serializer_t::from_json_node_(json_lexer_t& lexer) noexcept {
+    std::optional<error_context_t> error_context_serializer_t::from_json_node_(json_lexer_t& lexer, size_t depth) noexcept {
+        if (depth >= MAX_CAUSE_DEPTH) {
+            return std::nullopt;
+        }
         using token_type_t = json_lexer_t::token_type_t;
         auto token = lexer.next();
         if (token.type != token_type_t::left_brace) {
@@ -472,11 +478,16 @@ namespace error_system::core {
                 return std::nullopt;
             }
 
-            const auto& table = field_dispatcher_table_();
-            auto it = table.find(key);
-            bool ok = (it != table.end())
-                ? it->second(context, lexer)
-                : skip_json_value_(lexer);
+            bool ok;
+            if (key == "cause") {
+                ok = parse_json_cause_field_(context, lexer, depth + 1);
+            } else {
+                const auto& table = field_dispatcher_table_();
+                auto it = table.find(key);
+                ok = (it != table.end())
+                    ? it->second(context, lexer)
+                    : skip_json_value_(lexer);
+            }
             if (!ok) {
                 return std::nullopt;
             }
@@ -528,7 +539,8 @@ namespace error_system::core {
 
     /**
      * @brief 解析 "location" 字段：{file,function,line} 对象
-     * @details 仅当三个子字段全部成功才写入 context。字段分发委托 parse_location_member_。
+     * @details 仅当三个子字段全部成功才写入 context；部分字段存在但不全时返回 true 但不写入 context。
+     *          字段分发委托 parse_location_member_。
      */
     bool error_context_serializer_t::parse_json_location_field_(
         error_context_t& context, json_lexer_t& lexer) noexcept {
@@ -666,10 +678,15 @@ namespace error_system::core {
 
     /**
      * @brief 解析 "cause" 字段：递归解析子对象到 context.cause
+     * @details 递归调用 from_json_node_ 解析 cause 子对象，depth 用于控制递归深度
+     * @param context 目标上下文
+     * @param lexer JSON 词法分析器
+     * @param depth 当前递归深度
+     * @return bool true=成功，false=格式错误
      */
     bool error_context_serializer_t::parse_json_cause_field_(
-        error_context_t& context, json_lexer_t& lexer) noexcept {
-        auto cause_ctx = from_json_node_(lexer);
+        error_context_t& context, json_lexer_t& lexer, size_t depth) noexcept {
+        auto cause_ctx = from_json_node_(lexer, depth);
         if (!cause_ctx) {
             return false;
         }
