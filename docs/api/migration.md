@@ -1,84 +1,83 @@
-# 🔁 Migration 层 API
+# Migration 层 API
 
-> `error_system::migration` ｜ 头文件：`error_system/migration/error_migration.h`
+`error_system::migration`
 
-错误码废弃与迁移模块 — 管理错误码的废弃状态与旧码→新码迁移映射，支撑版本演进下的平滑过渡。
+错误码废弃与迁移模块，管理错误码的废弃状态与旧码→新码迁移映射，支撑版本演进下的平滑过渡。
 
 ---
 
-## 📋 deprecation_info_t
+## deprecation_info_t
 
 废弃信息描述结构。
 
-```cpp
-struct deprecation_info_t {
-    bool deprecated{false};                       // 是否已废弃
-    std::string reason;                            // 废弃原因
-    std::optional<error_code_t> replacement{};     // 替代错误码（可选）
-    std::string since_version;                     // 起始废弃版本
-    std::string removal_version;                   // 计划移除版本
-};
-```
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| deprecated | `bool` | `false` | 是否已废弃 |
+| reason | `std::string` | — | 废弃原因 |
+| replacement | `std::optional<error_code_t>` | `nullopt` | 替代错误码（可选） |
+| since_version | `std::string` | — | 起始废弃版本 |
+| removal_version | `std::string` | — | 计划移除版本 |
 
 ---
 
-## 📝 deprecation_meta_t
+## deprecation_meta_t
 
-废弃元数据 — `mark_deprecated` 的参数封装。与 `deprecation_info_t` 的区别是不含 `deprecated` 布尔字段（标记时隐含为 true），符合函数参数超过 4 个时封装为结构体的设计原则。
+废弃元数据，`mark_deprecated` 的参数封装。与 `deprecation_info_t` 的区别是不含 `deprecated` 布尔字段（标记时隐含为 true），符合函数参数超过 4 个时封装为结构体的设计原则。
 
-```cpp
-struct deprecation_meta_t {
-    std::string reason;                            // 废弃原因
-    std::optional<error_code_t> replacement{};     // 替代错误码（可选）
-    std::string since_version;                     // 起始废弃版本
-    std::string removal_version;                   // 计划移除版本
-};
-```
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| reason | `std::string` | — | 废弃原因 |
+| replacement | `std::optional<error_code_t>` | `nullopt` | 替代错误码（可选） |
+| since_version | `std::string` | — | 起始废弃版本 |
+| removal_version | `std::string` | — | 计划移除版本 |
 
 ---
 
-## 🔄 error_migration_registry_t
+## error_migration_registry_t
 
-错误码废弃与迁移注册器单例。废弃状态与迁移映射**分离存储**：废弃不一定有替代码，迁移也不一定意味着源码已废弃（可能是别名）。
+错误码废弃与迁移注册器单例，通过 `instance()` 获取。废弃状态与迁移映射分离存储：废弃不一定有替代码，迁移也不一定意味着源码已废弃（可能是别名）。
 
-### API
+### 标记
 
-```cpp
-class error_migration_registry_t {
-public:
-    static error_migration_registry_t& instance() noexcept;
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| mark_deprecated | `void mark_deprecated(error_code_t code, const deprecation_meta_t& meta) noexcept` | 标记废弃（若 meta.replacement 有值，同时建立 migration 映射） |
+| register_migration | `void register_migration(error_code_t old_code, error_code_t new_code) noexcept` | 仅建立迁移映射（不标记废弃，适用于别名场景） |
 
-    // 标记废弃（若 meta.replacement 有值，同时建立 migration 映射）
-    void mark_deprecated(error_code_t code, const deprecation_meta_t& meta) noexcept;
+### 查询
 
-    // 仅建立迁移映射（不标记废弃，适用于别名场景）
-    void register_migration(error_code_t old_code, error_code_t new_code) noexcept;
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| get_deprecation_info | `[[nodiscard]] std::optional<deprecation_info_t> get_deprecation_info(error_code_t code) const noexcept` | 查询废弃信息 |
+| is_deprecated | `[[nodiscard]] bool is_deprecated(error_code_t code) const noexcept` | 检查是否已废弃 |
 
-    // 查询
-    [[nodiscard]] std::optional<deprecation_info_t> get_deprecation_info(error_code_t code) const noexcept;
-    [[nodiscard]] bool is_deprecated(error_code_t code) const noexcept;
+### 迁移
 
-    // 迁移（单跳，不递归）
-    [[nodiscard]] std::optional<error_code_t> migrate(error_code_t old_code) const noexcept;
-    // 递归迁移（沿链跳转到终点，最大深度 16，环检测后返回当前码）
-    [[nodiscard]] error_code_t migrate_recursive(error_code_t old_code) const noexcept;
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| migrate | `[[nodiscard]] std::optional<error_code_t> migrate(error_code_t old_code) const noexcept` | 单跳迁移（a → b，不递归） |
+| migrate_recursive | `[[nodiscard]] error_code_t migrate_recursive(error_code_t old_code) const noexcept` | 递归迁移到终点，最大深度 16，环检测后返回当前码 |
 
-    // 移除
-    bool unmark_deprecated(error_code_t code) noexcept;       // 不清除迁移映射
-    bool unregister_migration(error_code_t old_code) noexcept;
-    void clear_all() noexcept;
+### 注销
 
-    // 统计
-    [[nodiscard]] size_t deprecated_count() const noexcept;
-    [[nodiscard]] size_t migration_count() const noexcept;
-    [[nodiscard]] std::vector<code_t> get_deprecated_codes() const noexcept;
-};
-```
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| unmark_deprecated | `bool unmark_deprecated(error_code_t code) noexcept` | 移除废弃标记（不清除迁移映射） |
+| unregister_migration | `bool unregister_migration(error_code_t old_code) noexcept` | 移除迁移映射 |
+| clear_all | `void clear_all() noexcept` | 清除所有废弃标记与迁移映射 |
+
+### 统计
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| deprecated_count | `[[nodiscard]] size_t deprecated_count() const noexcept` | 已废弃错误码数量 |
+| migration_count | `[[nodiscard]] size_t migration_count() const noexcept` | 迁移映射数量 |
+| get_deprecated_codes | `[[nodiscard]] std::vector<code_t> get_deprecated_codes() const noexcept` | 已废弃错误码列表 |
 
 ### 单跳 vs 递归迁移
 
 - `migrate()`：仅一次映射跳转（a → b），适用于单步版本升级
-- `migrate_recursive()`：沿链跳转到终点（a → b → c → … → 终点），最大深度 16，环检测安全，适用于追溯最终替代码
+- `migrate_recursive()`：沿链跳转到终点（a → b → c → … → 终点），最大深度 16，环检测安全
 
 决策树详见 [决策树 · 3](../decision_tree.md#3-错误码废弃与迁移决策)。
 
@@ -86,15 +85,9 @@ public:
 
 ```cpp
 auto& reg = error_migration_registry_t::instance();
-// 版本演进，下线旧码（同时建立迁移）
 reg.mark_deprecated(ERR_OLD_DB_POOL, {"v2.0 起改用 ERR_DB_POOL_V2", ERR_DB_POOL_V2, "2.0.0", "3.0.0"});
-// 仅标记废弃，无替代
-reg.mark_deprecated(ERR_LEGACY_AUTH, {"鉴权流程已重构，下版本移除"});
-// 别名映射（不标记废弃）
-reg.register_migration(ERR_USER_V1, ERR_USER_V2);
-
-auto migrated = reg.migrate(ERR_OLD_DB_POOL);           // 单跳到 ERR_DB_POOL_V2
-auto terminal = reg.migrate_recursive(ERR_OLD_DB_POOL); // 递归到终点
+reg.register_migration(ERR_USER_V1, ERR_USER_V2);           // 别名映射
+auto migrated = reg.migrate(ERR_OLD_DB_POOL);                // 单跳到 ERR_DB_POOL_V2
 ```
 
 `unmark_deprecated()` 不会清除迁移映射，便于先停止废弃警告再逐步下线。

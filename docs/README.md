@@ -2,9 +2,7 @@
 
 错误系统全量文档导航中心，按用途分类速查。
 
----
-
-## 📖 API 参考
+## API 参考
 
 | 文档 | 内容 |
 |------|------|
@@ -16,20 +14,15 @@
 | [Plugin 层](api/plugin.md) | 插件接口、注册表、路由分发、延迟通知、开发指南 |
 | [Utils 层](api/utils.md) | 字符串工具、JSON 解析、文件操作、异步队列、堆栈跟踪 |
 
-## 🏗️ 设计文档
+## 设计文档
 
 | 文档 | 内容 |
 |------|------|
 | [架构设计](architecture.md) | 分层架构、模块职责、关键设计决策（21 项）、编译配置 |
 | [错误码自动生成](error_code_generation.md) | JSON 配置格式、生成脚本、CMake 集成、自定义错误码 |
+| [决策树](decision_tree.md) | 通知模式、查询路径、废弃/迁移、i18n 回退、序列化格式、插件开发、错误传递、HTTP/gRPC 映射 |
 
-## 🌳 决策树
-
-| 文档 | 内容 |
-|------|------|
-| [决策树](decision_tree.md) | 通知模式选择、查询路径选择、废弃/迁移、i18n 回退、序列化格式、插件开发、错误传递、HTTP/gRPC 映射 |
-
-## 🧭 快速导航
+## 快速导航
 
 - **构建错误码** → [error_code_t](api/core.md#error_code_t)
 - **错误上下文** → [error_context_t](api/core.md#error_context_t)
@@ -41,11 +34,11 @@
 - **全局配置** → [feature_flags_t](api/config.md#feature_flags_t)
 - **插件通知** → [plugin_registry_t](api/plugin.md#plugin_registry_t)
 - **选型决策** → [决策树](decision_tree.md)
-- **代码生成工具** → [架构设计](architecture.md#16-代码生成)
+- **代码生成工具** → [错误码自动生成](error_code_generation.md)
 
-## 🧪 运行测试
+## 运行测试
 
-在 `build` 目录下执行 `ctest` 即可跑通全量用例。
+在 `build` 目录下执行 `ctest` 跑通全量用例。
 
 ```bash
 cd build && ctest --output-on-failure
@@ -63,4 +56,4 @@ cd build && ctest --output-on-failure
 | Migration | 1 | 32 |
 | **总计** | **21** | **481** |
 
-另有 `tests/perf/` 8 个性能基准场景（共享 `perf_common.h`），覆盖：基线（全关）、栈追踪、插件、栈追踪+插件、全特性、错误路由插件、去重采样器、i18n 翻译模块。
+另有 `tests/perf/` 8 个性能基准场景（共享 `perf_common.h`）：基线、栈追踪、插件、栈追踪+插件、全特性、错误路由插件、去重采样器、i18n 翻译模块。
