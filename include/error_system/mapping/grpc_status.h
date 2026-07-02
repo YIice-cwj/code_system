@@ -22,7 +22,7 @@ namespace error_system::mapping {
      * @code
      * grpc_status_t s{grpc_status_t::value_t::internal};
      * s.c_str();                  // → "INTERNAL"
-     * grpc_status_t::from_int(13); // → grpc_status_t::value_t::internal
+     * grpc_status_t::from_int(13); // → grpc_status_t{value_t::internal}
      * grpc_status_t::is_valid(13); // → true
      * @endcode
      */
@@ -92,6 +92,8 @@ namespace error_system::mapping {
          * @brief 从整数构造 gRPC 状态码
          * @param value 整数值
          * @return grpc_status_t 状态码（无效值返回 unknown）
+         * @note unknown 既可作为合法状态码（值 2），也作为越界值的回退结果
+         *       （value < 0 或 value > 16 时统一映射为 unknown）。
          */
         [[nodiscard]] static constexpr grpc_status_t from_int(int value) noexcept {
             if (value < 0 || value > 16) {

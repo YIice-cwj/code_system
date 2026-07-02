@@ -23,7 +23,7 @@ namespace error_system::mapping {
      * http_status_t s{http_status_t::value_t::service_unavailable};
      * s.to_int();       // → 503
      * s.c_str();        // → "Service Unavailable"
-     * http_status_t::from_int(503); // → http_status_t::value_t::service_unavailable
+     * http_status_t::from_int(503); // → http_status_t{value_t::service_unavailable}
      * @endcode
      */
     class http_status_t {
@@ -99,7 +99,7 @@ namespace error_system::mapping {
 
         /**
          * @brief 从整数构造 HTTP 状态码
-         * @param value 整数值
+         * @param value HTTP 状态码整数值
          * @return http_status_t 状态码（不在已知列表中时返回 internal_server_error）
          */
         [[nodiscard]] static constexpr http_status_t from_int(int value) noexcept {
@@ -127,7 +127,7 @@ namespace error_system::mapping {
 
         /**
          * @brief 检查整数值是否为已知 HTTP 状态码
-         * @param value 整数值
+         * @param value HTTP 状态码整数值
          * @return bool 已知返回 true
          */
         [[nodiscard]] static constexpr bool is_valid(int value) noexcept {
@@ -143,7 +143,7 @@ namespace error_system::mapping {
         }
 
         /**
-         * @brief 是否为成功类状态码（2xx）
+         * @brief 是否为成功状态码（200 OK）
          */
         [[nodiscard]] constexpr bool is_success() const noexcept {
             return value_ == value_t::ok;

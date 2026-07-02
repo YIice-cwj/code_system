@@ -1,7 +1,9 @@
 #include "error_system/migration/error_migration.h"
 
+#include <cassert>
 #include <cstdio>
 #include <mutex>
+#include <unordered_set>
 #include <utility>
 
 /**
@@ -33,11 +35,15 @@ namespace error_system::migration {
             static error_migration_registry_t instance;
             instance_ptr = &instance;
         });
+        assert(instance_ptr != nullptr);
         return *instance_ptr;
     }
 
     void error_migration_registry_t::mark_deprecated(error_code_t code,
                                                       const deprecation_meta_t& meta) noexcept {
+        // try 块内仅涉及 mutex 上锁、string 拷贝与 unordered_map 插入，
+        // 预期仅可能抛出 std::bad_alloc；其余异常类型不在此捕获（遵循规范第 14 条：
+        // 禁止捕获过宽异常类型）。
         try {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             deprecation_info_t info;
@@ -97,12 +103,21 @@ namespace error_system::migration {
     error_code_t error_migration_registry_t::migrate_recursive(error_code_t old_code) const noexcept {
         std::shared_lock<std::shared_mutex> lock(mutex_);
         code_t current = old_code.get_identity_code();
-        for (size_t i = 0; i < MAX_MIGRATION_RECURSION_DEPTH; ++i) {
-            auto it = migrations_.find(current);
-            if (it == migrations_.end()) {
-                break;
+        std::unordered_set<code_t> visited;
+        try {
+            for (size_t i = 0; i < MAX_MIGRATION_RECURSION_DEPTH; ++i) {
+                // 环检测：若当前码已存在于已访问集合，说明存在环，返回当前码
+                if (!visited.insert(current).second) {
+                    break;
+                }
+                auto it = migrations_.find(current);
+                if (it == migrations_.end()) {
+                    break;
+                }
+                current = it->second;
             }
-            current = it->second;
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_migration] migrate_recursive: std::bad_alloc\n");
         }
         return error_code_t{current};
     }
@@ -112,6 +127,12 @@ namespace error_system::migration {
         auto it = deprecations_.find(code.get_identity_code());
         if (it == deprecations_.end()) {
             return false;
+        }
+        // 若废弃信息中包含替代码，同步清理由 mark_deprecated 隐式建立的迁移项。
+        // 此处已持有 unique_lock，不能调用 unregister_migration（会重复加锁导致死锁），
+        // 直接擦除 migrations_ 中对应条目即可。
+        if (it->second.replacement) {
+            migrations_.erase(code.get_identity_code());
         }
         deprecations_.erase(it);
         return true;
@@ -153,6 +174,7 @@ namespace error_system::migration {
             }
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_migration] get_deprecated_codes: std::bad_alloc\n");
+            codes.clear();
         }
         return codes;
     }

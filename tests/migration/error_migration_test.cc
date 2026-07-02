@@ -221,7 +221,7 @@ namespace error_system::migration {
         EXPECT_FALSE(reg_->unregister_migration(code));
     }
 
-    TEST_F(error_migration_test_t, unmark_deprecated_does_not_remove_migration) {
+    TEST_F(error_migration_test_t, unmark_deprecated_removes_implicit_migration) {
         const auto old_code = make_code(1, 1, 1);
         const auto new_code = make_code(1, 1, 2);
 
@@ -229,9 +229,8 @@ namespace error_system::migration {
         EXPECT_TRUE(reg_->unmark_deprecated(old_code));
 
         EXPECT_FALSE(reg_->is_deprecated(old_code));
-        auto migrated = reg_->migrate(old_code);
-        ASSERT_TRUE(migrated.has_value());
-        EXPECT_EQ(migrated->get_identity_code(), new_code.get_identity_code());
+        // unmark_deprecated 同步清理由 mark_deprecated 隐式建立的迁移项
+        EXPECT_FALSE(reg_->migrate(old_code).has_value());
     }
 
 

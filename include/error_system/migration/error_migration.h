@@ -25,7 +25,7 @@
  *          线程安全（读多写少场景使用 shared_mutex）。
  *          本头文件仅含声明，实现见 error_migration.cc（遵循规范第 5 条）。
  * @author yiice
- * @version 1.1.0
+ * @version 2.3.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */
@@ -63,8 +63,9 @@ namespace error_system::migration {
     };
 
     /**
-     * @brief 废弃元数据（mark_deprecated 参数封装）
-     * @details 将 mark_deprecated 的后 4 个参数封装为结构体，提升可读性（规范 7.3：函数参数超过 4 个时封装为结构体）。
+     * @brief 废弃元数据
+     * @details 该结构体作为废弃元数据载体，用于 mark_deprecated 接口入参，
+     *          聚合废弃原因、替代码、版本信息等字段。
      *          调用方使用聚合初始化构造，如 `{"废弃原因", replacement, "2.0.0", "3.0.0"}`。
      */
     struct deprecation_meta_t {
@@ -144,6 +145,8 @@ namespace error_system::migration {
     public:
         /**
          * @brief 标记错误码为废弃
+         * @details 若 meta.replacement 有值，同时建立 old_code → replacement 的迁移映射，
+         *          后续 migrate/migrate_recursive 查询将自动跳转到替代码。
          * @param code 被废弃的错误码
          * @param meta 废弃元数据（包含废弃原因、替代码、版本信息）
          */
@@ -163,6 +166,8 @@ namespace error_system::migration {
          * @brief 查询废弃信息
          * @param code 错误码
          * @return std::optional<deprecation_info_t> 废弃信息副本，未标记废弃返回 nullopt
+         * @note 返回值副本构造若抛出 bad_alloc（内存不足），同样返回 nullopt，
+         *       调用方无法区分"未废弃"与"内存不足"两种情形。
          */
         [[nodiscard]] std::optional<deprecation_info_t> get_deprecation_info(error_system::core::error_code_t code) const noexcept;
 
@@ -184,8 +189,8 @@ namespace error_system::migration {
 
         /**
          * @brief 递归迁移错误码（直到终点）
-         * @details 沿迁移链递归跳转，直到无进一步映射或检测到环（环检测后返回当前码）。
-         *          最大递归深度 16，防止恶意数据导致栈溢出。
+         * @details 沿迁移链递归跳转，直到无进一步映射或检测到环（遇环时返回当前码）。
+         *          通过已访问节点集合检测环；最大跳转次数 16，防止恶意数据导致死循环。
          * @param old_code 旧错误码
          * @return error_code_t 迁移终点错误码
          */

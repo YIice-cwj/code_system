@@ -32,7 +32,7 @@ namespace error_system::mapping {
      * @brief 错误码到 HTTP / gRPC 状态码的映射器
      * @details 纯函数工具类，不可实例化。映射策略：
      *          - 成功码 → HTTP 200 / gRPC OK
-     *          - info/warn → HTTP 200 / gRPC OK（业务可继续）
+     *          - debug/info/warn → HTTP 200 / gRPC OK（业务可继续）
      *          - error 级别按系统域细分：
      *            application → 400 / INVALID_ARGUMENT（业务参数错误）
      *            database     → 503 / DATA_LOSS（数据层不可用）
@@ -40,7 +40,7 @@ namespace error_system::mapping {
      *            system       → 500 / INTERNAL（系统内部错误）
      *            third_party  → 502 / UNAVAILABLE（上游故障）
      *            none         → 500 / INTERNAL
-     *          - fatal 级别 → 500 / INTERNAL（除非 transient → 503 / UNAVAILABLE）
+     *          - fatal 级别 → 500 / INTERNAL（除非 retryable/transient → 503 / UNAVAILABLE）
      *          - retryable/transient 优先映射为 503 / UNAVAILABLE，提示客户端重试
      */
     class status_mapper_t {
@@ -49,7 +49,7 @@ namespace error_system::mapping {
          * @brief HTTP 状态码映射内部实现
          * @details 根据错误等级和系统域将错误码映射为 HTTP 状态码：
          *          - retryable/transient → 503
-         *          - info/warn → 200
+         *          - debug/info/warn → 200
          *          - error 级别按系统域细分（application→400, third_party→502,
          *            database/middleware→503, system/none→500）
          *          - fatal → 500
@@ -94,7 +94,7 @@ namespace error_system::mapping {
          * @brief gRPC 状态码映射内部实现
          * @details 根据错误等级和系统域将错误码映射为 gRPC 状态码：
          *          - retryable/transient → UNAVAILABLE
-         *          - info/warn → OK
+         *          - debug/info/warn → OK
          *          - error 级别按系统域细分（application→INVALID_ARGUMENT,
          *            third_party/middleware→UNAVAILABLE, database→DATA_LOSS,
          *            system/none→INTERNAL）
@@ -147,6 +147,8 @@ namespace error_system::mapping {
 
         /**
          * @brief 将错误码映射为 HTTP 状态码
+         * @details 成功码（sign=1）优先返回 200/OK，不进入等级判定；
+         *          其余错误码按等级与系统域映射（详见 to_http_status_impl_）。
          * @param code 错误码
          * @return http_status_t HTTP 状态码
          */
