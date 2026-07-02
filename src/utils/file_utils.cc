@@ -50,6 +50,10 @@ namespace error_system::utils {
             content.resize(static_cast<size_t>(size));
             file.seekg(0, std::ios::beg);
             file.read(content.data(), static_cast<std::streamsize>(content.size()));
+            const auto read_count = file.gcount();
+            if (read_count >= 0 && static_cast<size_t>(read_count) < content.size()) {
+                content.resize(static_cast<size_t>(read_count));
+            }
 
             return content;
         } catch (const std::bad_alloc&) {
@@ -120,9 +124,9 @@ namespace error_system::utils {
 
     /**
      * @brief 强制删除文件
-     * @details 强制删除指定文件路径的文件，如果文件不存在则返回 false
+     * @details 强制删除指定文件路径的文件，文件不存在时返回 true（幂等语义）
      * @param path 文件路径
-     * @return bool 删除成功则返回 true，否则返回 false
+     * @return bool 删除成功或文件不存在则返回 true，否则返回 false
      */
     bool file_utils_t::force_delete_file(const std::filesystem::path& path) noexcept {
         std::error_code error{};

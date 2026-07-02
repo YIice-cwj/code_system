@@ -13,7 +13,11 @@ void async_queue_t<T, Processor>::stop_() noexcept {
     }
     cv_.notify_all();
     if (worker_.joinable()) {
-        worker_.join();
+        try {
+            worker_.join();
+        } catch (const std::system_error&) {
+            std::fprintf(stderr, "[async_queue] stop_: worker_.join() threw std::system_error\n");
+        }
     }
 }
 
@@ -34,8 +38,10 @@ void async_queue_t<T, Processor>::worker_loop_() noexcept {
         }
         try {
             processor_(item);
-        } catch (const std::exception&) {
-            std::fprintf(stderr, "[async_queue] processor exception caught and ignored\n");
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[async_queue] processor std::bad_alloc caught and ignored\n");
+        } catch (...) {
+            std::fprintf(stderr, "[async_queue] processor unknown exception caught and ignored\n");
         }
     }
 }

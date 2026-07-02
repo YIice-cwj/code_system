@@ -65,6 +65,8 @@ std::string string_format_t::format(std::string_view format_str, Args&&... args)
             estimated_size += 32;
         } else if constexpr (std::is_pointer_v<arg_t> || std::is_same_v<arg_t, std::nullptr_t>) {
             estimated_size += 24;
+        } else if constexpr (is_member_to_string_v<arg_t> || is_global_to_string_v<arg_t>) {
+            estimated_size += 32;
         } else {
             estimated_size += std::string_view{argument}.size();
         }
@@ -78,9 +80,12 @@ std::string string_format_t::format(std::string_view format_str, Args&&... args)
 
     format_appender_t appender{result, format_str, 0};
 
-    (appender.append_value(std::forward<Args>(args)), ...);
-
-    appender.finish();
+    try {
+        (appender.append_value(std::forward<Args>(args)), ...);
+        appender.finish();
+    } catch (const std::bad_alloc&) {
+        std::fprintf(stderr, "[string_format] format: append failed (bad_alloc)\n");
+    }
 
     return result;
 }

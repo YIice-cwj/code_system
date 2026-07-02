@@ -1,5 +1,7 @@
 #pragma once
 #include <atomic>
+#include <cstdio>
+#include <new>
 #include <optional>
 #include <shared_mutex>
 #include <unordered_map>
@@ -97,8 +99,12 @@ namespace error_system::config {
          */
         static void set_per_code_stacktrace_level(uint64_t identity_code, core::error_level_t level) noexcept {
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
-                std::unique_lock<std::shared_mutex> lock(get_per_code_mutex_());
-                get_per_code_stacktrace_map_()[identity_code] = level;
+                try {
+                    std::unique_lock<std::shared_mutex> lock(get_per_code_mutex_());
+                    get_per_code_stacktrace_map_()[identity_code] = level;
+                } catch (const std::bad_alloc&) {
+                    std::fprintf(stderr, "[stacktrace_config] set_per_code_stacktrace_level: std::bad_alloc\n");
+                }
             }
         }
 

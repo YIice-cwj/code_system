@@ -100,6 +100,8 @@ namespace error_system::config {
 
         /**
          * @brief 通知模式存储
+         * @details 使用 std::atomic<notify_mode_t> 保证无锁并发读写
+         * @return std::atomic<notify_mode_t>& 通知模式存储引用
          */
         static std::atomic<notify_mode_t>& get_notify_mode_() noexcept {
             static std::atomic<notify_mode_t> mode{notify_mode_t::sync};

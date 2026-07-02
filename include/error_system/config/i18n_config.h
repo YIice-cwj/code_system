@@ -41,6 +41,12 @@ namespace error_system::config {
     class i18n_config_t {
     private:
         /**
+         * @brief output locale 已设置标志位（位于 get_output_locale_storage_ 的 bit 8）
+         * @details 与 locale 值合并存储于同一 uint16_t 原子变量，保证读写的原子一致性
+         */
+        static constexpr uint16_t OUTPUT_LOCALE_SET_FLAG = 0x100;
+
+        /**
          * @brief i18n 启用标志位存储
          * @details 使用 std::atomic<bool> 保证无锁并发读写
          * @return std::atomic<bool>& i18n 启用标志位引用
@@ -52,7 +58,7 @@ namespace error_system::config {
 
         /**
          * @brief 默认 locale 存储（使用 uint8_t 存储 locale_t 的 underlying value）
-         * @details std::atomic<locale_t> 在部分平台不支持原子操作，使用 uint8_t 规避
+         * @details 直接存储枚举的底层值，避免对 std::atomic<locale_t> 锁自由性的平台依赖
          * @return std::atomic<uint8_t>& 默认 locale 存储引用
          */
         static std::atomic<uint8_t>& get_default_locale_storage_() noexcept {
@@ -61,23 +67,15 @@ namespace error_system::config {
         }
 
         /**
-         * @brief 输出 locale 存储
-         * @details 显式设置的输出 locale，未设置时回退到 default_locale
-         * @return std::atomic<uint8_t>& 输出 locale 存储引用
+         * @brief 输出 locale 存储（值与已设置标志合并为单一原子变量）
+         * @details 显式设置的输出 locale，未设置时回退到 default_locale。
+         *          使用 uint16_t 存储：低 8 位为 locale 值，bit 8 (OUTPUT_LOCALE_SET_FLAG)
+         *          为已设置标志。值与标志合并为单一原子变量，避免分开存储时的读写竞争。
+         * @return std::atomic<uint16_t>& 输出 locale 存储引用
          */
-        static std::atomic<uint8_t>& get_output_locale_storage_() noexcept {
-            static std::atomic<uint8_t> locale{static_cast<uint8_t>(locale_t::zh_CN)};
+        static std::atomic<uint16_t>& get_output_locale_storage_() noexcept {
+            static std::atomic<uint16_t> locale{0};
             return locale;
-        }
-
-        /**
-         * @brief 输出 locale 是否已显式设置的标志位
-         * @details false 表示未设置，序列化时回退到 default_locale
-         * @return std::atomic<bool>& 输出 locale 已设置标志位引用
-         */
-        static std::atomic<bool>& get_output_locale_set_() noexcept {
-            static std::atomic<bool> set{false};
-            return set;
         }
 
     public:
@@ -130,18 +128,19 @@ namespace error_system::config {
         /**
          * @brief 设置输出 locale（运行时切换语言）
          * @details 设置后序列化器使用此 locale 查询本地化文本。
+         *          locale 值与已设置标志合并为单次原子写，保证读端观察到一致状态。
          * @param locale 输出语言区域
          */
         static void set_output_locale(locale_t locale) noexcept {
-            get_output_locale_storage_().store(static_cast<uint8_t>(locale));
-            get_output_locale_set_().store(true);
+            const uint16_t value = static_cast<uint16_t>(locale) | OUTPUT_LOCALE_SET_FLAG;
+            get_output_locale_storage_().store(value);
         }
 
         /**
          * @brief 清除输出 locale，回退到默认 locale
          */
         static void clear_output_locale() noexcept {
-            get_output_locale_set_().store(false);
+            get_output_locale_storage_().store(0);
         }
 
         /**
@@ -149,8 +148,9 @@ namespace error_system::config {
          * @return std::optional<locale_t> 已设置则返回 locale，未设置返回 nullopt
          */
         [[nodiscard]] static std::optional<locale_t> get_output_locale() noexcept {
-            if (get_output_locale_set_().load()) {
-                return static_cast<locale_t>(get_output_locale_storage_().load());
+            const uint16_t value = get_output_locale_storage_().load();
+            if ((value & OUTPUT_LOCALE_SET_FLAG) != 0) {
+                return static_cast<locale_t>(static_cast<uint8_t>(value));
             }
             return std::nullopt;
         }
@@ -161,8 +161,9 @@ namespace error_system::config {
          * @return locale_t 最终输出语言区域
          */
         [[nodiscard]] static locale_t resolve_output_locale() noexcept {
-            if (get_output_locale_set_().load()) {
-                return static_cast<locale_t>(get_output_locale_storage_().load());
+            const uint16_t value = get_output_locale_storage_().load();
+            if ((value & OUTPUT_LOCALE_SET_FLAG) != 0) {
+                return static_cast<locale_t>(static_cast<uint8_t>(value));
             }
             return static_cast<locale_t>(get_default_locale_storage_().load());
         }

@@ -69,7 +69,9 @@ namespace error_system::utils {
     public:
         /**
          * @brief 构造函数
-         * @param processor 任务处理器，对每个出队元素调用 processor(item)
+         * @param processor 任务处理器，对每个出队元素调用 processor(item)。
+         *                   processor 自身的移动构造必须不抛异常（noexcept），
+         *                   否则构造函数的 noexcept 约定无法保证。
          */
         explicit async_queue_t(processor_t processor) noexcept;
 

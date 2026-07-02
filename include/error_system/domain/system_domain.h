@@ -33,7 +33,7 @@ namespace error_system::domain {
     /**
      * @brief 系统域字符串
      * @details 用于表示系统域的字符串
-     *          与系统域分类一一对应，用于日志打印和错误处理
+     *          与系统域分类一一对应（不含 count 占位符），用于日志打印和错误处理
      */
     constexpr const char* SYSTEM_DOMAIN_STRING[] = {
         "none", "system", "middleware", "database", "application", "third_party"};
@@ -86,26 +86,38 @@ namespace error_system::domain {
 
     /**
      * @brief 系统域字符串转换为系统域
-     * @details 用于将系统域字符串转换为系统域
+     * @details 用于将系统域字符串转换为系统域。先按哈希快速匹配，匹配后再做字符串
+     *          二次校验以规避哈希碰撞导致的误判。string 为 nullptr 时返回 none。
      * @param string 系统域字符串
      * @return system_domain_t 系统域
      */
     [[nodiscard]] constexpr system_domain_t from_string(const char* string) noexcept {
-        switch (utils::string_utils_t::hash(string)) {
-            case utils::string_utils_t::hash("none"):
-                return system_domain_t::none;
-            case utils::string_utils_t::hash("system"):
-                return system_domain_t::system;
-            case utils::string_utils_t::hash("middleware"):
-                return system_domain_t::middleware;
-            case utils::string_utils_t::hash("database"):
-                return system_domain_t::database;
-            case utils::string_utils_t::hash("application"):
-                return system_domain_t::application;
-            case utils::string_utils_t::hash("third_party"):
-                return system_domain_t::third_party;
-            default:
-                return system_domain_t::none;
+        if (string == nullptr) {
+            return system_domain_t::none;
         }
+        const std::string_view sv(string);
+        switch (utils::string_utils_t::hash(sv)) {
+            case utils::string_utils_t::hash("none"):
+                if (sv == "none") { return system_domain_t::none; }
+                break;
+            case utils::string_utils_t::hash("system"):
+                if (sv == "system") { return system_domain_t::system; }
+                break;
+            case utils::string_utils_t::hash("middleware"):
+                if (sv == "middleware") { return system_domain_t::middleware; }
+                break;
+            case utils::string_utils_t::hash("database"):
+                if (sv == "database") { return system_domain_t::database; }
+                break;
+            case utils::string_utils_t::hash("application"):
+                if (sv == "application") { return system_domain_t::application; }
+                break;
+            case utils::string_utils_t::hash("third_party"):
+                if (sv == "third_party") { return system_domain_t::third_party; }
+                break;
+            default:
+                break;
+        }
+        return system_domain_t::none;
     }
 }  // namespace error_system::domain

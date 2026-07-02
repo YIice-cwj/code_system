@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdio>
 #include <functional>
 #include <mutex>
 #include <shared_mutex>
@@ -66,18 +67,28 @@ namespace error_system::config {
          * @param formatter 自定义格式化函数
          */
         static void set_custom_formatter(formatter_callback_t formatter) noexcept {
-            std::unique_lock<std::shared_mutex> lock(get_formatter_mutex_());
-            get_custom_formatter_() = std::move(formatter);
+            try {
+                std::unique_lock<std::shared_mutex> lock(get_formatter_mutex_());
+                get_custom_formatter_() = std::move(formatter);
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[formatter_config] set_custom_formatter: std::bad_alloc\n");
+            }
         }
 
         /**
          * @brief 获取自定义格式化函数副本
-         * @details 返回格式化函数的线程安全拷贝，调用方无需持有锁即可安全调用
+         * @details 返回格式化函数的线程安全拷贝，调用方无需持有锁即可安全调用。
+         *          内存不足时返回空回调（nullptr）。
          * @return formatter_callback_t 格式化函数副本
          */
         [[nodiscard]] static formatter_callback_t get_custom_formatter() noexcept {
-            std::shared_lock<std::shared_mutex> lock(get_formatter_mutex_());
-            return get_custom_formatter_();
+            try {
+                std::shared_lock<std::shared_mutex> lock(get_formatter_mutex_());
+                return get_custom_formatter_();
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[formatter_config] get_custom_formatter: std::bad_alloc\n");
+                return formatter_callback_t{nullptr};
+            }
         }
     };
 

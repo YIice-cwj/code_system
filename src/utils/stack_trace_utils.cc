@@ -12,6 +12,9 @@
  * @copyright Copyright (c) 2026
  */
 
+#include <cstdio>
+#include <new>
+
 namespace error_system::utils {
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
@@ -44,29 +47,33 @@ namespace error_system::utils {
                 return trace;
 
             for (int i = skip_frames; i < frames; ++i) {
-                std::string symbol_str = symbols[i];
-                auto begin_name = symbol_str.find("_Z");
+                try {
+                    std::string symbol_str = symbols[i];
+                    auto begin_name = symbol_str.find("_Z");
 
-                if (begin_name != std::string::npos) {
-                    auto end_name = symbol_str.find_first_of(" +)", begin_name);
-                    if (end_name == std::string::npos) {
-                        end_name = symbol_str.length();
+                    if (begin_name != std::string::npos) {
+                        auto end_name = symbol_str.find_first_of(" +)", begin_name);
+                        if (end_name == std::string::npos) {
+                            end_name = symbol_str.length();
+                        }
+                        std::string mangled_name = symbol_str.substr(begin_name, end_name - begin_name);
+                        int status = -1;
+                        char* demangled = abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
+                        if (status == 0 && demangled) {
+                            symbol_str.replace(begin_name, end_name - begin_name, demangled);
+                            free(demangled);
+                        }
                     }
-                    std::string mangled_name = symbol_str.substr(begin_name, end_name - begin_name);
-                    int status = -1;
-                    char* demangled = abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
-                    if (status == 0 && demangled) {
-                        symbol_str.replace(begin_name, end_name - begin_name, demangled);
-                        free(demangled);
+
+                    auto first_space = symbol_str.find_first_not_of("0123456789 ");
+                    if (first_space != std::string::npos && first_space > 0 && first_space < MAX_LEADING_OFFSET_LENGTH) {
+                        symbol_str = symbol_str.substr(first_space);
                     }
-                }
 
-                auto first_space = symbol_str.find_first_not_of("0123456789 ");
-                if (first_space != std::string::npos && first_space > 0 && first_space < MAX_LEADING_OFFSET_LENGTH) {
-                    symbol_str = symbol_str.substr(first_space);
+                    trace.push_back(symbol_str);
+                } catch (const std::bad_alloc&) {
+                    std::fprintf(stderr, "[stack_trace_utils] resolve_os_symbols: frame %d std::bad_alloc\n", i);
                 }
-
-                trace.push_back(symbol_str);
             }
             free(symbols);
             return trace;
@@ -80,7 +87,10 @@ namespace error_system::utils {
 
             dbghelp_manager_t() noexcept {
                 SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
-                SymInitialize(process, nullptr, TRUE);
+                if (!SymInitialize(process, nullptr, TRUE)) {
+                    std::fprintf(stderr, "[stack_trace_utils] SymInitialize failed (error=%lu)\n",
+                                 static_cast<unsigned long>(GetLastError()));
+                }
             }
 
             ~dbghelp_manager_t() noexcept { SymCleanup(process); }
@@ -99,7 +109,7 @@ namespace error_system::utils {
         /**
          * @brief 格式化不可解析的地址
          * @param address 地址
-         * @return std::string 格式化后的字符串
+         * @return std::string 格式化后的字符串；内存不足时返回精简字符串 [Unknown Symbol]
          */
         std::string format_fallback_address(void* address) noexcept {
             try {
@@ -187,21 +197,26 @@ namespace error_system::utils {
         return {};
 
 #else
-        constexpr int HARD_MAX_FRAMES = 32;
-        if (max_frames <= 0) {
+        try {
+            constexpr int HARD_MAX_FRAMES = 32;
+            if (max_frames <= 0) {
+                return {};
+            }
+            if (max_frames > HARD_MAX_FRAMES) {
+                max_frames = HARD_MAX_FRAMES;
+            }
+            std::vector<void*> callstack(static_cast<size_t>(max_frames));
+            int frames = capture_os_frames(callstack.data(), max_frames);
+
+            if (frames <= skip_frames) {
+                return {};
+            }
+
+            return resolve_os_symbols(callstack.data(), frames, skip_frames);
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[stack_trace_utils] generate: std::bad_alloc\n");
             return {};
         }
-        if (max_frames > HARD_MAX_FRAMES) {
-            max_frames = HARD_MAX_FRAMES;
-        }
-        std::vector<void*> callstack(static_cast<size_t>(max_frames));
-        int frames = capture_os_frames(callstack.data(), max_frames);
-
-        if (frames <= skip_frames) {
-            return {};
-        }
-
-        return resolve_os_symbols(callstack.data(), frames, skip_frames);
 #endif
     }
 

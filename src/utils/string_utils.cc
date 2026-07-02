@@ -41,15 +41,19 @@ namespace error_system::utils {
         }
 
         size_t current_pos = 0;
-        while (start_pos != std::string::npos) {
-            result.append(string.data() + current_pos, start_pos - current_pos);
-            result.append(to);
-            current_pos = start_pos + from.length();
-            start_pos = string.find(from, current_pos);
-        }
+        try {
+            while (start_pos != std::string::npos) {
+                result.append(string.data() + current_pos, start_pos - current_pos);
+                result.append(to);
+                current_pos = start_pos + from.length();
+                start_pos = string.find(from, current_pos);
+            }
 
-        if (current_pos < string.size()) {
-            result.append(string.data() + current_pos, string.size() - current_pos);
+            if (current_pos < string.size()) {
+                result.append(string.data() + current_pos, string.size() - current_pos);
+            }
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[string_utils] replace_all: append failed (bad_alloc)\n");
         }
 
         return result;
@@ -67,17 +71,21 @@ namespace error_system::utils {
             return {};
         }
         std::vector<std::string_view> result{};
-        size_t start = 0;
-        size_t end = string.find(delimiter);
-        while (end != std::string_view::npos) {
-            if (start != end) {
-                result.push_back(string.substr(start, end - start));
+        try {
+            size_t start = 0;
+            size_t end = string.find(delimiter);
+            while (end != std::string_view::npos) {
+                if (start != end) {
+                    result.push_back(string.substr(start, end - start));
+                }
+                start = end + delimiter.length();
+                end = string.find(delimiter, start);
             }
-            start = end + delimiter.length();
-            end = string.find(delimiter, start);
-        }
-        if (start < string.length()) {
-            result.push_back(string.substr(start));
+            if (start < string.length()) {
+                result.push_back(string.substr(start));
+            }
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[string_utils] split: push_back failed (bad_alloc)\n");
         }
         return result;
     }
@@ -101,13 +109,13 @@ namespace error_system::utils {
         std::string result{};
         try {
             result.reserve(total_length);
+            result.append(tokens[0]);
+            for (size_t i = 1; i < tokens.size(); ++i) {
+                result.append(delimiter);
+                result.append(tokens[i]);
+            }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[string_utils] join: reserve failed\n");
-        }
-        result.append(tokens[0]);
-        for (size_t i = 1; i < tokens.size(); ++i) {
-            result.append(delimiter);
-            result.append(tokens[i]);
+            std::fprintf(stderr, "[string_utils] join: append failed (bad_alloc)\n");
         }
         return result;
     }
@@ -130,7 +138,7 @@ namespace error_system::utils {
 
     /**
      * @brief 将字符串视图转换为小写
-     * @details 该函数不修改原始字符串视图，仅返回转换后的字符串视图
+     * @details 返回转换后的字符串，内存不足时返回空字符串
      * @param string 输入字符串视图
      * @return std::string 小写的字符串
      */
@@ -150,7 +158,7 @@ namespace error_system::utils {
 
     /**
      * @brief 将字符串视图转换为大写
-     * @details 该函数不修改原始字符串视图，仅返回转换后的字符串视图
+     * @details 返回转换后的字符串，内存不足时返回空字符串
      * @param string 输入字符串视图
      * @return std::string 大写的字符串
      */

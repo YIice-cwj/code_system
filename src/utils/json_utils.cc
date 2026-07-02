@@ -34,6 +34,12 @@ namespace error_system::utils {
         };
 
         /**
+         * @brief JSON 解析最大嵌套深度
+         * @details 超过此深度返回 std::nullopt，防止恶意深嵌套输入导致资源耗尽
+         */
+        constexpr size_t MAX_PARSE_DEPTH = 64;
+
+        /**
          * @brief 解析上下文结构体
          * @details 用于存储解析器的状态、路径栈、当前键名、临时字典等信息
          */
@@ -112,6 +118,7 @@ namespace error_system::utils {
                     context.temp_dict.emplace(std::move(full_path), token.value);
                 } catch (const std::bad_alloc&) {
                     std::fprintf(stderr, "[json_utils] handle_expect_value_or_start: emplace failed\n");
+                    return false;
                 }
 
                 context.current_key.clear();
@@ -235,7 +242,9 @@ namespace error_system::utils {
 
     /**
      * @brief 解析JSON字符串
-     * @details 解析JSON字符串为JSON字典，若解析失败则返回空可选
+     * @details 解析JSON字符串为JSON字典，若解析失败则返回空可选。
+     *          仅支持扁平/嵌套对象的字符串键值对，不支持数字/布尔/null/数组值。
+     *          嵌套深度上限为 64 层，超过则返回 std::nullopt。
      * @param json_content JSON字符串内容
      * @return std::optional<json_dict_t> 解析后的JSON字典，若解析失败则返回空可选
      */
@@ -259,6 +268,11 @@ namespace error_system::utils {
                     break;
                 if (token.type == detail::json_lexer_t::token_type_t::invalid)
                     return std::nullopt;
+                if (context.path_stack.size() > MAX_PARSE_DEPTH) {
+                    std::fprintf(stderr, "[json_utils] parse: nested depth exceeded %zu\n",
+                                 static_cast<size_t>(MAX_PARSE_DEPTH));
+                    return std::nullopt;
+                }
 
                 bool success = false;
                 switch (context.state) {
@@ -325,26 +339,25 @@ namespace error_system::utils {
         std::string result{};
         try {
             result.reserve(value.size() + 16);
-        } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[json_utils] escape_json: reserve failed\n");
-        }
-
-        for (char c : value) {
-            switch (c) {
-                case '"':  result.append("\\\""); break;
-                case '\\': result.append("\\\\"); break;
-                case '\b': result.append("\\b");  break;
-                case '\f': result.append("\\f");  break;
-                case '\n': result.append("\\n");  break;
-                case '\r': result.append("\\r");  break;
-                case '\t': result.append("\\t");  break;
-                default:
-                    if (static_cast<unsigned char>(c) < 0x20) {
-                        append_control_escape(result, static_cast<unsigned char>(c));
-                    } else {
-                        result.push_back(c);
-                    }
+            for (char c : value) {
+                switch (c) {
+                    case '"':  result.append("\\\""); break;
+                    case '\\': result.append("\\\\"); break;
+                    case '\b': result.append("\\b");  break;
+                    case '\f': result.append("\\f");  break;
+                    case '\n': result.append("\\n");  break;
+                    case '\r': result.append("\\r");  break;
+                    case '\t': result.append("\\t");  break;
+                    default:
+                        if (static_cast<unsigned char>(c) < 0x20) {
+                            append_control_escape(result, static_cast<unsigned char>(c));
+                        } else {
+                            result.push_back(c);
+                        }
+                }
             }
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[json_utils] escape_json: append failed (bad_alloc)\n");
         }
         return result;
     }

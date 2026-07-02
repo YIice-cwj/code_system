@@ -70,9 +70,9 @@ namespace error_system::utils {
 
         /**
          * @brief 强制删除文件
-         * @details 强制删除指定文件路径的文件，如果文件不存在则返回 false
+         * @details 强制删除指定文件路径的文件，文件不存在时返回 true（幂等语义）
          * @param path 文件路径
-         * @return bool 删除成功则返回 true，否则返回 false
+         * @return bool 删除成功或文件不存在则返回 true，否则返回 false
          */
         [[nodiscard]] static bool force_delete_file(const std::filesystem::path& path) noexcept;
 
@@ -85,10 +85,10 @@ namespace error_system::utils {
         [[nodiscard]] static bool file_exists(const std::filesystem::path& path) noexcept;
 
         /**
-         * @brief 检查文件路径是否存在
-         * @details 检查指定文件路径是否存在
-         * @param path 文件路径
-         * @return bool 文件路径存在则返回 true，否则返回 false
+         * @brief 检查目录路径是否存在
+         * @details 检查指定目录路径是否存在且为目录
+         * @param path 目录路径
+         * @return bool 目录路径存在则返回 true，否则返回 false
          */
         [[nodiscard]] static bool dir_exists(const std::filesystem::path& path) noexcept;
     };

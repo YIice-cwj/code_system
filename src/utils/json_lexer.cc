@@ -208,7 +208,12 @@ namespace error_system::utils::detail {
         if (pos_ == start) {
             return {token_type_t::invalid, {}};
         }
-        return {token_type_t::number, std::string(json_str_.substr(start, pos_ - start))};
+        try {
+            return {token_type_t::number, std::string(json_str_.substr(start, pos_ - start))};
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[json_lexer] parse_number_: std::bad_alloc\n");
+            return {token_type_t::invalid, {}};
+        }
     }
 
     /**
@@ -226,7 +231,12 @@ namespace error_system::utils::detail {
             return {token_type_t::invalid, {}};
         }
         pos_ += keyword.size();
-        return {type, std::string(keyword)};
+        try {
+            return {type, std::string(keyword)};
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[json_lexer] parse_keyword_: std::bad_alloc\n");
+            return {token_type_t::invalid, {}};
+        }
     }
 
     /**
@@ -242,56 +252,61 @@ namespace error_system::utils::detail {
      * @return token_t 下一个token
      */
     json_lexer_t::token_t json_lexer_t::next() noexcept {
-        skip_whitespace_();
-        if (pos_ >= json_str_.size()) {
-            return {token_type_t::eof, ""};
-        }
+        try {
+            skip_whitespace_();
+            if (pos_ >= json_str_.size()) {
+                return {token_type_t::eof, ""};
+            }
 
-        char c = json_str_[pos_];
-        if (c == '{') {
-            ++pos_;
-            return {token_type_t::left_brace, "{"};
-        }
-        if (c == '}') {
-            ++pos_;
-            return {token_type_t::right_brace, "}"};
-        }
-        if (c == '[') {
-            ++pos_;
-            return {token_type_t::left_bracket, "["};
-        }
-        if (c == ']') {
-            ++pos_;
-            return {token_type_t::right_bracket, "]"};
-        }
-        if (c == ':') {
-            ++pos_;
-            return {token_type_t::colon, ":"};
-        }
-        if (c == ',') {
-            ++pos_;
-            return {token_type_t::comma, ","};
-        }
+            char c = json_str_[pos_];
+            if (c == '{') {
+                ++pos_;
+                return {token_type_t::left_brace, "{"};
+            }
+            if (c == '}') {
+                ++pos_;
+                return {token_type_t::right_brace, "}"};
+            }
+            if (c == '[') {
+                ++pos_;
+                return {token_type_t::left_bracket, "["};
+            }
+            if (c == ']') {
+                ++pos_;
+                return {token_type_t::right_bracket, "]"};
+            }
+            if (c == ':') {
+                ++pos_;
+                return {token_type_t::colon, ":"};
+            }
+            if (c == ',') {
+                ++pos_;
+                return {token_type_t::comma, ","};
+            }
 
-        if (c == '"') {
-            return parse_string_();
-        }
+            if (c == '"') {
+                return parse_string_();
+            }
 
-        if (c == 't') {
-            return parse_keyword_("true", token_type_t::true_literal);
-        }
-        if (c == 'f') {
-            return parse_keyword_("false", token_type_t::false_literal);
-        }
-        if (c == 'n') {
-            return parse_keyword_("null", token_type_t::null_literal);
-        }
+            if (c == 't') {
+                return parse_keyword_("true", token_type_t::true_literal);
+            }
+            if (c == 'f') {
+                return parse_keyword_("false", token_type_t::false_literal);
+            }
+            if (c == 'n') {
+                return parse_keyword_("null", token_type_t::null_literal);
+            }
 
-        if (c == '-' || (c >= '0' && c <= '9')) {
-            return parse_number_();
-        }
+            if (c == '-' || (c >= '0' && c <= '9')) {
+                return parse_number_();
+            }
 
-        return {token_type_t::invalid, {}};
+            return {token_type_t::invalid, {}};
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[json_lexer] next: std::bad_alloc\n");
+            return {token_type_t::invalid, {}};
+        }
     }
 
 }  // namespace error_system::utils::detail

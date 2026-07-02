@@ -14,9 +14,12 @@ namespace error_system::utils {
     /**
      * @brief 提取源文件名
      * @param path 源文件路径
-     * @return const char* 源文件名
+     * @return const char* 源文件名；path 为 nullptr 时返回 "unknown"
      */
     [[nodiscard]] constexpr const char* extract_short_filename(const char* path) noexcept {
+        if (path == nullptr) {
+            return "unknown";
+        }
         const char* short_name = path;
         for (const char* ptr = path; *ptr != '\0'; ++ptr) {
             if (*ptr == '/' || *ptr == '\\') {

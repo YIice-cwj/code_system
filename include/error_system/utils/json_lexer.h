@@ -64,7 +64,10 @@ namespace error_system::utils::detail {
 
         /**
          * @brief 解析JSON字符串中的字符串token
-         * @details 解析JSON字符串中的字符串token，直到遇到非字符串字符
+         * @details 解析 JSON 字符串字面量（RFC 8259 §7），处理转义序列（\" \\ \/ \b \f \n \r \t）。
+         *          \uXXXX 转义按 RFC 3629 编码为 UTF-8；若高代理（0xD800~0xDBFF）后紧跟
+         *          \uXXXX 低代理（0xDC00~0xDFFF），则合并为 0x10000~0x10FFFF 范围内的码点
+         *          再编码为 UTF-8（UTF-16 代理对处理）。孤立高代理或非法转义返回 invalid。
          */
         token_t parse_string_() noexcept;
 
