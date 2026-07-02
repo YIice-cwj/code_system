@@ -131,7 +131,7 @@ namespace error_system::plugin {
         EXPECT_EQ(plugin.last_context->get_code().get_code(), 42ULL);
     }
 
-    TEST_F(plugin_registry_test_t, concurrent_register_and_notify) {
+    TEST_F(plugin_registry_test_t, concurrent_notify_with_stable_registry) {
         mock_plugin_t plugin("concurrent");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
@@ -153,10 +153,13 @@ namespace error_system::plugin {
         }
 
         EXPECT_EQ(notify_count.load(), 1000);
-        EXPECT_GE(plugin.call_count.load(), 995);
+        // error_context_t 构造时也会经由默认通知器触发 notify_error，
+        // 因此 plugin.on_error 被调用 2 × notify_count 次
+        EXPECT_EQ(plugin.call_count.load(), 2000);
     }
 
-    TEST_F(plugin_registry_test_t, concurrent_register_and_unregister) {
+    // 冒烟级别测试：各线程操作不相交插件，仅验证并发期间不崩溃
+    TEST_F(plugin_registry_test_t, concurrent_register_and_unregister_smoke) {
         std::vector<std::unique_ptr<mock_plugin_t>> plugins;
         for (int i = 0; i < 100; ++i) {
             plugins.push_back(std::make_unique<mock_plugin_t>("plugin_" + std::to_string(i)));
@@ -178,6 +181,7 @@ namespace error_system::plugin {
             thread.join();
         }
 
+        // 冒烟验证：所有插件已注销，并发期间未崩溃
         EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
     }
 
@@ -212,10 +216,11 @@ namespace error_system::plugin {
         unregisterer.join();
 
         EXPECT_TRUE(unregister_done.load());
-        EXPECT_GT(plugin.call_count.load(), 0L);
+        EXPECT_GT(plugin.call_count.load(), 500L);
+        EXPECT_EQ(plugin_registry_t::instance().size(), 1UL);
     }
 
-    TEST_F(plugin_registry_test_t, notify_error_with_slow_plugin_does_not_block_registration) {
+    TEST_F(plugin_registry_test_t, slow_plugin_does_not_cause_deadlock) {
         class slow_plugin_t : public i_error_plugin_t {
             public:
             std::string_view name() const noexcept override { return "slow_plugin"; }
@@ -231,6 +236,7 @@ namespace error_system::plugin {
 
         slow_plugin_t slow_plugin;
         mock_plugin_t normal_plugin("normal");
+        std::atomic<int> registrant_ops{0};
 
         plugin_registry_t::instance().register_plugin_ref(slow_plugin);
 
@@ -241,17 +247,20 @@ namespace error_system::plugin {
             }
         });
 
-        std::thread registrant([&normal_plugin]() {
+        std::thread registrant([&normal_plugin, &registrant_ops]() {
             for (int i = 0; i < 50; ++i) {
                 plugin_registry_t::instance().register_plugin_ref(normal_plugin);
                 plugin_registry_t::instance().unregister_plugin("normal");
+                registrant_ops.fetch_add(1);
             }
         });
 
         notifier.join();
         registrant.join();
 
+        // 两线程均完成（join 未阻塞说明无死锁）
         EXPECT_GT(slow_plugin.call_count.load(), 0);
+        EXPECT_EQ(registrant_ops.load(), 50);
     }
 
     TEST_F(plugin_registry_test_t, register_plugin_nullptr) {

@@ -116,7 +116,7 @@ namespace error_system::plugin {
 
     TEST_F(error_dedup_sampler_test_t, sample_rate_half_forwards_half) {
         sampler_.set_sample_rate(0.5);
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 1; i <= 10; ++i) {
             [[maybe_unused]] const bool ok = sampler_.should_be_forwarded(make_ctx(static_cast<uint16_t>(i)));
         }
         EXPECT_EQ(sampler_.forwarded_count(), 5u);
@@ -125,8 +125,8 @@ namespace error_system::plugin {
 
     TEST_F(error_dedup_sampler_test_t, sample_rate_tenth_forwards_one_in_ten) {
         sampler_.set_sample_rate(0.1);
-        for (int i = 0; i < 100; ++i) {
-            [[maybe_unused]] const bool ok = sampler_.should_be_forwarded(make_ctx(static_cast<uint16_t>(i)));
+        for (int i = 1; i <= 100; ++i) {
+            [[maybe_unused]] const bool ok = sampler_.should_be_forwarded(make_ctx(static_cast<uint16_t>((i % 20) + 1)));
         }
         EXPECT_EQ(sampler_.forwarded_count(), 10u);
         EXPECT_EQ(sampler_.sampled_count(), 90u);
@@ -134,7 +134,7 @@ namespace error_system::plugin {
 
     TEST_F(error_dedup_sampler_test_t, sample_rate_full_forwards_all) {
         sampler_.set_sample_rate(1.0);
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 1; i <= 5; ++i) {
             EXPECT_TRUE(sampler_.should_be_forwarded(make_ctx(static_cast<uint16_t>(i))));
         }
         EXPECT_EQ(sampler_.sampled_count(), 0u);
@@ -142,7 +142,7 @@ namespace error_system::plugin {
 
     TEST_F(error_dedup_sampler_test_t, sample_rate_zero_suppresses_all) {
         sampler_.set_sample_rate(0.0);
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 1; i <= 5; ++i) {
             EXPECT_FALSE(sampler_.should_be_forwarded(make_ctx(static_cast<uint16_t>(i))));
         }
         EXPECT_EQ(sampler_.forwarded_count(), 0u);
@@ -202,7 +202,7 @@ namespace error_system::plugin {
             t = std::thread([this]() {
                 for (int i = 0; i < ITERATIONS; ++i) {
                     [[maybe_unused]] const bool ok =
-                        sampler_.should_be_forwarded(make_ctx(static_cast<uint16_t>(i % 10)));
+                        sampler_.should_be_forwarded(make_ctx(static_cast<uint16_t>(i % 10 + 1)));
                 }
             });
         }
@@ -214,6 +214,7 @@ namespace error_system::plugin {
                              + sampler_.sampled_count()
                              + sampler_.deduped_count();
         EXPECT_EQ(total, static_cast<uint64_t>(THREAD_COUNT * ITERATIONS));
+        EXPECT_GE(sampler_.deduped_count(), 1u);
     }
 
 }  // namespace error_system::plugin

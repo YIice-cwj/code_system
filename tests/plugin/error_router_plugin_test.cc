@@ -12,6 +12,12 @@ namespace error_system::plugin {
         static constexpr core::code_t TEST_CODE_B = 99999;
         static constexpr core::code_t TEST_CODE_C = 11111;
 
+        /** 构造 application 域的错误码（subsystem/module/number 由参数指定） */
+        static core::error_code_t make_test_code(uint16_t subsystem, uint16_t module, uint16_t number) noexcept {
+            return error_code_t(core::error_level_t::error, domain::system_domain_t::application,
+                                core::subsystem_id_t{subsystem}, core::module_id_t{module}, core::error_number_t{number});
+        }
+
         void SetUp() override {
             error_router_plugin_t::instance().unregister_handler_by_code(core::error_code_t(0));
             error_router_plugin_t::instance().unregister_handler_by_module_group_id(0);
@@ -36,6 +42,8 @@ namespace error_system::plugin {
             error_router_plugin_t::instance().unregister_handler_by_domain(domain::system_domain_t::database);
             error_router_plugin_t::instance().unregister_handler_by_domain(domain::system_domain_t::middleware);
             error_router_plugin_t::instance().unregister_handler_by_domain(domain::system_domain_t::application);
+            error_router_plugin_t::instance().unregister_handler_by_code(make_test_code(1, 1, 1));
+            error_router_plugin_t::instance().unregister_handler_by_module_group_id(make_test_code(1, 1, 1).get_module_group_id());
         }
     };
 
@@ -142,12 +150,66 @@ namespace error_system::plugin {
         error_router_plugin_t::instance().on_error(context);
 
         EXPECT_TRUE(code_handler_called);
+        EXPECT_FALSE(domain_handler_called);
     }
 
     TEST_F(error_router_plugin_test_t, no_handler_does_not_crash) {
-        core::error_context_t context(core::located_code_t{core::error_code_t(TEST_CODE_A)}, "test");
+        // on_error 声明为 noexcept，此处主要验证无 handler 时不 terminate
+        core::error_context_t context(core::located_code_t{core::error_code_t(TEST_CODE_A)}, "no handler");
+        error_router_plugin_t::instance().on_error(context);
+        // 若执行到此行说明未 terminate
+        SUCCEED();
+    }
 
-        EXPECT_NO_THROW(error_router_plugin_t::instance().on_error(context));
+    TEST_F(error_router_plugin_test_t, module_group_handler_takes_priority_over_domain) {
+        bool module_handler_called = false;
+        bool domain_handler_called = false;
+
+        auto code = make_test_code(1, 1, 1);
+
+        error_router_plugin_t::instance().register_handler_by_module_group_id(code.get_module_group_id(),
+            [&module_handler_called](const core::error_context_t&) { module_handler_called = true; });
+        error_router_plugin_t::instance().register_handler_by_domain(domain::system_domain_t::application,
+            [&domain_handler_called](const core::error_context_t&) { domain_handler_called = true; });
+
+        core::error_context_t context(core::located_code_t{code}, "test");
+        error_router_plugin_t::instance().on_error(context);
+
+        EXPECT_TRUE(module_handler_called);
+        EXPECT_FALSE(domain_handler_called);
+    }
+
+    TEST_F(error_router_plugin_test_t, code_handler_takes_priority_over_module_group) {
+        bool code_handler_called = false;
+        bool module_handler_called = false;
+
+        auto code = make_test_code(1, 1, 1);
+
+        error_router_plugin_t::instance().register_handler_by_code(code,
+            [&code_handler_called](const core::error_context_t&) { code_handler_called = true; });
+        error_router_plugin_t::instance().register_handler_by_module_group_id(code.get_module_group_id(),
+            [&module_handler_called](const core::error_context_t&) { module_handler_called = true; });
+
+        core::error_context_t context(core::located_code_t{code}, "test");
+        error_router_plugin_t::instance().on_error(context);
+
+        EXPECT_TRUE(code_handler_called);
+        EXPECT_FALSE(module_handler_called);
+    }
+
+    TEST_F(error_router_plugin_test_t, fallback_chain_code_to_module_to_domain) {
+        bool domain_handler_called = false;
+
+        auto code = make_test_code(1, 1, 1);
+
+        // 不注册 code handler，不注册 module_group handler，只注册 domain handler
+        error_router_plugin_t::instance().register_handler_by_domain(domain::system_domain_t::application,
+            [&domain_handler_called](const core::error_context_t&) { domain_handler_called = true; });
+
+        core::error_context_t context(core::located_code_t{code}, "test");
+        error_router_plugin_t::instance().on_error(context);
+
+        EXPECT_TRUE(domain_handler_called);
     }
 
 }  // namespace error_system::plugin
