@@ -14,13 +14,16 @@ namespace error_system::utils {
 
     TEST(string_utils_test, hash_single_char) {
         constexpr auto result = string_utils_t::hash("a");
-        EXPECT_NE(result, 0);
+        EXPECT_NE(result, 0ULL);
+        EXPECT_NE(result, string_utils_t::hash(""));  // 与空串不同
+        EXPECT_NE(result, string_utils_t::hash("b"));  // 与不同字符不同
     }
 
     TEST(string_utils_test, hash_same_string_same_result) {
-        constexpr auto result1 = string_utils_t::hash("hello");
-        constexpr auto result2 = string_utils_t::hash("hello");
-        EXPECT_EQ(result1, result2);
+        // FNV-1a 64-bit: offset_basis=0xcbf29ce484222325, prime=0x100000001b3
+        constexpr auto result = string_utils_t::hash("hello");
+        constexpr uint64_t EXPECTED = 0xa430d84680aabd0bULL;  // FNV-1a("hello")
+        EXPECT_EQ(result, EXPECTED);
     }
 
     TEST(string_utils_test, hash_different_string_different_result) {

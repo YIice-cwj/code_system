@@ -66,4 +66,19 @@ namespace error_system::utils {
         EXPECT_EQ(result, "}");
     }
 
+    TEST(string_format_test, format_handles_bool) {
+        EXPECT_EQ(string_format_t::format("{}", true), "true");
+        EXPECT_EQ(string_format_t::format("{}", false), "false");
+    }
+
+    TEST(string_format_test, format_handles_char) {
+        EXPECT_EQ(string_format_t::format("{}", 'A'), "A");
+        EXPECT_EQ(string_format_t::format("{}", 'Z'), "Z");
+    }
+
+    TEST(string_format_test, format_handles_negative_int) {
+        EXPECT_EQ(string_format_t::format("{}", -42), "-42");
+        EXPECT_EQ(string_format_t::format("{}", -1), "-1");
+    }
+
 }  // namespace error_system::utils

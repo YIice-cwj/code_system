@@ -150,7 +150,7 @@ namespace error_system::utils {
         EXPECT_EQ(result->get_value("level2.key2"), "val2");
     }
 
-    TEST_F(json_dict_test_t, parse_json_with_special_characters_in_values) {
+    TEST_F(json_dict_test_t, parse_json_with_printable_ascii_characters) {
         auto result = json_dict_t::parse(R"({"special": "hello world! @#$%"})");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result->get_value("special"), "hello world! @#$%");
