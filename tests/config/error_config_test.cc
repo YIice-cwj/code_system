@@ -1,4 +1,5 @@
 #include "error_system/config/error_config.h"
+#include "error_system/config/feature_flags.h"
 
 #include <atomic>
 #include <thread>
@@ -37,10 +38,17 @@ namespace error_system::config {
 
     TEST_F(error_config_test_t, stacktrace_level_defaults) {
         auto level = stacktrace_config_t::get_stacktrace_level();
-        EXPECT_GE(static_cast<int>(level), 0);
+        if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
+            EXPECT_EQ(level, core::error_level_t::error);
+        } else {
+            EXPECT_EQ(level, core::error_level_t::warn);
+        }
     }
 
     TEST_F(error_config_test_t, set_stacktrace_level_works) {
+        if constexpr (!feature_flags_t::STACKTRACE_ENABLED) {
+            GTEST_SKIP() << "编译期未启用栈追踪";
+        }
         auto original = stacktrace_config_t::get_stacktrace_level();
 
         stacktrace_config_t::set_stacktrace_level(core::error_level_t::fatal);
@@ -50,6 +58,9 @@ namespace error_system::config {
     }
 
     TEST_F(error_config_test_t, enable_stacktrace_can_be_toggled) {
+        if constexpr (!feature_flags_t::STACKTRACE_ENABLED) {
+            GTEST_SKIP() << "编译期未启用栈追踪";
+        }
         feature_flags_t::set_enable_stacktrace(true);
         EXPECT_TRUE(feature_flags_t::is_stacktrace_enabled());
 
@@ -58,6 +69,9 @@ namespace error_system::config {
     }
 
     TEST_F(error_config_test_t, validation_can_be_toggled) {
+        if constexpr (!feature_flags_t::VALIDATION_ENABLED) {
+            GTEST_SKIP() << "编译期未启用验证";
+        }
         feature_flags_t::set_enable_validation(true);
         EXPECT_TRUE(feature_flags_t::is_validation_enabled());
 
@@ -66,6 +80,9 @@ namespace error_system::config {
     }
 
     TEST_F(error_config_test_t, source_location_can_be_toggled) {
+        if constexpr (!feature_flags_t::LOCATION_ENABLED) {
+            GTEST_SKIP() << "编译期未启用源位置";
+        }
         feature_flags_t::set_enable_source_location(true);
         EXPECT_TRUE(feature_flags_t::is_source_location_enabled());
 
@@ -74,6 +91,9 @@ namespace error_system::config {
     }
 
     TEST_F(error_config_test_t, short_filename_can_be_toggled) {
+        if constexpr (!feature_flags_t::LOCATION_ENABLED) {
+            GTEST_SKIP() << "编译期未启用源位置";
+        }
         feature_flags_t::set_enable_short_filename(true);
         EXPECT_TRUE(feature_flags_t::is_short_filename_enabled());
 
@@ -82,17 +102,24 @@ namespace error_system::config {
     }
 
     TEST_F(error_config_test_t, concurrent_set_and_get_stacktrace_level) {
-        auto original = stacktrace_config_t::get_stacktrace_level();
-
-        std::vector<std::thread> threads;
+        if constexpr (!feature_flags_t::STACKTRACE_ENABLED) {
+            GTEST_SKIP() << "编译期未启用栈追踪";
+        }
+        constexpr int THREAD_COUNT = 10;
+        constexpr int ITERATIONS = 100;
         std::atomic<int> success_count{0};
 
-        for (int i = 0; i < 10; ++i) {
-            threads.emplace_back([&success_count]() {
-                for (int j = 0; j < 100; ++j) {
-                    stacktrace_config_t::set_stacktrace_level(core::error_level_t::error);
-                    auto level = stacktrace_config_t::get_stacktrace_level();
-                    if (level == core::error_level_t::error) {
+        std::vector<std::thread> threads;
+        threads.reserve(THREAD_COUNT);
+        for (int t = 0; t < THREAD_COUNT; ++t) {
+            threads.emplace_back([t, &success_count]() {
+                for (int i = 0; i < ITERATIONS; ++i) {
+                    // 不同线程写不同值，验证读取值是合法枚举值（非 torn read）
+                    auto level = static_cast<core::error_level_t>((t + i) % 5);
+                    stacktrace_config_t::set_stacktrace_level(level);
+                    auto read = stacktrace_config_t::get_stacktrace_level();
+                    auto underlying = static_cast<int>(read);
+                    if (underlying >= 0 && underlying <= 4) {
                         success_count.fetch_add(1);
                     }
                 }
@@ -103,8 +130,9 @@ namespace error_system::config {
             thread.join();
         }
 
-        EXPECT_EQ(success_count.load(), 1000);
-        stacktrace_config_t::set_stacktrace_level(original);
+        EXPECT_EQ(success_count.load(), THREAD_COUNT * ITERATIONS);
+        // 恢复默认值，避免影响后续测试
+        stacktrace_config_t::set_stacktrace_level(core::error_level_t::error);
     }
 
     TEST_F(error_config_test_t, set_and_get_notify_mode) {
@@ -118,6 +146,9 @@ namespace error_system::config {
     }
 
     TEST_F(error_config_test_t, per_code_stacktrace_level_set_and_get) {
+        if constexpr (!feature_flags_t::STACKTRACE_ENABLED) {
+            GTEST_SKIP() << "编译期未启用栈追踪";
+        }
         uint64_t id1 = 0x123450000000001ULL;
         uint64_t id2 = 0x543210000000001ULL;
 
@@ -137,6 +168,9 @@ namespace error_system::config {
     }
 
     TEST_F(error_config_test_t, per_code_stacktrace_level_remove) {
+        if constexpr (!feature_flags_t::STACKTRACE_ENABLED) {
+            GTEST_SKIP() << "编译期未启用栈追踪";
+        }
         uint64_t id = 0xABCD0000000001ULL;
 
         stacktrace_config_t::set_per_code_stacktrace_level(id, core::error_level_t::warn);
@@ -147,6 +181,9 @@ namespace error_system::config {
     }
 
     TEST_F(error_config_test_t, per_code_stacktrace_level_overwrite) {
+        if constexpr (!feature_flags_t::STACKTRACE_ENABLED) {
+            GTEST_SKIP() << "编译期未启用栈追踪";
+        }
         uint64_t id = 0xDEAD0000000001ULL;
 
         stacktrace_config_t::set_per_code_stacktrace_level(id, core::error_level_t::warn);

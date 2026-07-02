@@ -17,6 +17,12 @@
 int main() {
     using namespace perf;
 
+    // 编译期未启用栈追踪时跳过本场景（避免退化为基线的虚假测量）
+    if constexpr (!feature_flags_t::STACKTRACE_ENABLED) {
+        std::cout << "编译期未启用栈追踪，本场景跳过" << std::endl;
+        return 0;
+    }
+
     // ===== 场景开关设置：仅开启栈追踪 =====
     feature_flags_t::set_enable_stacktrace(true);
     feature_flags_t::set_enable_source_location(false);
@@ -41,7 +47,10 @@ int main() {
 
     print_report("场景二 仅栈追踪（位置关 / 无插件）", items);
 
+    // 验证基准结果合理性
+    const int result = validate_report(items);
+
     // 恢复默认，避免影响后续测试
     feature_flags_t::set_enable_stacktrace(false);
-    return 0;
+    return result;
 }

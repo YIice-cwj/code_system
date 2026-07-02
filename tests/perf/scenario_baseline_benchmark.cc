@@ -38,5 +38,7 @@ int main() {
     items.push_back({"6. 移动构造", benchmark_move(code)});
 
     print_report("场景一 基线（栈追踪关 / 位置关 / 无插件）", items);
-    return 0;
+
+    // 验证基准结果合理性
+    return validate_report(items);
 }

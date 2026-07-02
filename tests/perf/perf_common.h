@@ -212,21 +212,28 @@ namespace perf {
 
     /**
      * @brief 测量移动构造性能
+     * @details 预构造源对象池，计时段内仅做移动构造，排除构造开销干扰。
      * @param code 基准错误码
      * @return double ns/op
      */
     inline double benchmark_move(const error_code_t& code) noexcept {
+        // 预构造源对象池，避免计时段内包含构造开销
+        std::vector<error_context_t> sources;
+        sources.reserve(static_cast<std::size_t>(MEASURE_ITERATIONS + WARMUP_ITERATIONS));
+        for (int i = 0; i < MEASURE_ITERATIONS + WARMUP_ITERATIONS; ++i) {
+            sources.emplace_back(code, "移动基准源对象");
+        }
+        // 预热
         for (int i = 0; i < WARMUP_ITERATIONS; ++i) {
-            error_context_t src(code, "移动基准源对象");
-            error_context_t dst(std::move(src));
+            error_context_t dst(std::move(sources[static_cast<std::size_t>(i)]));
             (void)dst.message.size();
         }
+        // 正式计时：仅测量移动构造
         stopwatch_t sw;
         sw.start();
         std::size_t checksum = 0;
         for (int i = 0; i < MEASURE_ITERATIONS; ++i) {
-            error_context_t src(code, "移动基准源对象");
-            error_context_t dst(std::move(src));
+            error_context_t dst(std::move(sources[static_cast<std::size_t>(WARMUP_ITERATIONS + i)]));
             checksum += dst.message.size();
         }
         const auto ns = sw.elapsed_ns();
@@ -258,6 +265,28 @@ namespace perf {
             std::printf("  %-24s | %10.2f\n", item.name, item.ns_per_op);
         }
         std::cout << "========================================================\n";
+    }
+
+    /**
+     * @brief 验证基准结果合理性
+     * @details 检查 ns_per_op 是否为正值且在合理范围内。
+     *          负值表示基准函数内部检测到错误（如 handler 未被调用、forwarded 计数不符）。
+     *          非零退出码让 ctest 检测到失败。
+     * @param items 各测试项结果
+     * @return int 0=全部合理，1=存在异常
+     */
+    inline int validate_report(const std::vector<benchmark_item_t>& items) noexcept {
+        for (const auto& item : items) {
+            if (item.ns_per_op <= 0.0) {
+                std::fprintf(stderr, "错误: %s 耗时非正: %.2f ns（可能基准内部检测到错误）\n",
+                             item.name, item.ns_per_op);
+                return 1;
+            }
+            if (item.ns_per_op > 1e9) {
+                std::fprintf(stderr, "警告: %s 耗时异常高: %.2f ns\n", item.name, item.ns_per_op);
+            }
+        }
+        return 0;
     }
 
     // ============================================================
@@ -366,6 +395,14 @@ namespace perf {
      * @return double ns/op
      */
     inline double benchmark_router_register_handler(error_router_plugin_t& router) noexcept {
+        auto handler = [](const error_context_t&) noexcept {};
+        // 预热：使用不同 subsystem 避免与正式测量冲突
+        for (int i = 0; i < WARMUP_ITERATIONS; ++i) {
+            error_code_t warmup_code(error_level_t::error, system_domain_t::database,
+                                      subsystem_id_t{2}, module_id_t{1},
+                                      error_number_t{static_cast<uint16_t>(i)});
+            router.register_handler_by_code(warmup_code, handler);
+        }
         // 用不同 number 构造不同 code 避免重复注册静默
         std::vector<error_code_t> codes;
         codes.reserve(MEASURE_ITERATIONS);
@@ -374,7 +411,6 @@ namespace perf {
                                subsystem_id_t{1}, module_id_t{1},
                                error_number_t{static_cast<uint16_t>(1000 + i)});
         }
-        auto handler = [](const error_context_t&) noexcept {};
         stopwatch_t sw;
         sw.start();
         for (size_t i = 0; i < static_cast<size_t>(MEASURE_ITERATIONS); ++i) {
@@ -409,6 +445,12 @@ namespace perf {
         }
         const auto ns = sw.elapsed_ns();
         std::fprintf(stderr, "[dedup_all_forward] forwarded=%zu\n", forwarded);
+        // rate=1.0 且 dedup=0 时应全部放行
+        if (forwarded != static_cast<std::size_t>(MEASURE_ITERATIONS)) {
+            std::fprintf(stderr, "错误: [dedup_all_forward] forwarded=%zu 期望=%d\n",
+                         forwarded, MEASURE_ITERATIONS);
+            return -1.0;
+        }
         return static_cast<double>(ns) / static_cast<double>(MEASURE_ITERATIONS);
     }
 
@@ -436,6 +478,11 @@ namespace perf {
         }
         const auto ns = sw.elapsed_ns();
         std::fprintf(stderr, "[dedup_window] forwarded=%zu\n", forwarded);
+        // 去重窗口内同 code 只放行首次，至少应放行一次
+        if (forwarded < 1) {
+            std::fprintf(stderr, "错误: [dedup_window] forwarded=%zu 期望>=1\n", forwarded);
+            return -1.0;
+        }
         return static_cast<double>(ns) / static_cast<double>(MEASURE_ITERATIONS);
     }
 
@@ -461,6 +508,11 @@ namespace perf {
         }
         const auto ns = sw.elapsed_ns();
         std::fprintf(stderr, "[dedup_sample] forwarded=%zu\n", forwarded);
+        // rate=0.1 时应至少有部分放行（概率性，但 10 万次采样不应为 0）
+        if (forwarded == 0) {
+            std::fprintf(stderr, "错误: [dedup_sample] forwarded=0 期望>0\n");
+            return -1.0;
+        }
         return static_cast<double>(ns) / static_cast<double>(MEASURE_ITERATIONS);
     }
 
@@ -488,6 +540,11 @@ namespace perf {
         }
         const auto ns = sw.elapsed_ns();
         std::fprintf(stderr, "[dedup_combined] forwarded=%zu\n", forwarded);
+        // 去重窗口内同 code 只放行首次，叠加采样后最多放行一次
+        if (forwarded > 1) {
+            std::fprintf(stderr, "错误: [dedup_combined] forwarded=%zu 期望<=1\n", forwarded);
+            return -1.0;
+        }
         return static_cast<double>(ns) / static_cast<double>(MEASURE_ITERATIONS);
     }
 
@@ -520,6 +577,11 @@ namespace perf {
         }
         const auto ns = sw.elapsed_ns();
         std::fprintf(stderr, "[dedup_multi] forwarded=%zu\n", forwarded);
+        // N 个不同 code 各放行首次，forwarded 应在 [1, n] 范围内
+        if (forwarded < 1 || forwarded > n) {
+            std::fprintf(stderr, "错误: [dedup_multi] forwarded=%zu 期望[1,%zu]\n", forwarded, n);
+            return -1.0;
+        }
         return static_cast<double>(ns) / static_cast<double>(MEASURE_ITERATIONS);
     }
 
@@ -533,7 +595,14 @@ namespace perf {
      */
     inline double benchmark_i18n_register_single() noexcept {
         auto& i18n = i18n_t::instance();
+        // 预热：注册后清空，不影响正式测量
         i18n.clear_all();
+        for (int i = 0; i < WARMUP_ITERATIONS; ++i) {
+            error_code_t warmup_code(error_level_t::error, system_domain_t::database,
+                                      subsystem_id_t{1}, module_id_t{1},
+                                      error_number_t{static_cast<uint16_t>(50000 + i)});
+            i18n.register_message(locale_t::zh_CN, warmup_code, "预热消息");
+        }
         // 用不同 number 构造不同 code 避免覆盖
         std::vector<error_code_t> codes;
         codes.reserve(MEASURE_ITERATIONS);
@@ -542,6 +611,7 @@ namespace perf {
                                subsystem_id_t{1}, module_id_t{1},
                                error_number_t{static_cast<uint16_t>(2000 + i)});
         }
+        i18n.clear_all();
         stopwatch_t sw;
         sw.start();
         for (size_t i = 0; i < static_cast<size_t>(MEASURE_ITERATIONS); ++i) {
@@ -670,6 +740,15 @@ namespace perf {
      */
     inline double benchmark_catalog_register() noexcept {
         auto& catalog = subsystem_module_catalog_t::instance();
+        // 预热：注册后清空，不影响正式测量
+        catalog.clear();
+        for (int i = 0; i < WARMUP_ITERATIONS; ++i) {
+            catalog.register_subsystem_module(
+                locale_t::zh_CN,
+                static_cast<uint16_t>(1000 + (i / 100)),
+                static_cast<uint16_t>(1 + (i % 100)),
+                "预热子系统", "预热模块");
+        }
         catalog.clear();
         stopwatch_t sw;
         sw.start();

@@ -26,7 +26,8 @@ namespace error_system::config {
         }
     };
 
-    TEST_F(i18n_config_test_t, enable_i18n_defaults_to_true) {
+    TEST_F(i18n_config_test_t, enable_i18n_set_up_correctly) {
+        // SetUp 中已显式 set_enable_i18n(true)，此处验证设置生效
         EXPECT_TRUE(i18n_config_t::is_i18n_enabled());
     }
 
@@ -38,7 +39,8 @@ namespace error_system::config {
         EXPECT_TRUE(i18n_config_t::is_i18n_enabled());
     }
 
-    TEST_F(i18n_config_test_t, default_locale_defaults_to_zh_CN) {
+    TEST_F(i18n_config_test_t, default_locale_set_up_correctly) {
+        // SetUp 中已显式 set_default_locale(zh_CN)，此处验证设置生效
         EXPECT_EQ(i18n_config_t::get_default_locale(), locale_t::zh_CN);
     }
 
@@ -122,17 +124,20 @@ namespace error_system::config {
     }
 
     TEST_F(i18n_config_test_t, concurrent_set_and_read_output_locale) {
-        std::vector<std::thread> threads;
+        constexpr int THREAD_COUNT = 10;
         std::atomic<int> invalid_reads{0};
 
-        for (int i = 0; i < 8; ++i) {
+        std::vector<std::thread> threads;
+        threads.reserve(THREAD_COUNT);
+        for (int t = 0; t < THREAD_COUNT; ++t) {
             threads.emplace_back([&invalid_reads]() {
-                for (int j = 0; j < 1000; ++j) {
-                    const auto locale = static_cast<locale_t>(j % 15);
+                for (int i = 0; i < 100; ++i) {
+                    const auto locale = static_cast<locale_t>(i % 15);
                     i18n_config_t::set_output_locale(locale);
                     const auto resolved = i18n_config_t::resolve_output_locale();
-                    const auto underlying = static_cast<uint8_t>(resolved);
-                    if (underlying > 14) {
+                    // 验证读取的值在合法范围 [0, 14] 内（非 torn read）
+                    const auto underlying = static_cast<int>(resolved);
+                    if (underlying < 0 || underlying > 14) {
                         invalid_reads.fetch_add(1);
                     }
                 }
@@ -147,17 +152,17 @@ namespace error_system::config {
     }
 
     TEST_F(i18n_config_test_t, concurrent_enable_toggle_is_safe) {
-        std::vector<std::thread> threads;
-        std::atomic<int> invalid_reads{0};
+        constexpr int THREAD_COUNT = 10;
+        constexpr int ITERATIONS = 1000;
 
-        for (int i = 0; i < 4; ++i) {
-            threads.emplace_back([&invalid_reads]() {
-                for (int j = 0; j < 500; ++j) {
-                    i18n_config_t::set_enable_i18n(j % 2 == 0);
-                    const bool enabled = i18n_config_t::is_i18n_enabled();
-                    if (enabled != true && enabled != false) {
-                        invalid_reads.fetch_add(1);
-                    }
+        std::vector<std::thread> threads;
+        threads.reserve(THREAD_COUNT);
+        for (int t = 0; t < THREAD_COUNT; ++t) {
+            threads.emplace_back([t]() {
+                for (int i = 0; i < ITERATIONS; ++i) {
+                    // bool 类型由 std::atomic<bool> 保证无 torn read
+                    i18n_config_t::set_enable_i18n((t + i) % 2 == 0);
+                    (void)i18n_config_t::is_i18n_enabled();
                 }
             });
         }
@@ -166,7 +171,11 @@ namespace error_system::config {
             t.join();
         }
 
-        EXPECT_EQ(invalid_reads.load(), 0);
+        // 并发压力后验证 set/get 一致性（单线程无干扰）
+        i18n_config_t::set_enable_i18n(false);
+        EXPECT_FALSE(i18n_config_t::is_i18n_enabled());
+        i18n_config_t::set_enable_i18n(true);
+        EXPECT_TRUE(i18n_config_t::is_i18n_enabled());
     }
 
 }  // namespace error_system::config

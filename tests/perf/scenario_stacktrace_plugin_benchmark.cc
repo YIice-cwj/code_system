@@ -37,6 +37,12 @@ namespace {
 int main() {
     using namespace perf;
 
+    // 编译期未启用栈追踪时跳过本场景
+    if constexpr (!feature_flags_t::STACKTRACE_ENABLED) {
+        std::cout << "编译期未启用栈追踪，本场景跳过" << std::endl;
+        return 0;
+    }
+
     // ===== 场景开关设置：开启栈追踪 + 注册插件 =====
     feature_flags_t::set_enable_stacktrace(true);
     feature_flags_t::set_enable_source_location(false);
@@ -64,9 +70,16 @@ int main() {
 
     print_report("场景四 栈追踪 + 插件（同步通知）", items);
 
+    // 验证插件被回调
+    if (plugin.count() == 0) {
+        std::fprintf(stderr, "错误: 插件未被回调\n");
+        return 1;
+    }
     std::cout << "\n  插件回调总次数: " << plugin.count() << " (应等于构造次数)\n";
+
+    const int result = validate_report(items);
 
     feature_flags_t::set_enable_stacktrace(false);
     plugin_registry_t::instance().clear();
-    return 0;
+    return result;
 }

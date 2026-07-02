@@ -65,12 +65,19 @@ int main() {
 
     print_report("场景五 全特性（栈追踪 + 位置 + 短文件名 + 插件）", items);
 
+    // 验证插件被回调
+    if (plugin.count() == 0) {
+        std::fprintf(stderr, "错误: 插件未被回调\n");
+        return 1;
+    }
     std::cout << "\n  插件回调总次数: " << plugin.count() << " (应等于构造次数)\n";
+
+    const int result = validate_report(items);
 
     // 恢复默认，避免影响后续测试
     feature_flags_t::set_enable_stacktrace(false);
     feature_flags_t::set_enable_source_location(false);
     feature_flags_t::set_enable_short_filename(false);
     plugin_registry_t::instance().clear();
-    return 0;
+    return result;
 }

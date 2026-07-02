@@ -65,8 +65,15 @@ int main() {
 
     print_report("场景三 仅插件（栈追踪关 / 同步通知）", items);
 
+    // 验证插件被回调
+    if (plugin.count() == 0) {
+        std::fprintf(stderr, "错误: 插件未被回调\n");
+        return 1;
+    }
     std::cout << "\n  插件回调总次数: " << plugin.count() << " (应等于构造次数)\n";
 
+    const int result = validate_report(items);
+
     plugin_registry_t::instance().clear();
-    return 0;
+    return result;
 }

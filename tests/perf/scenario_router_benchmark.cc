@@ -14,6 +14,8 @@
  * @copyright Copyright (c) 2026
  */
 
+#include <atomic>
+
 #include "perf_common.h"
 
 int main() {
@@ -27,8 +29,11 @@ int main() {
     const error_code_t code = prepare_registry();
     auto& router = error_router_plugin_t::instance();
 
-    // 按错误码注册处理函数（命中路径 1）
-    auto handler = [](const error_context_t&) noexcept {};
+    // 按错误码注册处理函数（命中路径 1）—— 带计数器验证分发实际发生
+    std::atomic<std::size_t> handler_called{0};
+    auto handler = [&handler_called](const error_context_t&) noexcept {
+        handler_called.fetch_add(1);
+    };
     router.register_handler_by_code(code, handler);
     // 按模块组注册（命中路径 2 使用不同 code，相同模块组）
     const error_code_t code_module_only(
@@ -57,5 +62,14 @@ int main() {
     items.push_back({"5. 注册处理函数", benchmark_router_register_handler(router)});
 
     print_report("场景六 错误路由插件", items);
-    return 0;
+
+    // 验证 handler 被调用：3 个分发基准各调用 (WARMUP + MEASURE) 次
+    const std::size_t expected_calls =
+        3 * static_cast<std::size_t>(WARMUP_ITERATIONS + MEASURE_ITERATIONS);
+    if (handler_called.load() != expected_calls) {
+        std::fprintf(stderr, "错误: handler 调用次数 %zu 期望 %zu\n",
+                     handler_called.load(), expected_calls);
+        return 1;
+    }
+    return validate_report(items);
 }

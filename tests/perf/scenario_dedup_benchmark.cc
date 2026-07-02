@@ -81,5 +81,8 @@ int main() {
         }(), multi_codes)});
 
     print_report("场景七 去重采样器", items);
-    return 0;
+
+    // 验证基准结果合理性（dedup 基准内部已通过 forwarded 计数校验，
+    // 若 forwarded 不符会返回 -1.0，此处再统一兜底）
+    return validate_report(items);
 }

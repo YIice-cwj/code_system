@@ -46,6 +46,7 @@ int main() {
     using perf::subsystem_id_t;
     using perf::subsystem_module_catalog_t;
     using perf::system_domain_t;
+    using perf::validate_report;
 
     perf::feature_flags_t::set_enable_stacktrace(false);
     perf::feature_flags_t::set_enable_source_location(false);
@@ -108,5 +109,7 @@ int main() {
     items.push_back({"10. locale 字符串转换", benchmark_locale_conversion()});
 
     print_report("场景八 i18n 翻译模块", items);
-    return 0;
+
+    // 验证基准结果合理性
+    return validate_report(items);
 }
