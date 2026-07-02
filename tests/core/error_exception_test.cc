@@ -21,6 +21,7 @@ namespace error_system::core {
         error_exception_t ex(context);
 
         EXPECT_EQ(ex.code().get_code(), code.get_code());
+        EXPECT_EQ(ex.context().message, "test message");
     }
 
     TEST_F(error_exception_test_t, exception_inherits_from_std_exception) {
@@ -56,8 +57,13 @@ namespace error_system::core {
     }
 
     TEST_F(error_exception_test_t, noexcept_constructor) {
-        static_assert(std::is_nothrow_constructible_v<error_exception_t, error_context_t>,
-                      "constructor should be noexcept");
+        static_assert(std::is_nothrow_constructible_v<error_exception_t, error_context_t&&>);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, subsystem_id_t{0}, module_id_t{0}, error_number_t{1});
+        error_registry_t::instance().register_error(code, "ERR_NOEXCEPT", "noexcept test");
+        error_context_t context(located_code_t{code}, "noexcept test");
+        error_exception_t ex(std::move(context));
+        EXPECT_NE(ex.what(), nullptr);
+        EXPECT_EQ(ex.context().message, "noexcept test");
     }
 
 }  // namespace error_system::core

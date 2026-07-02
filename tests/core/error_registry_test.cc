@@ -118,7 +118,7 @@ namespace error_system::core {
         EXPECT_TRUE(errors_after.empty());
     }
 
-    TEST_F(error_registry_test_t, get_info_returns_nullptr_for_unregistered) {
+    TEST_F(error_registry_test_t, get_info_returns_nullopt_for_unregistered) {
         auto code =
             error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{99}, module_id_t{99}, error_number_t{99});
 
@@ -361,7 +361,7 @@ namespace error_system::core {
         EXPECT_EQ(info->description, "Original description");
     }
 
-    TEST_F(error_registry_test_t, concurrent_register_and_query) {
+    TEST_F(error_registry_test_t, concurrent_query_after_registration) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         error_registry_t::instance().register_error(code, "CONCURRENT", "Concurrent test");
 

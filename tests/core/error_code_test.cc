@@ -34,13 +34,24 @@ namespace error_system::core {
     TEST_F(error_code_test_t, get_module_group_id_extracts_correct_bits) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::system, subsystem_id_t{2}, module_id_t{3}, error_number_t{4});
         auto group_id = code.get_module_group_id();
-        EXPECT_NE(group_id, 0ULL);
+        /** group_id 应等于 code 原始值掩码后的结果：保留 system+subsys+module，屏蔽 sign+reserved+level 与 number */
+        EXPECT_EQ(group_id, code.get_code() & 0x00FFFFFFFFFF0000ULL);
+        /** 低 16 位（number）被屏蔽 */
         EXPECT_EQ(group_id & 0xFFFFULL, 0ULL);
+        /** 高 8 位（sign+reserved+level）被屏蔽 */
+        EXPECT_EQ(group_id & 0xFF00000000000000ULL, 0ULL);
     }
 
     TEST_F(error_code_test_t, fields_are_correctly_extracted) {
         error_code_t code(0x0000000000000001ULL);
+        /** raw=0x01：sign=0、reserved=0、level=debug(0)、system=none(0)、subsys=0、module=0、number=1 */
         EXPECT_EQ(code.get_sign(), 0);
+        EXPECT_EQ(code.get_reserved(), 0);
+        EXPECT_EQ(code.get_level(), error_level_t::debug);
+        EXPECT_EQ(code.get_system(), domain::system_domain_t::none);
+        EXPECT_EQ(code.get_subsys(), 0);
+        EXPECT_EQ(code.get_module(), 0);
+        EXPECT_EQ(code.get_number(), 1);
     }
 
     TEST_F(error_code_test_t, constexpr_evaluation_works) {
@@ -49,9 +60,11 @@ namespace error_system::core {
         EXPECT_EQ(code.get_code(), 0x1234ULL);
     }
 
-    TEST_F(error_code_test_t, zero_code_represents_success) {
+    TEST_F(error_code_test_t, zero_raw_code_represents_error) {
+        /** raw=0 时 sign=0 表示错误码（而非成功码），is_error_code() 返回 true */
         constexpr error_code_t code(0);
         EXPECT_EQ(code.get_sign(), 0);
+        EXPECT_TRUE(code.is_error_code());
         EXPECT_EQ(code.get_level(), error_level_t::debug);
     }
 
@@ -86,7 +99,8 @@ namespace error_system::core {
         static_assert(code.get_subsys() == subsystem.value, "");
         static_assert(code.get_module() == module.value, "");
         static_assert(code.get_number() == number.value, "");
-        EXPECT_TRUE(true);
+        EXPECT_EQ(code.get_level(), level);
+        EXPECT_EQ(code.get_number(), number.value);
     }
 
 }  // namespace error_system::core

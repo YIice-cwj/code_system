@@ -46,7 +46,8 @@ namespace error_system::core {
     }
 
     TEST_F(result_test_t, move_constructor_transfers_value) {
-        result_t<std::string> result(std::string("moved value"));
+        result_t<std::string> original(std::string("moved value"));
+        result_t<std::string> result(std::move(original));
         EXPECT_EQ(result.value(), "moved value");
     }
 
@@ -184,18 +185,13 @@ namespace error_system::core {
     }
 
 
-    TEST_F(result_test_t, expect_on_success_returns_value) {
-        result_t<int> result(42);
-        EXPECT_EQ(result.value(), 42);
-    }
-
-    TEST_F(result_test_t, void_expect_on_success_no_op) {
+    TEST_F(result_test_t, void_success_result_is_success) {
         result_t<void> result;
         EXPECT_TRUE(result.is_success());
-        EXPECT_TRUE(result.is_success());
+        EXPECT_FALSE(result.is_error());
     }
 
-    TEST_F(result_test_t, expect_with_string_value) {
+    TEST_F(result_test_t, string_value_accessible) {
         result_t<std::string> result(std::string("hello"));
         EXPECT_EQ(result.value(), "hello");
     }
@@ -431,6 +427,10 @@ namespace error_system::core {
         static_assert(!noexcept(std::declval<const result_t<int>&>().match(
             throwing_success_fn_t{}, nothrow_error_fn_t{})),
             "match should not be noexcept when a callback may throw");
+        EXPECT_THROW(
+            (void)result.match([](int) -> int { throw std::runtime_error("test"); },
+                               [](const error_context_t&) -> int { return 0; }),
+            std::runtime_error);
     }
 
 }  // namespace error_system::core
