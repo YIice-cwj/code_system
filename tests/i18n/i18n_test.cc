@@ -1,6 +1,7 @@
 #include "error_system/i18n/i18n.h"
 #include "error_system/i18n/locale.h"
 
+#include <atomic>
 #include <string>
 #include <thread>
 #include <vector>
@@ -41,7 +42,8 @@ namespace error_system::core {
         EXPECT_TRUE(catalog_->get_message(error_system::i18n::locale_t::zh_CN, code).empty());
     }
 
-    TEST_F(i18n_test_t, query_returns_empty_for_unregistered_locale) {
+    TEST_F(i18n_test_t, fallback_to_default_locale_when_locale_unregistered) {
+        // fr_FR 未注册，应回退到默认 locale（zh_CN）的消息
         const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "数据库连接超时");
 
@@ -160,21 +162,32 @@ namespace error_system::core {
     TEST_F(i18n_test_t, concurrent_register_and_query_is_safe) {
         const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
+        std::atomic<int> success_count{0};
+        std::atomic<int> fail_count{0};
+
         std::thread writer([&code, this] {
             for (int i = 0; i < 100; ++i) {
                 catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "并发写入");
             }
         });
 
-        std::thread reader([&code, this] {
+        std::thread reader([&code, this, &success_count, &fail_count] {
             for (int i = 0; i < 100; ++i) {
-                [[maybe_unused]] const auto message = catalog_->get_message(error_system::i18n::locale_t::zh_CN, code);
+                auto msg = catalog_->get_message(error_system::i18n::locale_t::zh_CN, code);
+                // 合法状态：已注册返回 "并发写入"，或首次写入前返回空串
+                if (msg == "并发写入" || msg.empty()) {
+                    success_count.fetch_add(1);
+                } else {
+                    fail_count.fetch_add(1);
+                }
             }
         });
 
         writer.join();
         reader.join();
 
+        EXPECT_EQ(fail_count.load(), 0);
+        // 最终状态应一致
         EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::zh_CN, code), "并发写入");
     }
 

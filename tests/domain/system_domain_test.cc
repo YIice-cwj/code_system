@@ -22,6 +22,14 @@ namespace error_system::domain {
         EXPECT_STREQ(to_string(system_domain_t::third_party), "third_party");
     }
 
+    TEST(system_domain_test, to_string_count_returns_unknown) {
+        EXPECT_STREQ(to_string(system_domain_t::count), "unknown");
+    }
+
+    TEST(system_domain_test, to_string_invalid_enum_returns_unknown) {
+        EXPECT_STREQ(to_string(static_cast<system_domain_t>(99)), "unknown");
+    }
+
     TEST(system_domain_test, is_valid_checks_correctly) {
         EXPECT_TRUE(is_valid(0));
         EXPECT_TRUE(is_valid(1));
@@ -57,9 +65,18 @@ namespace error_system::domain {
     }
 
     TEST(system_domain_test, from_string_invalid_returns_none) {
+        EXPECT_EQ(from_string(nullptr), system_domain_t::none);
         EXPECT_EQ(from_string("unknown"), system_domain_t::none);
         EXPECT_EQ(from_string(""), system_domain_t::none);
         EXPECT_EQ(from_string("invalid"), system_domain_t::none);
+    }
+
+    TEST(system_domain_test, from_string_similar_string_does_not_mismatch) {
+        // 验证哈希碰撞保护：相似但不同的字符串不应匹配错误域
+        EXPECT_EQ(from_string("applicatio"), system_domain_t::none);   // 少一个字符
+        EXPECT_EQ(from_string("Application"), system_domain_t::none);   // 大写
+        EXPECT_EQ(from_string("application "), system_domain_t::none);  // 多空格
+        EXPECT_EQ(from_string(" applica\n"), system_domain_t::none);
     }
 
     TEST(system_domain_test, constexpr_evaluation_works) {

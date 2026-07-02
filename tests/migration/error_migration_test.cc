@@ -166,7 +166,8 @@ namespace error_system::migration {
 
         const auto result = reg_->migrate_recursive(a);
         const auto rid = result.get_identity_code();
-        EXPECT_TRUE(rid == a.get_identity_code() || rid == b.get_identity_code());
+        // a→b, b→a 构成环：从 a 出发，a→b→a 检测到 a 已访问，break 返回当前码 a
+        EXPECT_EQ(rid, a.get_identity_code());
     }
 
     TEST_F(error_migration_test_t, migrate_recursive_self_cycle_safely) {
@@ -339,7 +340,7 @@ namespace error_system::migration {
 
         std::vector<std::thread> threads;
         std::atomic<int> mark_count{0};
-        std::atomic<int> query_count{0};
+        std::atomic<int> query_hit_count{0};
 
         for (int i = 0; i < 8; ++i) {
             threads.emplace_back([&, i]() {
@@ -348,10 +349,12 @@ namespace error_system::migration {
                         reg_->mark_deprecated(code, {"并发废弃", replacement, "", ""});
                         mark_count.fetch_add(1);
                     } else {
-                        if (reg_->is_deprecated(code) || reg_->get_deprecation_info(code)) {
-                            query_count.fetch_add(1);
-                        } else {
-                            query_count.fetch_add(1);
+                        // 删除原 if/else 死代码：两分支均计数，无实际断言意义
+                        bool deprecated = reg_->is_deprecated(code);
+                        auto info = reg_->get_deprecation_info(code);
+                        // 命中：观察到 deprecated 状态或 deprecation_info 有值
+                        if (deprecated || info.has_value()) {
+                            query_hit_count.fetch_add(1);
                         }
                     }
                 }
@@ -363,7 +366,8 @@ namespace error_system::migration {
         }
 
         EXPECT_EQ(mark_count.load(), 400);
-        EXPECT_EQ(query_count.load(), 400);
+        // 确实查到了标记为 deprecated 的码
+        EXPECT_GT(query_hit_count.load(), 0);
         EXPECT_TRUE(reg_->is_deprecated(code));
     }
 
@@ -413,7 +417,9 @@ namespace error_system::migration {
             t.join();
         }
 
-        SUCCEED();
+        // 所有注册又被注销，最终应无迁移项
+        EXPECT_EQ(reg_->migration_count(), 0UL);
+        EXPECT_FALSE(reg_->migrate(old_code).has_value());
     }
 
 }  // namespace error_system::migration

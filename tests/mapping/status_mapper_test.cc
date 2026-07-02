@@ -39,6 +39,12 @@ namespace error_system::mapping {
             http_status_t{http_status_t::value_t::ok});
     }
 
+    TEST(status_mapper_test, debug_level_maps_to_http_ok) {
+        EXPECT_EQ(status_mapper_t::to_http_status(
+            make_err(error_level_t::debug, domain::system_domain_t::application)),
+            http_status_t{http_status_t::value_t::ok});
+    }
+
     TEST(status_mapper_test, warn_level_maps_to_http_ok) {
         EXPECT_EQ(status_mapper_t::to_http_status(
             make_err(error_level_t::warn, domain::system_domain_t::system)),
@@ -75,6 +81,12 @@ namespace error_system::mapping {
             http_status_t{http_status_t::value_t::internal_server_error});
     }
 
+    TEST(status_mapper_test, error_none_maps_to_http_internal_server_error) {
+        EXPECT_EQ(status_mapper_t::to_http_status(
+            make_err(error_level_t::error, domain::system_domain_t::none)),
+            http_status_t{http_status_t::value_t::internal_server_error});
+    }
+
     TEST(status_mapper_test, fatal_level_maps_to_http_internal_server_error) {
         EXPECT_EQ(status_mapper_t::to_http_status(
             make_err(error_level_t::fatal, domain::system_domain_t::database)),
@@ -105,6 +117,18 @@ namespace error_system::mapping {
             grpc_status_t{grpc_status_t::value_t::ok});
     }
 
+    TEST(status_mapper_test, debug_level_maps_to_grpc_ok) {
+        EXPECT_EQ(status_mapper_t::to_grpc_status(
+            make_err(error_level_t::debug, domain::system_domain_t::application)),
+            grpc_status_t{grpc_status_t::value_t::ok});
+    }
+
+    TEST(status_mapper_test, warn_level_maps_to_grpc_ok) {
+        EXPECT_EQ(status_mapper_t::to_grpc_status(
+            make_err(error_level_t::warn, domain::system_domain_t::system)),
+            grpc_status_t{grpc_status_t::value_t::ok});
+    }
+
     TEST(status_mapper_test, error_application_maps_to_grpc_invalid_argument) {
         EXPECT_EQ(status_mapper_t::to_grpc_status(
             make_err(error_level_t::error, domain::system_domain_t::application)),
@@ -132,6 +156,12 @@ namespace error_system::mapping {
     TEST(status_mapper_test, error_system_maps_to_grpc_internal) {
         EXPECT_EQ(status_mapper_t::to_grpc_status(
             make_err(error_level_t::error, domain::system_domain_t::system)),
+            grpc_status_t{grpc_status_t::value_t::internal});
+    }
+
+    TEST(status_mapper_test, error_none_maps_to_grpc_internal) {
+        EXPECT_EQ(status_mapper_t::to_grpc_status(
+            make_err(error_level_t::error, domain::system_domain_t::none)),
             grpc_status_t{grpc_status_t::value_t::internal});
     }
 
