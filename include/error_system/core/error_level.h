@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <type_traits>
 
 #include "error_system/utils/string_utils.h"
 
@@ -71,28 +72,36 @@ namespace error_system::core {
 
     /**
      * @brief 错误等级字符串转换为错误等级
-     * @details 用于将错误等级字符串转换为错误等级
-     * @param level 错误等级字符串
+     * @details 先按 FNV-1a 哈希快速匹配，匹配后再做字符串二次校验以规避哈希碰撞导致的误判。
+     *          string 为 nullptr 时返回 info。
+     * @param string 错误等级字符串
      * @return error_level_t 错误等级
      */
     [[nodiscard]] constexpr error_level_t from_string(const char* string) noexcept {
         if (string == nullptr) {
             return error_level_t::info;
         }
-        switch (utils::string_utils_t::hash(string)) {
+        const std::string_view sv(string);
+        switch (utils::string_utils_t::hash(sv)) {
             case utils::string_utils_t::hash("debug"):
-                return error_level_t::debug;
+                if (sv == "debug") { return error_level_t::debug; }
+                break;
             case utils::string_utils_t::hash("info"):
-                return error_level_t::info;
+                if (sv == "info") { return error_level_t::info; }
+                break;
             case utils::string_utils_t::hash("warn"):
-                return error_level_t::warn;
+                if (sv == "warn") { return error_level_t::warn; }
+                break;
             case utils::string_utils_t::hash("error"):
-                return error_level_t::error;
+                if (sv == "error") { return error_level_t::error; }
+                break;
             case utils::string_utils_t::hash("fatal"):
-                return error_level_t::fatal;
+                if (sv == "fatal") { return error_level_t::fatal; }
+                break;
             default:
-                return error_level_t::info;
+                break;
         }
+        return error_level_t::info;
     }
 
     /**

@@ -38,7 +38,7 @@ namespace error_system::core {
         /**
          * @brief 写入长度前缀字符串（4 字节小端长度 + 字符串字节）
          */
-        void write_string_len_prefixed(std::string& buffer, const std::string& text) noexcept {
+        void write_string_len_prefixed(std::string& buffer, std::string_view text) noexcept {
             const size_t string_size = text.size();
             if (string_size > 0xFFFFFFFFULL) {
                 std::fprintf(stderr, "[error_context_serializer] write_string_len_prefixed: string too long, truncated\n");

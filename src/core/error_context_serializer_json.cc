@@ -609,14 +609,15 @@ namespace error_system::core {
             if (token.type != token_type_t::string) {
                 return false;
             }
+            if (payload_count >= MAX_PAYLOAD_ITEMS) {
+                return false;
+            }
             auto pkey = std::move(token.value);
 
             if (!parse_single_payload_entry_(lexer, context, std::move(pkey))) {
                 return false;
             }
-            if (++payload_count > MAX_PAYLOAD_ITEMS) {
-                return false;
-            }
+            ++payload_count;
 
             token = lexer.next();
             if (token.type == token_type_t::right_brace) {
