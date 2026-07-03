@@ -161,7 +161,7 @@ namespace error_system::core {
         }
         try {
             return result_t<new_type>(std::invoke(std::forward<Function>(function), value()));
-        } catch (const std::bad_alloc&) {
+        } catch (...) {
             std::fprintf(stderr, "[result_t] map: std::invoke threw exception\n");
             return result_t<new_type>(detail::make_invoke_exception_context("map: function threw exception"));
         }
@@ -178,7 +178,7 @@ namespace error_system::core {
         }
         try {
             return result_t<new_type>(std::invoke(std::forward<Function>(function), std::move(value())));
-        } catch (const std::bad_alloc&) {
+        } catch (...) {
             std::fprintf(stderr, "[result_t] map(&&): std::invoke threw exception\n");
             return result_t<new_type>(detail::make_invoke_exception_context("map(&&): function threw exception"));
         }
@@ -190,7 +190,7 @@ namespace error_system::core {
         if (is_error()) {
             try {
                 return result_t<value_type_t>(std::invoke(std::forward<Function>(function), error()));
-            } catch (const std::bad_alloc&) {
+            } catch (...) {
                 std::fprintf(stderr, "[result_t] map_error: std::invoke threw exception\n");
                 return result_t<value_type_t>(error());
             }
@@ -205,8 +205,8 @@ namespace error_system::core {
             auto error_copy = error();
             try {
                 return result_t<value_type_t>(std::invoke(std::forward<Function>(function), std::move(error())));
-            } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[result_t] map_error(&&): std::invoke threw bad_alloc\n");
+            } catch (...) {
+                std::fprintf(stderr, "[result_t] map_error(&&): std::invoke threw exception\n");
                 return result_t<value_type_t>(error_copy);
             }
         }
@@ -223,7 +223,7 @@ namespace error_system::core {
         }
         try {
             return std::invoke(std::forward<Function>(function), std::move(value()));
-        } catch (const std::bad_alloc&) {
+        } catch (...) {
             std::fprintf(stderr, "[result_t] and_then(&&): std::invoke threw exception\n");
             return return_type(detail::make_invoke_exception_context("and_then(&&): function threw exception"));
         }
@@ -239,7 +239,7 @@ namespace error_system::core {
         }
         try {
             return std::invoke(std::forward<Function>(function), value());
-        } catch (const std::bad_alloc&) {
+        } catch (...) {
             std::fprintf(stderr, "[result_t] and_then(&): std::invoke threw exception\n");
             return return_type(detail::make_invoke_exception_context("and_then(&): function threw exception"));
         }
@@ -255,7 +255,7 @@ namespace error_system::core {
         }
         try {
             return std::invoke(std::forward<Function>(function), value());
-        } catch (const std::bad_alloc&) {
+        } catch (...) {
             std::fprintf(stderr, "[result_t] and_then(const&): std::invoke threw exception\n");
             return return_type(detail::make_invoke_exception_context("and_then(const&): function threw exception"));
         }
@@ -268,8 +268,8 @@ namespace error_system::core {
             auto error_copy = error();
             try {
                 return std::invoke(std::forward<Function>(function), std::move(error()));
-            } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[result_t] or_else(&&): std::invoke threw bad_alloc\n");
+            } catch (...) {
+                std::fprintf(stderr, "[result_t] or_else(&&): std::invoke threw exception\n");
                 return result_t<value_type_t>(error_copy);
             }
         }
@@ -282,7 +282,7 @@ namespace error_system::core {
         if (is_error()) {
             try {
                 return std::invoke(std::forward<Function>(function), error());
-            } catch (const std::bad_alloc&) {
+            } catch (...) {
                 std::fprintf(stderr, "[result_t] or_else(&): std::invoke threw exception\n");
                 return *this;
             }
@@ -402,7 +402,7 @@ namespace error_system::core {
         }
         try {
             return std::invoke(std::forward<Function>(function));
-        } catch (const std::bad_alloc&) {
+        } catch (...) {
             std::fprintf(stderr, "[result_t<void>] and_then(&&): std::invoke threw exception\n");
             return return_type(detail::make_invoke_exception_context("and_then(&&): function threw exception"));
         }
@@ -420,7 +420,7 @@ namespace error_system::core {
         }
         try {
             return std::invoke(std::forward<Function>(function));
-        } catch (const std::bad_alloc&) {
+        } catch (...) {
             std::fprintf(stderr, "[result_t<void>] and_then(&): std::invoke threw exception\n");
             return return_type(detail::make_invoke_exception_context("and_then(&): function threw exception"));
         }
@@ -433,7 +433,7 @@ namespace error_system::core {
             if (ptr) {
                 try {
                     return result_t<void>(std::invoke(std::forward<Function>(function), *ptr));
-                } catch (const std::bad_alloc&) {
+                } catch (...) {
                     std::fprintf(stderr, "[result_t<void>] map_error: std::invoke threw exception\n");
                     return result_t<void>(*ptr);
                 }
@@ -449,7 +449,7 @@ namespace error_system::core {
             if (ptr) {
                 try {
                     return result_t<void>(std::invoke(std::forward<Function>(function), std::move(*ptr)));
-                } catch (const std::bad_alloc&) {
+                } catch (...) {
                     std::fprintf(stderr, "[result_t<void>] map_error(&&): std::invoke threw exception\n");
                     return result_t<void>(detail::make_invoke_exception_context("map_error(&&): function threw exception"));
                 }
@@ -465,7 +465,7 @@ namespace error_system::core {
             if (ptr) {
                 try {
                     return std::invoke(std::forward<Function>(function), std::move(*ptr));
-                } catch (const std::bad_alloc&) {
+                } catch (...) {
                     std::fprintf(stderr, "[result_t<void>] or_else(&&): std::invoke threw exception\n");
                     return std::move(*this);
                 }
@@ -481,7 +481,7 @@ namespace error_system::core {
             if (ptr) {
                 try {
                     return std::invoke(std::forward<Function>(function), *ptr);
-                } catch (const std::bad_alloc&) {
+                } catch (...) {
                     std::fprintf(stderr, "[result_t<void>] or_else(&): std::invoke threw exception\n");
                     return *this;
                 }
