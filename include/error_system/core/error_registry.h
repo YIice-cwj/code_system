@@ -302,7 +302,7 @@ namespace error_system::core {
          * @param code 错误码
          * @return std::optional<error_metadata_t> 元数据副本，未注册返回 nullopt
          */
-        std::optional<error_metadata_t> get_info_cached(const error_code_t code) const noexcept;
+        [[nodiscard]] std::optional<error_metadata_t> get_info_cached(const error_code_t code) const noexcept;
 
         /**
          * @brief 清除当前线程的元数据缓存

@@ -174,8 +174,8 @@ namespace error_system::core {
         if (auto formatter = formatter_config_t::get_custom_formatter()) {
             try {
                 return formatter(context);
-            } catch (const std::exception& e) {
-                std::fprintf(stderr, "[error_context_serializer] to_string: custom formatter threw: %s\n", e.what());
+            } catch (...) {
+                std::fprintf(stderr, "[error_context_serializer] to_string: custom formatter threw unknown exception\n");
             }
         }
 

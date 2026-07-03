@@ -105,6 +105,22 @@ namespace error_system::core {
         std::string loc_file_storage_{};
         std::string loc_func_storage_{};
 
+    public:
+        std::string message{};
+        /**
+         * @brief 源位置信息
+         * @details 构造时通过 located_code_t 捕获调用者真实位置
+         */
+        utils::source_location_t source_location{};
+        /**
+         * @brief 文件名（可能为短文件名，由 initializer 根据配置设置）
+         * @details nullptr 表示未设置源位置
+         */
+        const char* file_name{nullptr};
+        std::shared_ptr<error_context_t> cause{nullptr};
+        std::vector<std::string> stack_frames{};
+
+    private:
         /**
          * @brief 查找 payload 值指针（避免 optional 拷贝）
          * @param key 键名
@@ -188,21 +204,6 @@ namespace error_system::core {
         void repair_source_location_pointers_() noexcept;
 
     public:
-        std::string message{};
-        /**
-         * @brief 源位置信息
-         * @details 构造时通过 located_code_t 捕获调用者真实位置
-         */
-        utils::source_location_t source_location{};
-        /**
-         * @brief 文件名（可能为短文件名，由 initializer 根据配置设置）
-         * @details nullptr 表示未设置源位置
-         */
-        const char* file_name{nullptr};
-        std::shared_ptr<error_context_t> cause{nullptr};
-        std::vector<std::string> stack_frames{};
-
-    public:
         constexpr error_context_t() noexcept = default;
 
         /**
@@ -280,13 +281,13 @@ namespace error_system::core {
          * @brief 检查错误上下文是否表示成功
          * @return bool 若 sign 位为 1（成功码）则返回 true
          */
-        bool is_success() const noexcept;
+        [[nodiscard]] bool is_success() const noexcept;
 
         /**
          * @brief 检查错误上下文是否包含错误
          * @return bool 若 sign 位为 0（错误码）则返回 true
          */
-        bool is_error() const noexcept;
+        [[nodiscard]] bool is_error() const noexcept;
 
         /**
          * @brief 包装底层错误为当前错误的直接原因
