@@ -403,7 +403,7 @@ result_t<void> fail = result_t<void>::make_error(ERR_FAIL, "失败");
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `make_error_code` | `template <typename SubSystemEnum, typename ModuleEnum> [[nodiscard]] static constexpr error_code_t make_error_code(error_level_t level, domain::system_domain_t system, SubSystemEnum subsystem, ModuleEnum module, uint16_t number) noexcept` | 枚举模板版本，编译期类型安全，防止 subsystem/module ID 传反 |
+| `make_error_code` | `template <typename SubSystemEnum, typename ModuleEnum, typename = std::enable_if_t<is_uint16_enum_v<SubSystemEnum> && is_uint16_enum_v<ModuleEnum>>> [[nodiscard]] static constexpr error_code_t make_error_code(error_level_t level, domain::system_domain_t system, SubSystemEnum subsystem, ModuleEnum module, uint16_t number) noexcept` | 枚举模板版本，编译期类型安全（SFINAE 约束枚举大小不超过 2 字节），防止 subsystem/module ID 传反 |
 | `from_raw` | `[[nodiscard]] static constexpr error_code_t from_raw(code_t code) noexcept` | 从 64 位原始码恢复（语义明确表达"反序列化"意图） |
 
 ```cpp

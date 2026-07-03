@@ -158,7 +158,7 @@ registry.flush_deferred_notifications();                       // 显式 flush
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | `set_dedup_window_ms` | `void set_dedup_window_ms(uint64_t milliseconds) noexcept` | 去重窗口(ms)，0 = 关闭（默认） |
-| `set_sample_rate` | `void set_sample_rate(double rate) noexcept` | 采样率 [0.0, 1.0]，`rate=0.1` 放行 10% |
+| `set_sample_rate` | `void set_sample_rate(double rate) noexcept` | 采样率 [0.0, 1.0]，`rate=0.1` 放行 10%；极小 rate（1.0/rate 超出安全阈值）等同 0 全部抑制 |
 | `should_be_forwarded` | `[[nodiscard]] bool should_be_forwarded(const core::error_context_t& context) noexcept` | 先采样再去重，两关通过才放行 |
 
 ### 统计
