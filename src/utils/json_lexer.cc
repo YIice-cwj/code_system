@@ -29,20 +29,24 @@ namespace error_system::utils::detail {
             if (codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
                 return;
             }
-            if (codepoint <= 0x7F) {
-                output.push_back(static_cast<char>(codepoint));
-            } else if (codepoint <= 0x7FF) {
-                output.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
-                output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-            } else if (codepoint <= 0xFFFF) {
-                output.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
-                output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-                output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
-            } else {
-                output.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
-                output.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
-                output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-                output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+            try {
+                if (codepoint <= 0x7F) {
+                    output.push_back(static_cast<char>(codepoint));
+                } else if (codepoint <= 0x7FF) {
+                    output.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+                    output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                } else if (codepoint <= 0xFFFF) {
+                    output.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+                    output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+                    output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                } else {
+                    output.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+                    output.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+                    output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+                    output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                }
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[json_lexer] append_utf8: bad_alloc\n");
             }
         }
 
@@ -187,13 +191,21 @@ namespace error_system::utils::detail {
         if (json_str_[pos_] == '-') {
             ++pos_;
         }
+        const size_t int_part_start = pos_;
         while (pos_ < json_str_.size() && json_str_[pos_] >= '0' && json_str_[pos_] <= '9') {
             ++pos_;
         }
+        if (pos_ == int_part_start) {
+            return {token_type_t::invalid, {}};
+        }
         if (pos_ < json_str_.size() && json_str_[pos_] == '.') {
             ++pos_;
+            const size_t frac_start = pos_;
             while (pos_ < json_str_.size() && json_str_[pos_] >= '0' && json_str_[pos_] <= '9') {
                 ++pos_;
+            }
+            if (pos_ == frac_start) {
+                return {token_type_t::invalid, {}};
             }
         }
         if (pos_ < json_str_.size() && (json_str_[pos_] == 'e' || json_str_[pos_] == 'E')) {
@@ -201,12 +213,13 @@ namespace error_system::utils::detail {
             if (pos_ < json_str_.size() && (json_str_[pos_] == '+' || json_str_[pos_] == '-')) {
                 ++pos_;
             }
+            const size_t exp_start = pos_;
             while (pos_ < json_str_.size() && json_str_[pos_] >= '0' && json_str_[pos_] <= '9') {
                 ++pos_;
             }
-        }
-        if (pos_ == start) {
-            return {token_type_t::invalid, {}};
+            if (pos_ == exp_start) {
+                return {token_type_t::invalid, {}};
+            }
         }
         try {
             return {token_type_t::number, std::string(json_str_.substr(start, pos_ - start))};
@@ -244,7 +257,13 @@ namespace error_system::utils::detail {
      * @details 构造函数，初始化JSON字符串
      * @param json_text JSON字符串视图
      */
-    json_lexer_t::json_lexer_t(std::string_view json_text) noexcept : json_str_(json_text), pos_(0) {}
+    json_lexer_t::json_lexer_t(std::string_view json_text) noexcept : pos_(0) {
+        try {
+            json_str_ = std::string(json_text);
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[json_lexer] constructor: std::bad_alloc\n");
+        }
+    }
 
     /**
      * @brief 获取下一个token

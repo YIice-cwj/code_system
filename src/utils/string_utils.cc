@@ -67,7 +67,7 @@ namespace error_system::utils {
      * @return std::vector<std::string_view> 分割后的视图向量
      */
     std::vector<std::string_view> string_utils_t::split(std::string_view string, std::string_view delimiter) noexcept {
-        if (string.empty()) {
+        if (string.empty() || delimiter.empty()) {
             return {};
         }
         std::vector<std::string_view> result{};

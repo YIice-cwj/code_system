@@ -70,7 +70,12 @@ namespace error_system::utils {
                 return true;
             }
             if (token.type == detail::json_lexer_t::token_type_t::string) {
-                context.current_key = token.value;
+                try {
+                    context.current_key = token.value;
+                } catch (const std::bad_alloc&) {
+                    std::fprintf(stderr, "[json_utils] handle_expect_key_or_end: bad_alloc\n");
+                    return false;
+                }
                 context.state = parse_state_t::expect_colon;
                 return true;
             }
@@ -95,12 +100,17 @@ namespace error_system::utils {
          */
         bool handle_expect_value_or_start(parser_context_t& context, const json_lexer_t::token_t& token) noexcept {
             if (token.type == json_lexer_t::token_type_t::left_brace) {
-                context.path_stack.push_back(context.current_key);
-                if (context.path_prefix.empty()) {
-                    context.path_prefix = context.current_key;
-                } else {
-                    context.path_prefix += ".";
-                    context.path_prefix += context.current_key;
+                try {
+                    context.path_stack.push_back(context.current_key);
+                    if (context.path_prefix.empty()) {
+                        context.path_prefix = context.current_key;
+                    } else {
+                        context.path_prefix += ".";
+                        context.path_prefix += context.current_key;
+                    }
+                } catch (const std::bad_alloc&) {
+                    std::fprintf(stderr, "[json_utils] handle_expect_value_or_start: bad_alloc\n");
+                    return false;
                 }
                 context.current_key.clear();
                 context.state = parse_state_t::expect_key_or_end;
@@ -172,7 +182,12 @@ namespace error_system::utils {
     std::optional<std::string> json_dict_t::get_value(const std::string& key) const noexcept {
         auto it = dict_.find(key);
         if (it != dict_.end()) {
-            return it->second;
+            try {
+                return it->second;
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[json_utils] get_value: copy failed (bad_alloc)\n");
+                return std::nullopt;
+            }
         }
         return std::nullopt;
     }
@@ -190,7 +205,12 @@ namespace error_system::utils {
         if (value.has_value()) {
             return std::move(*value);
         }
-        return default_value;
+        try {
+            return default_value;
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[json_utils] get_value_or: copy default failed (bad_alloc)\n");
+            return {};
+        }
     }
 
     /**
@@ -312,18 +332,22 @@ namespace error_system::utils {
          *          使用 std::to_chars 生成两位十六进制，不足两位前补 '0'。
          */
         void append_control_escape(std::string& result, unsigned char c) noexcept {
-            result.append("\\u00");
-            std::array<char, 2> buffer;
-            auto [ptr, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), c, 16);
-            if (ec != std::errc{}) {
-                return;
-            }
-            const size_t written = static_cast<size_t>(ptr - buffer.data());
-            if (written == 1) {
-                result.push_back('0');
-                result.push_back(buffer[0]);
-            } else {
-                result.append(buffer.data(), 2);
+            try {
+                result.append("\\u00");
+                std::array<char, 2> buffer;
+                auto [ptr, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), c, 16);
+                if (ec != std::errc{}) {
+                    return;
+                }
+                const size_t written = static_cast<size_t>(ptr - buffer.data());
+                if (written == 1) {
+                    result.push_back('0');
+                    result.push_back(buffer[0]);
+                } else {
+                    result.append(buffer.data(), 2);
+                }
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[json_utils] append_control_escape: bad_alloc\n");
             }
         }
 

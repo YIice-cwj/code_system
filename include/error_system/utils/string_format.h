@@ -99,24 +99,28 @@ namespace error_system::utils {
              *          支持 {{ 和 }} 转义
              */
             void append_literal_braces() noexcept {
-                while (cursor < format.size()) {
-                    if (format[cursor] == '{') {
-                        if (cursor + 1 < format.size() && format[cursor + 1] == '{') {
-                            result.push_back('{');
-                            cursor += 2;
-                            continue;
+                try {
+                    while (cursor < format.size()) {
+                        if (format[cursor] == '{') {
+                            if (cursor + 1 < format.size() && format[cursor + 1] == '{') {
+                                result.push_back('{');
+                                cursor += 2;
+                                continue;
+                            }
+                            break;
                         }
-                        break;
-                    }
-                    if (format[cursor] == '}') {
-                        if (cursor + 1 < format.size() && format[cursor + 1] == '}') {
-                            result.push_back('}');
-                            cursor += 2;
-                            continue;
+                        if (format[cursor] == '}') {
+                            if (cursor + 1 < format.size() && format[cursor + 1] == '}') {
+                                result.push_back('}');
+                                cursor += 2;
+                                continue;
+                            }
                         }
+                        result.push_back(format[cursor]);
+                        ++cursor;
                     }
-                    result.push_back(format[cursor]);
-                    ++cursor;
+                } catch (const std::bad_alloc&) {
+                    std::fprintf(stderr, "[string_format] append_literal_braces: bad_alloc\n");
                 }
             }
 
@@ -142,7 +146,11 @@ namespace error_system::utils {
             void finish() noexcept {
                 append_literal_braces();
                 if (cursor < format.size()) {
-                    result.append(format.data() + cursor, format.size() - cursor);
+                    try {
+                        result.append(format.data() + cursor, format.size() - cursor);
+                    } catch (const std::bad_alloc&) {
+                        std::fprintf(stderr, "[string_format] finish: bad_alloc\n");
+                    }
                 }
             }
         };

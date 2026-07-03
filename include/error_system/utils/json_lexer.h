@@ -53,7 +53,7 @@ namespace error_system::utils::detail {
         };
 
     private:
-        std::string_view json_str_{};
+        std::string json_str_{};
 
         size_t pos_{0};
         /**

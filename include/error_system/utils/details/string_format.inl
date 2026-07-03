@@ -16,39 +16,51 @@ void string_format_t::format_appender_t::append_value(const T& value) noexcept {
         return;
     }
 
-    if constexpr (std::is_convertible_v<T, std::string_view>) {
-        result.append(std::string_view(value));
-    } else if constexpr (std::is_same_v<T, char>) {
-        result.push_back(value);
-    } else if constexpr (std::is_pointer_v<std::decay_t<T>>) {
-        if (value == nullptr) {
+    try {
+        if constexpr (std::is_same_v<std::decay_t<T>, std::nullptr_t>) {
             result.append("nullptr");
-        } else {
-            result.append("0x");
-            uintptr_t addr = reinterpret_cast<uintptr_t>(value);
-            std::array<char, 32> buffer;
-            auto [pointer, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), addr, 16);
-            if (error == std::errc{}) {
-                result.append(buffer.data(), static_cast<size_t>(pointer - buffer.data()));
+        } else if constexpr (std::is_convertible_v<T, std::string_view>) {
+            if constexpr (std::is_pointer_v<std::decay_t<T>>) {
+                if (value == nullptr) {
+                    result.append("nullptr");
+                    return;
+                }
             }
-        }
+            result.append(std::string_view(value));
+        } else if constexpr (std::is_same_v<T, char>) {
+            result.push_back(value);
+        } else if constexpr (std::is_pointer_v<std::decay_t<T>>) {
+            if (value == nullptr) {
+                result.append("nullptr");
+            } else {
+                result.append("0x");
+                uintptr_t addr = reinterpret_cast<uintptr_t>(value);
+                std::array<char, 32> buffer;
+                auto [pointer, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), addr, 16);
+                if (error == std::errc{}) {
+                    result.append(buffer.data(), static_cast<size_t>(pointer - buffer.data()));
+                }
+            }
 
-    } else if constexpr (std::is_arithmetic_v<T>) {
-        if constexpr (std::is_same_v<std::decay_t<T>, bool>) {
-            result.append(value ? "true" : "false");
-        } else {
-            std::array<char, 64> buffer;
-            auto [pointer, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
-            if (error == std::errc{}) {
-                result.append(buffer.data(), static_cast<size_t>(pointer - buffer.data()));
+        } else if constexpr (std::is_arithmetic_v<T>) {
+            if constexpr (std::is_same_v<std::decay_t<T>, bool>) {
+                result.append(value ? "true" : "false");
+            } else {
+                std::array<char, 64> buffer;
+                auto [pointer, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+                if (error == std::errc{}) {
+                    result.append(buffer.data(), static_cast<size_t>(pointer - buffer.data()));
+                }
             }
+        } else if constexpr (is_member_to_string_v<T>) {
+            result.append(value.to_string());
+        } else if constexpr (is_global_to_string_v<T>) {
+            result.append(to_string(value));
+        } else {
+            result.append("[unsupported type]");
         }
-    } else if constexpr (is_member_to_string_v<T>) {
-        result.append(value.to_string());
-    } else if constexpr (is_global_to_string_v<T>) {
-        result.append(to_string(value));
-    } else {
-        result.append("[unsupported type]");
+    } catch (const std::bad_alloc&) {
+        std::fprintf(stderr, "[string_format] append_value: bad_alloc\n");
     }
 }
 

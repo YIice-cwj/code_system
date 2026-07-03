@@ -89,7 +89,11 @@ namespace error_system::core {
 
     void error_context_initializer_t::fill_stacktrace_(error_context_t& context) noexcept {
         if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
-            context.stack_frames = utils::stack_trace_utils_t::generate(1);
+            try {
+                context.stack_frames = utils::stack_trace_utils_t::generate(1);
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[error_context_initializer] fill_stacktrace_: std::bad_alloc\n");
+            }
         }
     }
 
