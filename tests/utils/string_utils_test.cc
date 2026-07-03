@@ -129,6 +129,12 @@ namespace error_system::utils {
         EXPECT_EQ(result[1], "b");
     }
 
+    /** Regression: split 传入空分隔符会导致无限循环（string.find("") 恒返回 0） */
+    TEST(string_utils_test, split_empty_delimiter_returns_empty) {
+        auto result = string_utils_t::split("abc", "");
+        EXPECT_TRUE(result.empty());
+    }
+
     TEST(string_utils_test, join_basic) {
         std::vector<std::string_view> tokens = {"a", "b", "c"};
         auto result = string_utils_t::join(tokens, ",");

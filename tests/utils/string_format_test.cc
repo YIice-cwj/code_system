@@ -1,5 +1,7 @@
 #include "error_system/utils/string_format.h"
 
+#include <cstdint>
+
 #include <string>
 
 #include <gtest/gtest.h>
@@ -79,6 +81,31 @@ namespace error_system::utils {
     TEST(string_format_test, format_handles_negative_int) {
         EXPECT_EQ(string_format_t::format("{}", -42), "-42");
         EXPECT_EQ(string_format_t::format("{}", -1), "-1");
+    }
+
+    /** Regression: nullptr 字面量曾匹配 string_view 分支触发 std::string_view(nullptr) UB（段错误） */
+    TEST(string_format_test, format_handles_nullptr_literal) {
+        EXPECT_EQ(string_format_t::format("{}", nullptr), "nullptr");
+        EXPECT_EQ(string_format_t::format("val={}", nullptr), "val=nullptr");
+    }
+
+    /** Regression: null const char* 同样匹配 string_view 分支，指针分支的 null 检查成为死代码 */
+    TEST(string_format_test, format_handles_null_char_pointer) {
+        const char* null_str = nullptr;
+        EXPECT_EQ(string_format_t::format("{}", null_str), "nullptr");
+    }
+
+    TEST(string_format_test, format_handles_null_object_pointer) {
+        const int* null_ptr = nullptr;
+        EXPECT_EQ(string_format_t::format("{}", null_ptr), "nullptr");
+    }
+
+    TEST(string_format_test, format_handles_non_null_object_pointer_as_hex_address) {
+        int value = 42;
+        const int* ptr = &value;
+        auto result = string_format_t::format("{}", ptr);
+        EXPECT_NE(result, "nullptr");
+        EXPECT_EQ(result.substr(0, 2), "0x");
     }
 
 }  // namespace error_system::utils
