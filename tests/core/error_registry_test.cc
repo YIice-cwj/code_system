@@ -334,6 +334,28 @@ namespace error_system::core {
         EXPECT_TRUE(registry.get_duplicate_warn_callback());
     }
 
+    /** Regression: warn 回调读注册表时自死锁（持写锁再获取共享锁） */
+    TEST_F(error_registry_test_t, duplicate_warn_callback_can_query_registry_without_deadlock) {
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database,
+                                 subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        error_registry_t::instance().register_error(code, "FIRST", "First");
+
+        std::atomic<bool> callback_returned{false};
+        error_registry_t::instance().set_duplicate_warn_callback(
+            [&callback_returned, code](code_t, const error_metadata_t&) {
+                /** 回调内读注册表，曾因写锁未释放导致自死锁 */
+                (void)error_registry_t::instance().is_registered(code);
+                (void)error_registry_t::instance().get_info(code);
+                callback_returned.store(true, std::memory_order_release);
+            });
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::warn);
+
+        error_registry_t::instance().register_error(code, "SECOND", "Second");
+
+        EXPECT_TRUE(callback_returned.load(std::memory_order_acquire));
+        error_registry_t::instance().set_duplicate_warn_callback(nullptr);
+    }
+
     TEST_F(error_registry_test_t, duplicate_warn_callback_not_called_on_first_registration) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 

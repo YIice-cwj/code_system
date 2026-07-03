@@ -114,12 +114,15 @@ namespace error_system::core {
          * @brief 注册单个错误码到所有索引（已持有锁）
          * @details 处理重复策略、移除旧条目、插入新条目到 primary_index_ / name_index_ /
          *          module_index_ / subsystem_index_。分配失败时记录日志并返回 false。
+         *          warn 策略下会临时释放 lock 调用用户回调后再重新加锁，避免回调读注册表时自死锁。
+         * @param lock 调用方持有的写锁（warn 场景下会被临时释放）
          * @param code 错误码
          * @param name 错误码名称
          * @param description 错误码描述
          * @return bool true=注册成功，false=跳过（重复策略拒绝或分配失败）
          */
-        bool register_single_entry_(error_code_t code, std::string_view name,
+        bool register_single_entry_(std::unique_lock<std::shared_mutex>& lock,
+                                    error_code_t code, std::string_view name,
                                     std::string_view description) noexcept;
 
         /**

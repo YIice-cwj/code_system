@@ -191,13 +191,29 @@ namespace error_system::core {
         code_t identity_code = code.get_identity_code();
         auto it = primary_index_.find(identity_code);
         if (it != primary_index_.end()) {
-            if (!duplicate_handler_.apply_duplicate_policy(identity_code, &it->second)) {
+            /**
+             * warn 策略下需调用用户回调，回调可能读注册表（再获取 index_mutex_ 共享锁），
+             * 持有写锁时调用会自死锁。先快照元数据，临时释放 lock 调用 apply_duplicate_policy，
+             * 再重新加锁。skip/overwrite 不触发回调，无需释放锁。
+             */
+            const auto policy = duplicate_handler_.get_policy();
+            if (policy == duplicate_policy_t::warn) {
+                error_metadata_t snapshot = it->second;
+                lock.unlock();
+                if (!duplicate_handler_.apply_duplicate_policy(identity_code, &snapshot)) {
+                    return;
+                }
+                lock.lock();
+            } else if (!duplicate_handler_.apply_duplicate_policy(identity_code, &it->second)) {
                 return;
             }
-            const uint64_t old_group_id = error_code_t{identity_code}.get_module_group_id();
-            erase_from_module_index_(old_group_id, identity_code);
-            name_index_.erase(it->second.name);
-            primary_index_.erase(it);
+            it = primary_index_.find(identity_code);
+            if (it != primary_index_.end()) {
+                const uint64_t old_group_id = error_code_t{identity_code}.get_module_group_id();
+                erase_from_module_index_(old_group_id, identity_code);
+                name_index_.erase(it->second.name);
+                primary_index_.erase(it);
+            }
         }
 
         try {
@@ -253,18 +269,36 @@ namespace error_system::core {
         }
     }
 
-    bool error_registry_t::register_single_entry_(error_code_t code, std::string_view name,
+    bool error_registry_t::register_single_entry_(std::unique_lock<std::shared_mutex>& lock,
+                                                  error_code_t code, std::string_view name,
                                                   std::string_view description) noexcept {
         code_t identity_code = code.get_identity_code();
         auto it = primary_index_.find(identity_code);
         if (it != primary_index_.end()) {
-            if (!duplicate_handler_.apply_duplicate_policy(identity_code, &it->second)) {
+            /**
+             * warn 策略下需调用用户回调，回调可能读注册表（再获取 index_mutex_ 共享锁），
+             * 持有写锁时调用会自死锁。先快照元数据，临时释放 lock 调用 apply_duplicate_policy，
+             * 再重新加锁。skip/overwrite 不触发回调，无需释放锁。
+             */
+            const auto policy = duplicate_handler_.get_policy();
+            if (policy == duplicate_policy_t::warn) {
+                error_metadata_t snapshot = it->second;
+                lock.unlock();
+                const bool proceed = duplicate_handler_.apply_duplicate_policy(identity_code, &snapshot);
+                lock.lock();
+                if (!proceed) {
+                    return false;
+                }
+            } else if (!duplicate_handler_.apply_duplicate_policy(identity_code, &it->second)) {
                 return false;
             }
-            const uint64_t old_group_id = error_code_t{identity_code}.get_module_group_id();
-            erase_from_module_index_(old_group_id, identity_code);
-            name_index_.erase(it->second.name);
-            primary_index_.erase(it);
+            it = primary_index_.find(identity_code);
+            if (it != primary_index_.end()) {
+                const uint64_t old_group_id = error_code_t{identity_code}.get_module_group_id();
+                erase_from_module_index_(old_group_id, identity_code);
+                name_index_.erase(it->second.name);
+                primary_index_.erase(it);
+            }
         }
 
         try {
@@ -300,7 +334,7 @@ namespace error_system::core {
 
         size_t registered_count = 0;
         for (size_t i = 0; i < codes.size(); ++i) {
-            if (register_single_entry_(codes[i], names[i], descriptions[i])) {
+            if (register_single_entry_(lock, codes[i], names[i], descriptions[i])) {
                 ++registered_count;
             }
         }
