@@ -50,7 +50,10 @@ public:
     }
 
     void on_error(const error_context_t& context) noexcept override {
-        ++counters_[context.get_code().get_code()];
+        try {
+            ++counters_[context.get_code().get_code()];
+        } catch (const std::bad_alloc&) {
+        }
     }
 
     int total() const noexcept {
@@ -141,7 +144,9 @@ int main() {
     if (chain_restored.has_value() && chain_restored->cause) {
         std::cout << "  顶层 message = " << chain_restored->message << std::endl;
         std::cout << "  中层 message = " << chain_restored->cause->message << std::endl;
-        std::cout << "  底层 message = " << chain_restored->cause->cause->message << std::endl;
+        if (chain_restored->cause->cause) {
+            std::cout << "  底层 message = " << chain_restored->cause->cause->message << std::endl;
+        }
     }
 
     // ============================================================

@@ -60,7 +60,10 @@ public:
     }
 
     void on_error(const error_context_t& context) noexcept override {
-        ++counters_[context.get_code().get_code()];
+        try {
+            ++counters_[context.get_code().get_code()];
+        } catch (const std::bad_alloc&) {
+        }
     }
 
     int total() const noexcept {
