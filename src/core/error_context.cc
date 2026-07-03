@@ -33,7 +33,7 @@ namespace error_system::core {
      * @brief 拷贝构造函数
      * @details 深拷贝 SSO payload、溢出 map，共享因果链（shared_ptr 引用计数）。
      *          POD 字段在初始化列表完成，string/容器拷贝放入 try 块，
-     *          避免 bad_alloc 突破 noexcept 触发 terminate（规范 14）。
+     *          避免 bad_alloc 突破 noexcept 触发 terminate。
      *          分配失败时对象处于部分构造状态，但调用方仍可安全析构。
      */
     error_context_t::error_context_t(const error_context_t& other) noexcept
@@ -49,6 +49,9 @@ namespace error_system::core {
             repair_source_location_pointers_();
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context] copy constructor: std::bad_alloc\n");
+            payload_count_ = 0;
+            payload_small_ = {};
+            payload_overflow_.reset();
             file_name = nullptr;
             source_location = {};
         }
@@ -72,9 +75,7 @@ namespace error_system::core {
             source_location = other.source_location;
             file_name = other.file_name;
             cause = std::move(other.cause);
-            if constexpr (error_system::config::feature_flags_t::STACKTRACE_ENABLED) {
-                stack_frames = std::move(other.stack_frames);
-            }
+            stack_frames = std::move(other.stack_frames);
             loc_file_storage_ = std::move(other.loc_file_storage_);
             loc_func_storage_ = std::move(other.loc_func_storage_);
             repair_source_location_pointers_();
