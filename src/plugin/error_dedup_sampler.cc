@@ -60,6 +60,9 @@ namespace error_system::plugin {
      * @details rate=1.0 全部放行，rate=0.1 放行 10%（每 10 个放行 1 个）。
      *          rate<=0 视为 0（全部抑制，慎用），rate>=1 视为 1（全部放行）。
      *          采用确定性计数器：第 (counter % interval == 0) 个放行。
+     *          极小 rate（1.0/rate 超过 SAFE_INTERVAL_LIMIT）直接走 SUPPRESS_ALL，
+     *          因 double 无法精确表示 UINT64_MAX（2^64-1，会舍入为 2^64），
+     *          static_cast<uint64_t> 会越界触发 UB，故用安全阈值提前拦截。
      * @param rate 采样率 [0.0, 1.0]
      */
     void error_dedup_sampler_t::set_sample_rate(double rate) noexcept {
@@ -69,11 +72,14 @@ namespace error_system::plugin {
         } else if (rate >= 1.0) {
             sample_interval_ = 0;
         } else {
-            // 对 1.0/rate 做上限钳制，避免 rate 极小时结果超出 uint64_t 表示范围导致转换 UB
-            const double interval = std::min<double>(1.0 / rate, double(UINT64_MAX));
-            sample_interval_ = static_cast<uint64_t>(interval);
-            if (sample_interval_ < 1) {
-                sample_interval_ = 1;
+            constexpr double SAFE_INTERVAL_LIMIT = 1e18;
+            if (1.0 / rate >= SAFE_INTERVAL_LIMIT) {
+                sample_interval_ = std::numeric_limits<uint64_t>::max();
+            } else {
+                sample_interval_ = static_cast<uint64_t>(1.0 / rate);
+                if (sample_interval_ < 1) {
+                    sample_interval_ = 1;
+                }
             }
         }
     }

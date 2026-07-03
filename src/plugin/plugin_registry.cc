@@ -173,6 +173,9 @@ namespace error_system::plugin {
     }  // namespace
 
     void plugin_registry_t::flush_deferred_notifications() noexcept {
+        if (tls_deferred_.flushing) {
+            return;
+        }
         if (tls_deferred_.buffer.empty()) {
             tls_deferred_.overflow_dropped = false;
             return;

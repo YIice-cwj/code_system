@@ -55,8 +55,8 @@ namespace error_system::plugin {
         if (handler) {
             try {
                 handler(context);
-            } catch (const std::exception& e) {
-                std::fprintf(stderr, "[error_router_plugin] handler exception caught and ignored: %s\n", e.what());
+            } catch (...) {
+                std::fprintf(stderr, "[error_router_plugin] handler exception caught and ignored\n");
             }
         }
     }
