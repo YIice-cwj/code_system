@@ -52,20 +52,30 @@ namespace error_system::utils {
         };
 
         /**
+         * @brief 弹出路径栈并裁剪路径前缀
+         * @details 遇到右括号 '}' 时回退一层：弹出 path_stack 栈顶，
+         *          将 path_prefix 裁剪到最后一个 '.' 之前（若无 '.' 则清空）
+         */
+        void pop_path_(parser_context_t& context) noexcept {
+            if (context.path_stack.empty()) {
+                return;
+            }
+            context.path_stack.pop_back();
+            const auto dot_pos = context.path_prefix.rfind('.');
+            if (dot_pos != std::string::npos) {
+                context.path_prefix.resize(dot_pos);
+            } else {
+                context.path_prefix.clear();
+            }
+        }
+
+        /**
          * @brief 处理期待键名或结束状态
          * @details 处理JSON解析器的解析状态为 expect_key_or_end 时的情况，包括遇到右括号 '}' 或键名（字符串）
          */
         bool handle_expect_key_or_end(parser_context_t& context, const json_lexer_t::token_t& token) noexcept {
             if (token.type == json_lexer_t::token_type_t::right_brace) {
-                if (!context.path_stack.empty()) {
-                    context.path_stack.pop_back();
-                    auto dot_pos = context.path_prefix.rfind('.');
-                    if (dot_pos != std::string::npos) {
-                        context.path_prefix.resize(dot_pos);
-                    } else {
-                        context.path_prefix.clear();
-                    }
-                }
+                pop_path_(context);
                 context.state = parse_state_t::expect_comma_or_end;
                 return true;
             }
@@ -148,15 +158,7 @@ namespace error_system::utils {
                 return true;
             }
             if (token.type == json_lexer_t::token_type_t::right_brace) {
-                if (!context.path_stack.empty()) {
-                    context.path_stack.pop_back();
-                    auto dot_pos = context.path_prefix.rfind('.');
-                    if (dot_pos != std::string::npos) {
-                        context.path_prefix.resize(dot_pos);
-                    } else {
-                        context.path_prefix.clear();
-                    }
-                }
+                pop_path_(context);
                 return true;
             }
             return false;

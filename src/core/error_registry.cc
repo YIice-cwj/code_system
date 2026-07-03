@@ -178,6 +178,9 @@ namespace error_system::core {
 
     /**
      * @brief 注册错误码
+     * @details 单条注册入口，委托 register_single_entry_ 完成实际注册逻辑，
+     *          避免与批量路径重复。bump_epoch_ 由本入口触发，
+     *          register_errors 批量路径在循环外统一触发一次。
      * @param code 错误码
      * @param name 错误码宏名称
      * @param description 错误码中文描述
@@ -187,57 +190,7 @@ namespace error_system::core {
                                           const std::string_view description) noexcept {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
         reserve_for_registration_(1);
-
-        code_t identity_code = code.get_identity_code();
-        auto it = primary_index_.find(identity_code);
-        if (it != primary_index_.end()) {
-            /**
-             * warn 策略下需调用用户回调，回调可能读注册表（再获取 index_mutex_ 共享锁），
-             * 持有写锁时调用会自死锁。先快照元数据，临时释放 lock 调用 apply_duplicate_policy，
-             * 再重新加锁。skip/overwrite 不触发回调，无需释放锁。
-             */
-            const auto policy = duplicate_handler_.get_policy();
-            if (policy == duplicate_policy_t::warn) {
-                error_metadata_t snapshot = it->second;
-                lock.unlock();
-                if (!duplicate_handler_.apply_duplicate_policy(identity_code, &snapshot)) {
-                    return;
-                }
-                lock.lock();
-            } else if (!duplicate_handler_.apply_duplicate_policy(identity_code, &it->second)) {
-                return;
-            }
-            it = primary_index_.find(identity_code);
-            if (it != primary_index_.end()) {
-                const uint64_t old_group_id = error_code_t{identity_code}.get_module_group_id();
-                erase_from_module_index_(old_group_id, identity_code);
-                name_index_.erase(it->second.name);
-                primary_index_.erase(it);
-            }
-        }
-
-        try {
-            error_metadata_t meta{
-                std::string(name), std::string(description), code.get_module(), code.get_number(), code.get_level()};
-            name_index_.emplace(meta.name, identity_code);
-            primary_index_.emplace(identity_code, std::move(meta));
-        } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] register_error: std::bad_alloc\n");
-            return;
-        }
-        try {
-            auto& module_codes = module_index_[code.get_module_group_id()];
-            module_codes.reserve(module_codes.size() + 1);
-            module_codes.push_back(identity_code);
-        } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] register_error: module_index std::bad_alloc\n");
-        }
-        try {
-            uint16_t subsystem_id = code.get_subsys();
-            subsystem_index_[subsystem_id].insert(code.get_module_group_id());
-        } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] register_error: subsystem_index std::bad_alloc\n");
-        }
+        register_single_entry_(lock, code, name, description);
         bump_epoch_();
     }
 
@@ -314,7 +267,9 @@ namespace error_system::core {
             return false;
         }
         try {
-            module_index_[code.get_module_group_id()].push_back(identity_code);
+            auto& module_codes = module_index_[code.get_module_group_id()];
+            module_codes.reserve(module_codes.size() + 1);
+            module_codes.push_back(identity_code);
             subsystem_index_[code.get_subsys()].insert(code.get_module_group_id());
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_registry] register_single_entry_: index std::bad_alloc\n");
