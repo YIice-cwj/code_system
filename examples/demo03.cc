@@ -171,35 +171,45 @@ int main() {
     std::cout << "  触发错误时立即通知" << std::endl;
     error_context_t ctx_sync{biz::trade_errors::ERR_ORDER_NOT_FOUND, "同步通知"};
 
-    section("6.2 async_queue 异步模式 + set_max_queue_size 背压");
+    section("6.2 async_queue 异步模式 + set_max_queue_size(100) 背压");
     feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::async_queue);
     registry.set_max_queue_size(100);
+    constexpr int ASYNC_TOTAL = 200;
+    for (int i = 0; i < ASYNC_TOTAL; ++i) {
+        error_context_t ctx{biz::trade_errors::ERR_ORDER_NOT_FOUND, "异步" + std::to_string(i)};
+    }
     std::cout << "  max_queue_size = " << registry.get_max_queue_size() << std::endl;
-    std::cout << "  pending = " << registry.pending_notifications() << std::endl;
-    error_context_t ctx_async{biz::trade_errors::ERR_ORDER_NOT_FOUND, "异步通知"};
-    std::cout << "  入队后 pending = " << registry.pending_notifications() << std::endl;
+    std::cout << "  入队 " << ASYNC_TOTAL << " 条后 pending = " << registry.pending_notifications()
+              << " (工作线程并发消费，pending 为瞬时值)" << std::endl;
 
-    section("6.3 sync_deferred 延迟模式 + set_deferred_buffer_size");
+    /** 清理已演示完的插件，避免后续 deferred flush 触发大量日志输出 */
+    registry.clear();
+
+    section("6.3 sync_deferred 延迟模式 + set_deferred_buffer_size(100)");
     feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::sync_deferred);
-    registry.set_deferred_buffer_size(1024);
+    registry.set_deferred_buffer_size(100);
     std::cout << "  buffer_size = " << registry.get_deferred_buffer_size() << std::endl;
 
-    section("6.4 pending_deferred_notifications 待通知数");
-    error_context_t d1{biz::trade_errors::ERR_ORDER_NOT_FOUND, "延迟1"};
-    error_context_t d2{biz::trade_errors::ERR_ORDER_NOT_FOUND, "延迟2"};
-    std::cout << "  pending = " << registry.pending_deferred_notifications() << std::endl;
+    section("6.4 批量入队 200 条验证缓冲溢出（不触发消费）");
+    constexpr int DEFER_TOTAL = 200;
+    for (int i = 0; i < DEFER_TOTAL; ++i) {
+        error_context_t d{biz::trade_errors::ERR_ORDER_NOT_FOUND, "延迟" + std::to_string(i)};
+    }
+    std::cout << "  预期 pending=100 丢弃=" << (DEFER_TOTAL - 100) << std::endl;
+    std::cout << "  实际 pending=" << registry.pending_deferred_notifications() << std::endl;
 
-    section("6.5 flush_deferred_notifications 批量通知");
+    section("6.5 deferred_buffer_overflowed 缓冲溢出标志");
+    std::cout << "  预期 overflowed=1" << std::endl;
+    std::cout << "  实际 overflowed = " << registry.deferred_buffer_overflowed() << std::endl;
+
+    section("6.6 flush_deferred_notifications 批量通知");
     registry.flush_deferred_notifications();
     std::cout << "  flush 后 pending = " << registry.pending_deferred_notifications() << std::endl;
 
-    section("6.6 clear_deferred_notifications 清空缓冲");
+    section("6.7 clear_deferred_notifications 清空缓冲");
     error_context_t d3{biz::trade_errors::ERR_ORDER_NOT_FOUND, "延迟3"};
     auto dropped = registry.clear_deferred_notifications();
     std::cout << "  清空丢弃数 = " << dropped << std::endl;
-
-    section("6.7 deferred_buffer_overflowed 缓冲溢出标志");
-    std::cout << "  overflowed = " << registry.deferred_buffer_overflowed() << std::endl;
 
     feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::sync);
     registry.clear();
@@ -207,30 +217,65 @@ int main() {
     // ============================================================
     // 七、错误去重采样器
     // ============================================================
-    section("7.1 error_dedup_sampler_t 去重窗口");
+    section("7.1 去重窗口验证：同错误码循环 100 次（rate=1.0 仅去重）");
     error_dedup_sampler_t sampler;
     sampler.set_dedup_window_ms(1000);  // 1 秒内同错误码去重
-    std::cout << "  dedup_window_ms = 1000" << std::endl;
+    sampler.set_sample_rate(1.0);       // 关闭采样，专注验证去重
+    sampler.reset_stats();
+    sampler.clear_dedup_cache();
+    error_context_t sample_ctx{biz::trade_errors::ERR_ORDER_NOT_FOUND, "去重测试"};
+    constexpr int DEDUP_TOTAL = 100;
+    int local_forwarded = 0;
+    for (int i = 0; i < DEDUP_TOTAL; ++i) {
+        if (sampler.should_be_forwarded(sample_ctx)) { ++local_forwarded; }
+    }
+    std::cout << "  预期 forwarded=1  deduped=" << (DEDUP_TOTAL - 1) << std::endl;
+    std::cout << "  实际 forwarded=" << sampler.forwarded_count()
+              << "  deduped=" << sampler.deduped_count()
+              << "  sampled=" << sampler.sampled_count() << std::endl;
+    std::cout << "  本地计数 forwarded=" << local_forwarded
+              << " (与采样器统计一致)" << std::endl;
 
-    section("7.2 set_sample_rate 采样率");
-    sampler.set_sample_rate(0.5);  // 50% 采样
-    std::cout << "  sample_rate = 0.5 (50% 采样)" << std::endl;
+    section("7.2 采样率验证：不同错误码循环 1000 次（rate=0.5 window=0）");
+    sampler.set_dedup_window_ms(0);     // 关闭去重，专注验证采样
+    sampler.set_sample_rate(0.5);       // 确定性计数器：每 2 个放行 1 个
+    sampler.reset_stats();
+    sampler.clear_dedup_cache();
+    constexpr int SAMPLE_TOTAL = 1000;
+    int local_sample_forwarded = 0;
+    for (int i = 0; i < SAMPLE_TOTAL; ++i) {
+        /**
+         * 构造 identity_code 互不相同的错误码，避免去重表命中干扰采样统计。
+         * number 字段递增即可让 identity_code 单调变化。
+         */
+        error_code_t code{error_level_t::error,
+                          system_domain_t::application,
+                          subsystem_id_t{1},
+                          module_id_t{1},
+                          error_number_t{static_cast<uint16_t>(i + 1)}};
+        error_context_t ctx{code, "采样测试"};
+        if (sampler.should_be_forwarded(ctx)) { ++local_sample_forwarded; }
+    }
+    const int expected_forward = SAMPLE_TOTAL / 2;
+    const int expected_sampled = SAMPLE_TOTAL - expected_forward;
+    std::cout << "  预期 forwarded=" << expected_forward
+              << "  sampled=" << expected_sampled << std::endl;
+    std::cout << "  实际 forwarded=" << sampler.forwarded_count()
+              << "  sampled=" << sampler.sampled_count()
+              << "  deduped=" << sampler.deduped_count() << std::endl;
+    std::cout << "  本地计数 forwarded=" << local_sample_forwarded
+              << " (与采样器统计一致)" << std::endl;
 
-    section("7.3 should_be_forwarded 判定是否放行");
-    error_context_t sample_ctx{biz::trade_errors::ERR_ORDER_NOT_FOUND, "采样测试"};
-    bool forward = sampler.should_be_forwarded(sample_ctx);
-    std::cout << "  should_be_forwarded = " << forward << std::endl;
-
-    section("7.4 deduped_count / sampled_count / forwarded_count 统计");
+    section("7.3 deduped_count / sampled_count / forwarded_count 统计查询");
     std::cout << "  deduped  = " << sampler.deduped_count() << std::endl;
     std::cout << "  sampled  = " << sampler.sampled_count() << std::endl;
     std::cout << "  forwarded= " << sampler.forwarded_count() << std::endl;
 
-    section("7.5 reset_stats 重置统计");
+    section("7.4 reset_stats 重置统计");
     sampler.reset_stats();
     std::cout << "  重置后 forwarded = " << sampler.forwarded_count() << std::endl;
 
-    section("7.6 clear_dedup_cache 清空去重缓存");
+    section("7.5 clear_dedup_cache 清空去重缓存");
     sampler.clear_dedup_cache();
     std::cout << "  缓存已清空" << std::endl;
 

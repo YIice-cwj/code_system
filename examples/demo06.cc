@@ -196,15 +196,16 @@ int main() {
     std::cout << "  message = " << joined_single.message << std::endl;
     std::cout << "  payload 项数 = " << joined_single.payload_size() << " (单元素不附加 payload)" << std::endl;
 
-    section("4.3 join_errors 多元素（主错误 + joined_error_N payload）");
-    std::vector<error_context_t> multi_errs = {
-        error_context_t{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单不存在"},
-        error_context_t{biz::payment_errors::ERR_INSUFFICIENT_BALANCE, "余额不足"},
-        error_context_t{biz::user_errors::ERR_TOKEN_EXPIRED, "Token 过期"},
-    };
+    section("4.3 join_errors 多元素（10 条：主错误 + joined_error_1..9）");
+    std::vector<error_context_t> multi_errs;
+    multi_errs.reserve(10);
+    for (int i = 0; i < 10; ++i) {
+        multi_errs.emplace_back(biz::trade_errors::ERR_ORDER_NOT_FOUND, "错误" + std::to_string(i));
+    }
     auto joined = join_errors(std::move(multi_errs));
+    std::cout << "  预期 payload 项数 = 9 (joined_error_1..9)" << std::endl;
     std::cout << "  主错误 message = " << joined.message << std::endl;
-    std::cout << "  聚合后 payload 项数 = " << joined.payload_size() << std::endl;
+    std::cout << "  实际 payload 项数 = " << joined.payload_size() << std::endl;
     joined.for_each_payload([](const std::string& k, const std::string& v) {
         std::cout << "    " << k << " = " << v << std::endl;
     });
@@ -313,9 +314,24 @@ int main() {
         std::cout << "  " << result_c.error().message << std::endl;
     }
 
-    section("6.6 插件统计结果（min_level=error 过滤 info）");
-    std::cout << "  总错误数 = " << stats.total() << std::endl;
-    std::cout << "  (场景B 的 fatal 被统计，场景C 的 info 被过滤)" << std::endl;
+    section("6.6 批量验证 min_level 过滤：循环 50 error + 50 info");
+    constexpr int BATCH_ERROR = 50;
+    constexpr int BATCH_INFO = 50;
+    for (int i = 0; i < BATCH_ERROR; ++i) {
+        error_context_t ctx{biz::trade_errors::ERR_ORDER_NOT_FOUND, "批量error" + std::to_string(i)};
+    }
+    for (int i = 0; i < BATCH_INFO; ++i) {
+        error_context_t ctx{biz::user_errors::ERR_TOKEN_EXPIRED, "批量info" + std::to_string(i)};
+    }
+    std::cout << "  预期新增 " << BATCH_ERROR
+              << " (error 被统计，info 被 min_level=error 过滤)" << std::endl;
+
+    section("6.7 插件统计结果");
+    /** 场景B 触发 1 次 fatal（ERR_ACCOUNT_FROZEN），批量触发 50 次 error */
+    constexpr int EXPECTED_TOTAL = 1 + BATCH_ERROR;
+    std::cout << "  预期 total=" << EXPECTED_TOTAL
+              << " (场景B fatal 1 + 批量 error " << BATCH_ERROR << ")" << std::endl;
+    std::cout << "  实际 total = " << stats.total() << std::endl;
 
     plugin_registry.unregister_plugin("stats");
 
