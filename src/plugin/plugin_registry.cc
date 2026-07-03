@@ -95,7 +95,6 @@ namespace error_system::plugin {
             auto it = std::find_if(snapshot.begin(), snapshot.end(),
                 [&name](const shared_plugin_ptr_t& plugin) { return plugin->name() == name; });
             if (it != snapshot.end()) {
-                // 若被替换的旧条目是 owning 插件，同步从 owned 中移除，避免悬挂所有权
                 auto* old_ptr = it->get();
                 owned.erase(std::remove_if(owned.begin(), owned.end(),
                                 [old_ptr](const shared_plugin_ptr_t& p) { return p.get() == old_ptr; }),
@@ -126,7 +125,6 @@ namespace error_system::plugin {
         auto snapshot = std::atomic_load(&plugins_snapshot_);
         for (const auto& plugin : *snapshot) {
             if (context.get_code().get_level() >= plugin->min_level()) {
-                // on_error 为 noexcept override，插件实现必须保证不抛异常，否则 std::terminate
                 plugin->on_error(context);
             }
         }

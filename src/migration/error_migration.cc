@@ -41,9 +41,6 @@ namespace error_system::migration {
 
     void error_migration_registry_t::mark_deprecated(error_code_t code,
                                                       const deprecation_meta_t& meta) noexcept {
-        // try 块内仅涉及 mutex 上锁、string 拷贝与 unordered_map 插入，
-        // 预期仅可能抛出 std::bad_alloc；其余异常类型不在此捕获（遵循规范第 14 条：
-        // 禁止捕获过宽异常类型）。
         try {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             deprecation_info_t info;
@@ -106,7 +103,6 @@ namespace error_system::migration {
         std::unordered_set<code_t> visited;
         try {
             for (size_t i = 0; i < MAX_MIGRATION_RECURSION_DEPTH; ++i) {
-                // 环检测：若当前码已存在于已访问集合，说明存在环，返回当前码
                 if (!visited.insert(current).second) {
                     break;
                 }
@@ -128,9 +124,6 @@ namespace error_system::migration {
         if (it == deprecations_.end()) {
             return false;
         }
-        // 若废弃信息中包含替代码，同步清理由 mark_deprecated 隐式建立的迁移项。
-        // 此处已持有 unique_lock，不能调用 unregister_migration（会重复加锁导致死锁），
-        // 直接擦除 migrations_ 中对应条目即可。
         if (it->second.replacement) {
             migrations_.erase(code.get_identity_code());
         }
