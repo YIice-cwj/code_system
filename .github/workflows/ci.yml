@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DERROR_SYSTEM_BUILD_TESTS=ON \
+            -DERROR_SYSTEM_BUILD_EXAMPLES=ON \
+            -DERROR_SYSTEM_BUILD_PERF_TESTS=OFF \
+            -DERROR_SYSTEM_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build -j $(nproc 2>/dev/null || sysctl -n hw.ncpu)
+
+      - name: Verify error dictionary generation
+        run: |
+          if [ ! -f build/generated_errors/error_dictionary.md ]; then
+            echo "::error::error_dictionary.md was not generated"
+            exit 1
+          fi
+          if [ ! -f build/generated_errors/include/error_dict.h ]; then
+            echo "::error::error_dict.h was not generated"
+            exit 1
+          fi
+          echo "Error dictionary generated successfully"
+
+      - name: Test
+        run: |
+          cd build
+          ctest -j $(nproc 2>/dev/null || sysctl -n hw.ncpu) --output-on-failure
+
+  sanitizer-check:
+    name: ASan + UBSan (ubuntu-latest)
+    runs-on: ubuntu-latest
+    env:
+      BUILD_TYPE: Debug
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Configure with sanitizers
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DERROR_SYSTEM_BUILD_TESTS=ON \
+            -DERROR_SYSTEM_BUILD_EXAMPLES=OFF \
+            -DERROR_SYSTEM_BUILD_PERF_TESTS=OFF \
+            -DERROR_SYSTEM_ENABLE_ASAN=ON \
+            -DERROR_SYSTEM_ENABLE_UBSAN=ON \
+            -DERROR_SYSTEM_WARNINGS_AS_ERRORS=ON
+
+      - name: Build with sanitizers
+        run: cmake --build build -j $(nproc)
+
+      - name: Test with sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:abort_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:abort_on_error=1
+        run: |
+          cd build
+          ctest -j $(nproc) --output-on-failure
