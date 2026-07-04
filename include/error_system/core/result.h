@@ -70,20 +70,19 @@ namespace error_system::core {
      * @details 封装结果信息，提供字段解析和访问功能。
      *          强制错误检查：Debug 构建下析构时检测未检查的错误状态。
      * @tparam T 结果类型
+     * @tparam Lean 是否为精简模式。Lean=true 时错误路径仅携带 error_code_t（无 message/
+     *              payload/cause/stack），成功路径与完整模式一致。适用于热路径性能敏感场景。
+     *              Lean 模式下 error() 返回值类型 error_context_t（值语义，临时构造仅含 code），
+     *              不携带原始 message/payload/cause/stack；context() 方法不可用。
      */
-    template <typename T>
+    template <typename T, bool Lean = false>
     class result_t {
     public:
         using value_type_t = T;
 
     private:
-        std::variant<value_type_t, error_context_t> value_or_error_{};
-        /**
-         * @brief 错误检查标志位
-         * @details 调用 is_error/is_success/value/error/operator bool/value_pointer/
-         *          value_or/match 任一后置位。Debug 析构时检测错误状态下未置位的情况。
-         *          Release 构建下因 NDEBUG，检查逻辑被消除，标志位本身因无读者也被优化。
-         */
+        using error_storage_t = std::conditional_t<Lean, error_code_t, error_context_t>;
+        std::variant<value_type_t, error_storage_t> value_or_error_{};
         mutable bool checked_{false};
 
         /**
@@ -93,14 +92,22 @@ namespace error_system::core {
          */
         void check_on_destroy_() const noexcept;
 
+        /**
+         * @brief Lean 模式专用私有构造函数
+         * @details Lean 模式下从 error_code_t 直接构造错误结果，无堆分配。
+         *          完整模式下此构造函数不存在（if constexpr 分支不使用）。
+         */
+        explicit result_t(error_code_t code) noexcept(std::is_nothrow_move_constructible_v<error_code_t>);
+
     public:
         /**
          * @brief 错误构造工厂函数（推荐）
          * @details 替代直接使用构造函数构造错误结果，语义更清晰。
          *          避免构造函数重载混淆（value vs error_context vs error_code）。
+         *          Lean 模式下忽略 message/location，仅存储 error_code_t。
          * @param code 错误码
-         * @param message 错误信息，默认为空
-         * @param location 源位置（默认捕获调用者位置）
+         * @param message 错误信息，默认为空（Lean 模式下忽略）
+         * @param location 源位置（默认捕获调用者位置，Lean 模式下忽略）
          * @return result_t 包装了错误的结果对象
          *
          * @example
@@ -108,24 +115,26 @@ namespace error_system::core {
          * return result_t<int>::make_error(ERR_DB_FAIL, "数据库操作失败");
          */
         [[nodiscard]] static result_t make_error(error_code_t code, const std::string& message = "",
-                                                 utils::source_location_t location = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<error_context_t>);
+                                                 utils::source_location_t location = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
 
         /**
          * @brief 错误构造工厂函数（移动消息版本）
+         * @details Lean 模式下忽略 message，仅存储 error_code_t。
          * @param code 错误码
          * @param message 错误信息
          * @param location 源位置（默认捕获调用者位置）
          * @return result_t 包装了错误的结果对象
          */
         [[nodiscard]] static result_t make_error(error_code_t code, std::string&& message,
-                                                 utils::source_location_t location = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<error_context_t>);
+                                                 utils::source_location_t location = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
 
         /**
          * @brief 错误构造工厂函数（从已有 error_context_t）
+         * @details Lean 模式下从 context 中提取 error_code_t 存储，丢弃其余信息。
          * @param context 错误上下文
          * @return result_t 包装了错误的结果对象
          */
-        [[nodiscard]] static result_t make_error(const error_context_t& context) noexcept(std::is_nothrow_copy_constructible_v<error_context_t>);
+        [[nodiscard]] static result_t make_error(const error_context_t& context) noexcept(std::is_nothrow_copy_constructible_v<error_storage_t>);
 
         /**
          * @brief 创建成功结果
@@ -151,30 +160,30 @@ namespace error_system::core {
          * @brief 构造函数
          * @param error_context 错误上下文
          */
-        explicit result_t(const error_context_t& error_context) noexcept(std::is_nothrow_copy_constructible_v<error_context_t>);
+        explicit result_t(const error_context_t& error_context) noexcept(std::is_nothrow_copy_constructible_v<error_storage_t>);
 
         /**
          * @brief 移动构造函数（从错误上下文右值）
          * @param error_context 错误上下文右值
          */
-        explicit result_t(error_context_t&& error_context) noexcept(std::is_nothrow_move_constructible_v<error_context_t>);
+        explicit result_t(error_context_t&& error_context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
 
         /**
-         * @brief 拷贝构造，noexcept 性跟随 value_type_t 与 error_context_t
+         * @brief 拷贝构造，noexcept 性跟随 value_type_t 与 error_storage_t
          * @details 拷贝时清空 checked_，新对象需要独立检查错误
          */
         result_t(const result_t& other) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>
-                                                 && std::is_nothrow_copy_constructible_v<error_context_t>);
+                                                 && std::is_nothrow_copy_constructible_v<error_storage_t>);
         /**
          * @brief 移动构造，noexcept 性跟随 value_type_t
-         * @details error_context_t 已保证 noexcept 移动。无条件 noexcept 会在 T 抛出移动异常时调用 std::terminate。
+         * @details error_storage_t 已保证 noexcept 移动。无条件 noexcept 会在 T 抛出移动异常时调用 std::terminate。
          *          移动时转移 checked_ 状态，源对象标记为已检查避免其析构断言。
          */
         result_t(result_t&& other) noexcept(std::is_nothrow_move_constructible_v<value_type_t>);
         result_t& operator=(const result_t&) noexcept = delete;
         /**
          * @brief 移动赋值，noexcept 性跟随 value_type_t
-         * @details error_context_t 已保证 noexcept 移动赋值。允许复用变量，改善易用性。
+         * @details error_storage_t 已保证 noexcept 移动赋值。允许复用变量，改善易用性。
          *          赋值前先检查自身未消费的错误，然后转移 checked_ 状态。
          */
         result_t& operator=(result_t&& other) noexcept(std::is_nothrow_move_assignable_v<value_type_t>);
@@ -199,19 +208,30 @@ namespace error_system::core {
 
         /**
          * @brief 获取错误上下文
-         * @details 使用 std::get_if 安全获取，若当前为成功状态则返回线程局部哨兵值（空 error_context_t）。
+         * @details 完整模式：使用 std::get_if 安全获取，若当前为成功状态则返回线程局部哨兵值（空 error_context_t）。
          *          调用方应在调用前通过 is_error() 检查，否则返回的哨兵值 is_error() 为 false。
-         * @return const error_context_t& 错误上下文
+         *          Lean 模式：返回值类型 error_context_t（临时构造仅含 code，无 message/payload/cause/stack）。
+         * @return 完整模式 const error_context_t&；Lean 模式 error_context_t 值
          */
-        [[nodiscard]] const error_context_t& error() const noexcept;
+        [[nodiscard]] auto error() const noexcept
+            -> std::conditional_t<Lean, error_context_t, const error_context_t&>;
 
         /**
-         * @brief 获取错误上下文（可变引用）
-         * @details 使用 std::get_if 安全获取，若当前为成功状态则返回线程局部哨兵值。
-         *          调用方应在调用前通过 is_error() 检查，否则返回的哨兵值无意义。
+         * @brief 获取错误上下文（可变引用，仅完整模式）
+         * @details 完整模式：返回可变引用，允许通过 context() 等方法修改 payload。
+         *          Lean 模式：此方法不可用（SFINAE 禁用），因 Lean 不携带可变 payload。
          * @return error_context_t& 错误上下文可变引用
          */
+        template <bool L = Lean, typename = std::enable_if_t<!L>>
         [[nodiscard]] error_context_t& error() noexcept;
+
+        /**
+         * @brief 获取错误码（Lean 模式专用）
+         * @details Lean 模式下直接返回存储的 error_code_t，无堆分配。
+         *          完整模式下从 error_context_t 提取 code。
+         * @return error_code_t 错误码
+         */
+        [[nodiscard]] error_code_t error_code() const noexcept;
 
         /**
          * @brief 获取成功值
@@ -291,16 +311,14 @@ namespace error_system::core {
          */
         template <typename Function>
         [[nodiscard]] auto map(Function&& function) const& noexcept
-            -> result_t<decltype(std::invoke(std::forward<Function>(function),
-                                             std::declval<const value_type_t&>()))>;
+            -> result_t<decltype(std::invoke(std::forward<Function>(function), std::declval<const value_type_t&>())), Lean>;
 
         /**
          * @brief 对成功值进行映射转换（移动语义）
          */
         template <typename Function>
         [[nodiscard]] auto map(Function&& function) && noexcept
-            -> result_t<decltype(std::invoke(std::forward<Function>(function),
-                                             std::move(value())))>;
+            -> result_t<decltype(std::invoke(std::forward<Function>(function), std::move(value()))), Lean>;
 
         /**
          * @brief 对错误上下文进行映射转换
@@ -309,13 +327,13 @@ namespace error_system::core {
          * @return result_t 映射后的结果，成功时保持不变
          */
         template <typename Function>
-        [[nodiscard]] result_t<value_type_t> map_error(Function&& function) const& noexcept;
+        [[nodiscard]] result_t<value_type_t, Lean> map_error(Function&& function) const& noexcept;
 
         /**
          * @brief 对错误上下文进行映射转换（移动语义）
          */
         template <typename Function>
-        [[nodiscard]] result_t<value_type_t> map_error(Function&& function) && noexcept;
+        [[nodiscard]] result_t<value_type_t, Lean> map_error(Function&& function) && noexcept;
 
         /**
          * @brief 对结果进行链式操作（右值引用版本）
@@ -358,7 +376,7 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象（移动语义）
          */
         template <typename Function>
-        [[nodiscard]] result_t<value_type_t> or_else(Function&& function) && noexcept;
+        [[nodiscard]] result_t<value_type_t, Lean> or_else(Function&& function) && noexcept;
 
         /**
          * @brief 对错误结果进行链式操作（左值引用版本）
@@ -368,7 +386,7 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象的副本
          */
         template <typename Function>
-        [[nodiscard]] result_t<value_type_t> or_else(Function&& function) & noexcept;
+        [[nodiscard]] result_t<value_type_t, Lean> or_else(Function&& function) & noexcept;
 
         /**
          * @brief 模式匹配处理成功和错误两种路径
@@ -391,21 +409,23 @@ namespace error_system::core {
          * @details 错误时对内部 error_context 调用 with(key, value) 追加负载，成功时无操作。
          *          完美转发到 error_context_t::with() 的 7 个重载，避免 API 表面积膨胀。
          *          典型用法：`return inner_call().context("host", host_);`
+         *          Lean 模式下此方法不可用（编译期 SFINAE 禁用），因 Lean 不携带 payload。
          * @tparam K 键类型（支持 string/string_view/const char*）
          * @tparam V 值类型（支持 string 及任意可转 string 的类型）
          * @param key 负载键
          * @param value 负载值
          * @return result_t& 自身引用（错误时已附加 payload，成功时保持原样）
          */
-        template <typename K, typename V>
+        template <typename K, typename V, bool L = Lean, typename = std::enable_if_t<!L>>
         result_t& context(K&& key, V&& value) & noexcept;
 
         /**
          * @brief 传播时附加 payload 上下文（右值版本）
-         * @details 与左值版本语义一致，返回移动后的新对象，适用于链式调用末尾
+         * @details 与左值版本语义一致，返回移动后的新对象，适用于链式调用末尾。
+         *          Lean 模式下此方法不可用。
          * @return result_t 移动后的结果对象
          */
-        template <typename K, typename V>
+        template <typename K, typename V, bool L = Lean, typename = std::enable_if_t<!L>>
         [[nodiscard]] result_t context(K&& key, V&& value) && noexcept;
     };
 
@@ -413,16 +433,18 @@ namespace error_system::core {
      * @brief 模板特化：当 T 为 void 时，特化为不包含值的 result_t
      * @details 特化 result_t 类模板，当 T 为 void 时，不存储值。
      *          成功路径持有 std::monostate（零 error_context_t 构造开销），
-     *          失败路径持有完整 error_context_t。
+     *          失败路径持有 error_storage_t（Lean 模式为 error_code_t，完整模式为 error_context_t）。
      *          强制错误检查：Debug 构建下析构时检测未检查的错误状态。
+     * @tparam Lean 是否为精简模式，与主模板语义一致
      */
-    template <>
-    class result_t<void> {
+    template <bool Lean>
+    class result_t<void, Lean> {
     public:
         using value_type_t = void;
 
     private:
-        std::variant<std::monostate, error_context_t> storage_;
+        using error_storage_t = std::conditional_t<Lean, error_code_t, error_context_t>;
+        std::variant<std::monostate, error_storage_t> storage_;
         mutable bool checked_{false};
 
         /**
@@ -430,6 +452,12 @@ namespace error_system::core {
          * @details 与主模板同名方法语义一致
          */
         void check_on_destroy_() const noexcept;
+
+        /**
+         * @brief Lean 模式专用私有构造函数
+         * @details 与主模板同名构造语义一致
+         */
+        explicit result_t(error_code_t code) noexcept;
 
     public:
         /**
@@ -445,30 +473,33 @@ namespace error_system::core {
 
         /**
          * @brief 错误构造工厂函数
+         * @details Lean 模式下忽略 message/location，仅存储 error_code_t。
          * @param code 错误码
-         * @param message 错误信息，默认为空
-         * @param location 源位置（默认捕获调用者位置）
+         * @param message 错误信息，默认为空（Lean 模式下忽略）
+         * @param location 源位置（默认捕获调用者位置，Lean 模式下忽略）
          * @return result_t<void> 包装了错误的结果对象
          */
-        [[nodiscard]] static result_t<void> make_error(error_code_t code, const std::string& message = "",
-                                                       utils::source_location_t location = utils::source_location_t::current()) noexcept;
+        [[nodiscard]] static result_t make_error(error_code_t code, const std::string& message = "",
+                                                 utils::source_location_t location = utils::source_location_t::current()) noexcept;
 
         /**
          * @brief 错误构造工厂函数（移动消息版本）
+         * @details Lean 模式下忽略 message，仅存储 error_code_t。
          * @param code 错误码
          * @param message 错误信息
          * @param location 源位置（默认捕获调用者位置）
          * @return result_t<void> 包装了错误的结果对象
          */
-        [[nodiscard]] static result_t<void> make_error(error_code_t code, std::string&& message,
-                                                       utils::source_location_t location = utils::source_location_t::current()) noexcept;
+        [[nodiscard]] static result_t make_error(error_code_t code, std::string&& message,
+                                                 utils::source_location_t location = utils::source_location_t::current()) noexcept;
 
         /**
          * @brief 错误构造工厂函数（从已有 error_context_t）
+         * @details Lean 模式下从 context 中提取 error_code_t 存储，丢弃其余信息。
          * @param context 错误上下文
          * @return result_t<void> 包装了错误的结果对象
          */
-        [[nodiscard]] static result_t<void> make_error(const error_context_t& context) noexcept;
+        [[nodiscard]] static result_t make_error(const error_context_t& context) noexcept;
 
         /**
          * @brief 创建成功结果
@@ -487,7 +518,7 @@ namespace error_system::core {
          * @brief 移动构造函数（从错误上下文右值）
          * @param error_context 错误上下文右值
          */
-        explicit result_t(error_context_t&& error_context) noexcept(std::is_nothrow_move_constructible_v<error_context_t>);
+        explicit result_t(error_context_t&& error_context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
 
         /**
          * @brief 布尔转换运算符
@@ -509,21 +540,27 @@ namespace error_system::core {
 
         /**
          * @brief 获取错误上下文
-         * @details 使用 std::get_if 安全获取，若当前为成功状态则返回线程局部哨兵值（空 error_context_t）。
-         *          前置条件：调用方应先通过 is_error() 检查，否则返回的哨兵值 is_error() 为 false，
-         *          且 debug 构建会触发 assert。
-         * @return const error_context_t& 错误上下文
+         * @details 完整模式：使用 std::get_if 安全获取，若当前为成功状态则返回线程局部哨兵值。
+         *          Lean 模式：返回值类型 error_context_t（临时构造仅含 code）。
+         * @return 完整模式 const error_context_t&；Lean 模式 error_context_t 值
          */
-        [[nodiscard]] const error_context_t& error() const noexcept;
+        [[nodiscard]] auto error() const noexcept
+            -> std::conditional_t<Lean, error_context_t, const error_context_t&>;
 
         /**
-         * @brief 获取错误上下文（可变引用）
-         * @details 使用 std::get_if 安全获取，若当前为成功状态则返回线程局部哨兵值。
-         *          前置条件：调用方应先通过 is_error() 检查，否则返回的哨兵值无意义，
-         *          且 debug 构建会触发 assert。
-         * @return error_context_t& 错误上下文可变引用
+         * @brief 获取错误上下文（可变引用，仅完整模式）
+         * @details 与主模板同名方法语义一致
          */
+        template <bool L = Lean, typename = std::enable_if_t<!L>>
         [[nodiscard]] error_context_t& error() noexcept;
+
+        /**
+         * @brief 获取错误码（Lean 模式专用）
+         * @details Lean 模式下直接返回存储的 error_code_t，无堆分配。
+         *          完整模式下从 error_context_t 提取 code。
+         * @return error_code_t 错误码
+         */
+        [[nodiscard]] error_code_t error_code() const noexcept;
 
         /**
          * @brief 对结果进行链式操作（右值引用版本）
@@ -554,13 +591,13 @@ namespace error_system::core {
          * @return result_t<void> 映射后的结果,成功时保持不变
          */
         template <typename Function>
-        [[nodiscard]] result_t<void> map_error(Function&& function) const& noexcept;
+        [[nodiscard]] result_t<void, Lean> map_error(Function&& function) const& noexcept;
 
         /**
          * @brief 对错误上下文进行映射转换（移动语义）
          */
         template <typename Function>
-        [[nodiscard]] result_t<void> map_error(Function&& function) && noexcept;
+        [[nodiscard]] result_t<void, Lean> map_error(Function&& function) && noexcept;
 
         /**
          * @brief 对错误结果进行链式操作（右值引用版本）
@@ -570,7 +607,7 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象（移动语义）
          */
         template <typename Function>
-        [[nodiscard]] result_t<void> or_else(Function&& function) && noexcept;
+        [[nodiscard]] result_t<void, Lean> or_else(Function&& function) && noexcept;
 
         /**
          * @brief 对错误结果进行链式操作（左值引用版本）
@@ -580,23 +617,25 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象的副本
          */
         template <typename Function>
-        [[nodiscard]] result_t<void> or_else(Function&& function) & noexcept;
+        [[nodiscard]] result_t<void, Lean> or_else(Function&& function) & noexcept;
 
         /**
          * @brief 传播时附加 payload 上下文（左值版本）
          * @details 错误时对内部 error_context 调用 with(key, value) 追加负载，成功时无操作。
          *          完美转发到 error_context_t::with() 的 7 个重载。
+         *          Lean 模式下此方法不可用。
          * @return result_t<void>& 自身引用
          */
-        template <typename K, typename V>
-        result_t<void>& context(K&& key, V&& value) & noexcept;
+        template <typename K, typename V, bool L = Lean, typename = std::enable_if_t<!L>>
+        result_t& context(K&& key, V&& value) & noexcept;
 
         /**
          * @brief 传播时附加 payload 上下文（右值版本）
+         * @details Lean 模式下此方法不可用。
          * @return result_t<void> 移动后的结果对象
          */
-        template <typename K, typename V>
-        [[nodiscard]] result_t<void> context(K&& key, V&& value) && noexcept;
+        template <typename K, typename V, bool L = Lean, typename = std::enable_if_t<!L>>
+        [[nodiscard]] result_t context(K&& key, V&& value) && noexcept;
     };
 
 }  // namespace error_system::core
