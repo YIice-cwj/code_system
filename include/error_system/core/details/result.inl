@@ -7,7 +7,7 @@
  *          Lean=true 时错误路径仅存储 error_code_t，省去 error_context_t 的
  *          message/payload/cause/stack 开销，适用于热路径性能敏感场景。
  * @author yiice
- * @version 2.4.0
+ * @version 3.0.0
  * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */
@@ -176,7 +176,7 @@ namespace error_system::core {
     }
 
     template <typename T, bool Lean>
-    template <bool L, typename>
+    template <bool IsLean, typename>
     error_context_t& result_t<T, Lean>::error() noexcept {
         checked_ = true;
         assert(std::holds_alternative<error_storage_t>(value_or_error_) && "result_t::error() called on a success result");
@@ -438,27 +438,27 @@ namespace error_system::core {
     }
 
     template <typename T, bool Lean>
-    template <typename SuccessFn, typename ErrorFn>
-    auto result_t<T, Lean>::match(SuccessFn&& success_fn, ErrorFn&& error_fn) const
-        noexcept(std::is_nothrow_invocable_v<SuccessFn&, const value_type_t&>
-                 && std::is_nothrow_invocable_v<ErrorFn&, const error_context_t&>)
-        -> decltype(success_fn(std::declval<const value_type_t&>())) {
+    template <typename SuccessFunction, typename ErrorFunction>
+    auto result_t<T, Lean>::match(SuccessFunction&& success_function, ErrorFunction&& error_function) const
+        noexcept(std::is_nothrow_invocable_v<SuccessFunction&, const value_type_t&>
+                 && std::is_nothrow_invocable_v<ErrorFunction&, const error_context_t&>)
+        -> decltype(success_function(std::declval<const value_type_t&>())) {
         checked_ = true;
         if (std::holds_alternative<value_type_t>(value_or_error_)) {
             auto* ptr = std::get_if<value_type_t>(&value_or_error_);
             if (ptr) {
-                return success_fn(*ptr);
+                return success_function(*ptr);
             }
         } else {
             if constexpr (Lean) {
                 auto* code_ptr = std::get_if<error_code_t>(&value_or_error_);
                 if (code_ptr) {
-                    return error_fn(error_context_t::make_minimal(*code_ptr));
+                    return error_function(error_context_t::make_minimal(*code_ptr));
                 }
             } else {
                 auto* ctx_ptr = std::get_if<error_context_t>(&value_or_error_);
                 if (ctx_ptr) {
-                    return error_fn(*ctx_ptr);
+                    return error_function(*ctx_ptr);
                 }
             }
         }
@@ -466,22 +466,22 @@ namespace error_system::core {
     }
 
     template <typename T, bool Lean>
-    template <typename K, typename V, bool L, typename>
-    result_t<T, Lean>& result_t<T, Lean>::context(K&& key, V&& value) & noexcept {
+    template <typename Key, typename V, bool IsLean, typename>
+    result_t<T, Lean>& result_t<T, Lean>::context(Key&& key, V&& value) & noexcept {
         if constexpr (!Lean) {
             if (is_error()) {
-                error().with(std::forward<K>(key), std::forward<V>(value));
+                error().with(std::forward<Key>(key), std::forward<V>(value));
             }
         }
         return *this;
     }
 
     template <typename T, bool Lean>
-    template <typename K, typename V, bool L, typename>
-    result_t<T, Lean> result_t<T, Lean>::context(K&& key, V&& value) && noexcept {
+    template <typename Key, typename V, bool IsLean, typename>
+    result_t<T, Lean> result_t<T, Lean>::context(Key&& key, V&& value) && noexcept {
         if constexpr (!Lean) {
             if (is_error()) {
-                error().with(std::forward<K>(key), std::forward<V>(value));
+                error().with(std::forward<Key>(key), std::forward<V>(value));
             }
         }
         return std::move(*this);
@@ -652,7 +652,7 @@ namespace error_system::core {
     }
 
     template <bool Lean>
-    template <bool L, typename>
+    template <bool IsLean, typename>
     inline error_context_t& result_t<void, Lean>::error() noexcept {
         checked_ = true;
         assert(std::holds_alternative<error_storage_t>(storage_) && "result_t<void>::error() called on a success result");
@@ -795,13 +795,13 @@ namespace error_system::core {
     }
 
     template <bool Lean>
-    template <typename K, typename V, bool L, typename>
-    result_t<void, Lean>& result_t<void, Lean>::context(K&& key, V&& value) & noexcept {
+    template <typename Key, typename V, bool IsLean, typename>
+    result_t<void, Lean>& result_t<void, Lean>::context(Key&& key, V&& value) & noexcept {
         if constexpr (!Lean) {
             if (is_error()) {
                 auto* ptr = std::get_if<error_context_t>(&storage_);
                 if (ptr) {
-                    ptr->with(std::forward<K>(key), std::forward<V>(value));
+                    ptr->with(std::forward<Key>(key), std::forward<V>(value));
                 }
             }
         }
@@ -809,13 +809,13 @@ namespace error_system::core {
     }
 
     template <bool Lean>
-    template <typename K, typename V, bool L, typename>
-    result_t<void, Lean> result_t<void, Lean>::context(K&& key, V&& value) && noexcept {
+    template <typename Key, typename V, bool IsLean, typename>
+    result_t<void, Lean> result_t<void, Lean>::context(Key&& key, V&& value) && noexcept {
         if constexpr (!Lean) {
             if (is_error()) {
                 auto* ptr = std::get_if<error_context_t>(&storage_);
                 if (ptr) {
-                    ptr->with(std::forward<K>(key), std::forward<V>(value));
+                    ptr->with(std::forward<Key>(key), std::forward<V>(value));
                 }
             }
         }

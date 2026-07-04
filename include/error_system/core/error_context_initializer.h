@@ -11,7 +11,7 @@
  *          插件通知通过 i_error_notifier_t 抽象接口完成，core 层不再直接依赖
  *          plugin 层（依赖倒置原则）。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-27
  * @copyright Copyright (c) 2026
  */
@@ -93,7 +93,7 @@ namespace error_system::core {
          * @brief 执行运行时特性初始化
          * @details 替代原 error_context_t::finalize_runtime_features_()。
          *          根据全局配置依次完成：错误码校验 → 堆栈捕获 → 源位置记录 → 插件通知。
-         *          成功码上下文（sign=1）由调用方在调用前自行跳过。
+         *          成功码上下文（sign=0）由调用方在调用前自行跳过。
          *          插件通知通过 i_error_notifier_t 接口完成，若未设置通知器则跳过通知。
          * @param context 待初始化的错误上下文
          */

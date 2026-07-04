@@ -18,7 +18,7 @@ using error_system::core::detail::append_decimal;
  *          从 error_context_serializer.cc 拆分而来，仅包含文本格式相关的辅助函数与逻辑。
  *          子系统/模块名称从 i18n_config_t 解析输出 locale，保证与错误码消息使用同一语言。
  * @author yiice
- * @version 1.1.0
+ * @version 3.0.0
  * @date 2026-06-29
  * @copyright Copyright (c) 2026
  */

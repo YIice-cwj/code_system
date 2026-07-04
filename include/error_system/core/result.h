@@ -16,7 +16,7 @@
  *          is_success/value/error/operator bool/value_pointer/value_or/match 任一未调用），
  *          触发 assert 提示调用方漏检错误。Release 构建零开销，标志位被编译器优化掉。
  * @author yiice
- * @version 2.4.0
+ * @version 3.0.0
  * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */
@@ -222,7 +222,7 @@ namespace error_system::core {
          *          Lean 模式：此方法不可用（SFINAE 禁用），因 Lean 不携带可变 payload。
          * @return error_context_t& 错误上下文可变引用
          */
-        template <bool L = Lean, typename = std::enable_if_t<!L>>
+        template <bool IsLean = Lean, typename = std::enable_if_t<!IsLean>>
         [[nodiscard]] error_context_t& error() noexcept;
 
         /**
@@ -390,19 +390,19 @@ namespace error_system::core {
 
         /**
          * @brief 模式匹配处理成功和错误两种路径
-         * @details 若结果为成功，调用 success_fn；否则调用 error_fn。两个函数必须返回相同类型。
+         * @details 若结果为成功，调用 success_function；否则调用 error_function。两个函数必须返回相同类型。
          *          noexcept 性跟随用户回调：仅当两个回调均为 noexcept 时，本方法才 noexcept；
          *          否则用户回调抛出的异常会传播给调用方。
          *          要求返回类型可默认构造（用于理论上的哨兵路径，正常路径不会触发）。
-         * @param success_fn 成功时的处理函数
-         * @param error_fn 错误时的处理函数
+         * @param success_function 成功时的处理函数
+         * @param error_function 错误时的处理函数
          * @return 处理函数的返回值
          */
-        template <typename SuccessFn, typename ErrorFn>
-        [[nodiscard]] auto match(SuccessFn&& success_fn, ErrorFn&& error_fn) const
-            noexcept(std::is_nothrow_invocable_v<SuccessFn&, const value_type_t&>
-                     && std::is_nothrow_invocable_v<ErrorFn&, const error_context_t&>)
-            -> decltype(success_fn(std::declval<const value_type_t&>()));
+        template <typename SuccessFunction, typename ErrorFunction>
+        [[nodiscard]] auto match(SuccessFunction&& success_function, ErrorFunction&& error_function) const
+            noexcept(std::is_nothrow_invocable_v<SuccessFunction&, const value_type_t&>
+                     && std::is_nothrow_invocable_v<ErrorFunction&, const error_context_t&>)
+            -> decltype(success_function(std::declval<const value_type_t&>()));
 
         /**
          * @brief 传播时附加 payload 上下文（左值版本）
@@ -410,14 +410,14 @@ namespace error_system::core {
          *          完美转发到 error_context_t::with() 的 7 个重载，避免 API 表面积膨胀。
          *          典型用法：`return inner_call().context("host", host_);`
          *          Lean 模式下此方法不可用（编译期 SFINAE 禁用），因 Lean 不携带 payload。
-         * @tparam K 键类型（支持 string/string_view/const char*）
+         * @tparam Key 键类型（支持 string/string_view/const char*）
          * @tparam V 值类型（支持 string 及任意可转 string 的类型）
          * @param key 负载键
          * @param value 负载值
          * @return result_t& 自身引用（错误时已附加 payload，成功时保持原样）
          */
-        template <typename K, typename V, bool L = Lean, typename = std::enable_if_t<!L>>
-        result_t& context(K&& key, V&& value) & noexcept;
+        template <typename Key, typename V, bool IsLean = Lean, typename = std::enable_if_t<!IsLean>>
+        result_t& context(Key&& key, V&& value) & noexcept;
 
         /**
          * @brief 传播时附加 payload 上下文（右值版本）
@@ -425,8 +425,8 @@ namespace error_system::core {
          *          Lean 模式下此方法不可用。
          * @return result_t 移动后的结果对象
          */
-        template <typename K, typename V, bool L = Lean, typename = std::enable_if_t<!L>>
-        [[nodiscard]] result_t context(K&& key, V&& value) && noexcept;
+        template <typename Key, typename V, bool IsLean = Lean, typename = std::enable_if_t<!IsLean>>
+        [[nodiscard]] result_t context(Key&& key, V&& value) && noexcept;
     };
 
     /**
@@ -551,7 +551,7 @@ namespace error_system::core {
          * @brief 获取错误上下文（可变引用，仅完整模式）
          * @details 与主模板同名方法语义一致
          */
-        template <bool L = Lean, typename = std::enable_if_t<!L>>
+        template <bool IsLean = Lean, typename = std::enable_if_t<!IsLean>>
         [[nodiscard]] error_context_t& error() noexcept;
 
         /**
@@ -626,16 +626,16 @@ namespace error_system::core {
          *          Lean 模式下此方法不可用。
          * @return result_t<void>& 自身引用
          */
-        template <typename K, typename V, bool L = Lean, typename = std::enable_if_t<!L>>
-        result_t& context(K&& key, V&& value) & noexcept;
+        template <typename Key, typename V, bool IsLean = Lean, typename = std::enable_if_t<!IsLean>>
+        result_t& context(Key&& key, V&& value) & noexcept;
 
         /**
          * @brief 传播时附加 payload 上下文（右值版本）
          * @details Lean 模式下此方法不可用。
          * @return result_t<void> 移动后的结果对象
          */
-        template <typename K, typename V, bool L = Lean, typename = std::enable_if_t<!L>>
-        [[nodiscard]] result_t context(K&& key, V&& value) && noexcept;
+        template <typename Key, typename V, bool IsLean = Lean, typename = std::enable_if_t<!IsLean>>
+        [[nodiscard]] result_t context(Key&& key, V&& value) && noexcept;
     };
 
 }  // namespace error_system::core

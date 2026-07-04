@@ -11,7 +11,7 @@
  * @brief 错误码数据类定义
  * @details 定义错误码数据结构、字段解析和访问接口，采用完全符合 C++ 标准的位移实现
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-05-21
  * @copyright Copyright (c) 2026
  */
@@ -110,9 +110,10 @@ namespace error_system::core {
     public:
         /**
          * @brief 默认构造函数
-         * @details 默认构造为成功码（sign=1），其余字段均为 0
+         * @details 默认构造为成功码（sign=0），其余字段均为 0。
+         *          遵循 Unix 退出码约定：0=成功，非0=失败。
          */
-        constexpr error_code_t() noexcept : code_(1ULL << SIGN_SHIFT) {}
+        constexpr error_code_t() noexcept : code_(0) {}
         constexpr error_code_t(const error_code_t&) noexcept = default;
         constexpr error_code_t(error_code_t&&) noexcept = default;
         constexpr error_code_t& operator=(const error_code_t&) noexcept = default;
@@ -124,7 +125,7 @@ namespace error_system::core {
          * @brief 创建成功码的工厂方法
          * @details 语义清晰的构造成功码方式，等价于默认构造函数。
          *          适用于返回默认成功状态的场景。
-         * @return error_code_t sign=1 的成功码
+         * @return error_code_t sign=0 的成功码
          *
          * @example
          * return error_code_t::make_success();
@@ -138,9 +139,9 @@ namespace error_system::core {
         constexpr explicit error_code_t(code_t code) noexcept : code_(code) {}
 
         /**
-         * @brief 便捷构造函数（通过位域值构造错误码，sign=0 表示错误）
+         * @brief 便捷构造函数（通过位域值构造错误码，sign=1 表示失败）
          * @details 直接传入 level、system、subsys、module、number 五个段，内部通过位运算组装。
-         *          sign 位默认为 0（false = 错误），符合计算机 0=false/1=true 语义。
+         *          sign 位固定为 1（非0 = 失败），遵循 Unix 退出码约定：0=成功，非0=失败。
          * @param level 错误等级 (bits 59-56)
          * @param system 系统域 (bits 55-48)
          * @param subsystem 子系统 ID (bits 47-32)
@@ -153,7 +154,8 @@ namespace error_system::core {
      */
         constexpr error_code_t(error_level_t level, domain::system_domain_t system,
                                subsystem_id_t subsystem, module_id_t module, error_number_t number) noexcept
-            : code_((static_cast<code_t>(level) << LEVEL_SHIFT)
+            : code_((1ULL << SIGN_SHIFT)
+                    | (static_cast<code_t>(level) << LEVEL_SHIFT)
                     | (static_cast<code_t>(system) << SYSTEM_SHIFT)
                     | (static_cast<code_t>(subsystem.value) << SUBSYS_SHIFT)
                     | (static_cast<code_t>(module.value) << MODULE_SHIFT)
@@ -166,20 +168,20 @@ namespace error_system::core {
         [[nodiscard]] constexpr code_t get_code() const noexcept { return code_; }
 
         /**
-         * @brief 判断错误码是否表示错误
-         * @return bool sign=0（false）时为错误，sign=1（true）时为成功
+         * @brief 判断错误码是否表示失败
+         * @return bool sign!=0 时为失败（遵循 Unix 约定：非0=失败）
          */
-        [[nodiscard]] constexpr bool is_error_code() const noexcept { return get_sign() == 0; }
+        [[nodiscard]] constexpr bool is_error_code() const noexcept { return get_sign() != 0; }
 
         /**
          * @brief 判断错误码是否表示成功
-         * @return bool sign=1（true）时为成功
+         * @return bool sign=0 时为成功（遵循 Unix 约定：0=成功）
          */
-        [[nodiscard]] constexpr bool is_success_code() const noexcept { return get_sign() == 1; }
+        [[nodiscard]] constexpr bool is_success_code() const noexcept { return get_sign() == 0; }
 
         /**
          * @brief 获取符号位
-         * @return uint8_t 符号位 (bit 63)，0 = 错误(false)，1 = 成功(true)
+         * @return uint8_t 符号位 (bit 63)，0 = 成功，非0 = 失败
          */
         [[nodiscard]] constexpr uint8_t get_sign() const noexcept { return static_cast<uint8_t>((code_ >> SIGN_SHIFT) & SIGN_MASK); }
 
@@ -193,11 +195,11 @@ namespace error_system::core {
 
         /**
          * @brief 设置符号位
-         * @details 仅接受 0/1，超范围值视为 0（错误），避免污染其他位
-         * @param sign 符号位值 (0 = 错误，1 = 成功)
+         * @details 仅接受 0/1，超范围值视为 1（失败），避免污染其他位
+         * @param sign 符号位值 (0 = 成功，1 = 失败)
          */
         constexpr void set_sign(uint8_t sign) noexcept {
-            const code_t sign_value = (sign <= 1) ? static_cast<code_t>(sign) : 0ULL;
+            const code_t sign_value = (sign <= 1) ? static_cast<code_t>(sign) : 1ULL;
             code_ = (code_ & ~(SIGN_MASK << SIGN_SHIFT)) | (sign_value << SIGN_SHIFT);
         }
 

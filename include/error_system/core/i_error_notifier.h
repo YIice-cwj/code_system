@@ -12,7 +12,7 @@
  *          均经由抽象接口完成。本头文件仅前向声明 error_context_t（不包含
  *          error_context.h），避免与 error_context.h 形成循环依赖。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-29
  * @copyright Copyright (c) 2026
  */

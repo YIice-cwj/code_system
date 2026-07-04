@@ -12,8 +12,8 @@ namespace error_system::core {
         EXPECT_EQ(code.get_subsys(), 1);
         EXPECT_EQ(code.get_module(), 2);
         EXPECT_EQ(code.get_number(), 0x1234);
-        /** sign=0 = false = 错误 */
-        EXPECT_EQ(code.get_sign(), 0);
+        /** sign=1 = 失败（非0=失败） */
+        EXPECT_EQ(code.get_sign(), 1);
     }
 
     /** error_builder_t 枚举模板版本测试（编译期类型安全） */
@@ -31,7 +31,7 @@ namespace error_system::core {
         EXPECT_EQ(code.get_subsys(), 1);
         EXPECT_EQ(code.get_module(), 2);
         EXPECT_EQ(code.get_number(), 0x0001);
-        EXPECT_EQ(code.get_sign(), 0);
+        EXPECT_EQ(code.get_sign(), 1);
     }
 
     TEST(error_builder_test, from_raw_restores_code) {
@@ -47,9 +47,10 @@ namespace error_system::core {
         EXPECT_EQ(code.get_level(), error_level_t::fatal);
     }
 
-    TEST(error_builder_test, error_code_has_sign_zero) {
+    TEST(error_builder_test, error_code_has_sign_one) {
         error_code_t code(error_level_t::debug, domain::system_domain_t::none, subsystem_id_t{0}, module_id_t{0}, error_number_t{0});
-        EXPECT_EQ(code.get_sign(), 0);
+        /** 5 参数构造函数构造错误码，sign=1（失败） */
+        EXPECT_EQ(code.get_sign(), 1);
     }
 
     TEST(error_builder_test, different_levels_produce_different_codes) {

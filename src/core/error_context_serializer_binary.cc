@@ -16,7 +16,7 @@ using error_system::config::feature_flags_t;
  *          从 error_context_serializer.cc 拆分而来，仅包含二进制格式相关的辅助函数与逻辑。
  *          使用小端序编码，顶层包含魔数与版本号；cause 链通过递归追加。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */
@@ -122,6 +122,11 @@ namespace error_system::core {
         bool read_string_len_prefixed(std::string_view data, size_t& offset, std::string& output) noexcept {
             uint32_t length = 0;
             if (!read_little_endian(data, offset, length)) {
+                return false;
+            }
+            if (length > MAX_STRING_LENGTH) {
+                std::fprintf(stderr, "[error_context_serializer] read_string_len_prefixed: length %u exceeds max %zu\n",
+                             length, MAX_STRING_LENGTH);
                 return false;
             }
             if (offset + length > data.size()) {

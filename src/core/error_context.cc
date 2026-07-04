@@ -18,7 +18,7 @@
  *          序列化实现见 error_context_serializer_*.cc，运行时特性初始化见 error_context_initializer.cc。
  *          payload 采用 SSO（Small Size Optimization），≤4 项时栈上存储零堆分配。
  * @author yiice
- * @version 2.5.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */
@@ -181,11 +181,37 @@ namespace error_system::core {
     }
 
     /**
+     * @brief 检测指定对象是否在当前 cause 链中
+     * @details 沿 cause 链向下遍历，深度上限 MAX_CAUSE_DEPTH。
+     *          用于 wrap() 防止循环引用导致 shared_ptr 内存泄漏与遍历截断。
+     */
+    bool error_context_t::has_cause_in_chain_(const error_context_t* target) const noexcept {
+        if (target == nullptr) {
+            return false;
+        }
+        const error_context_t* current = cause.get();
+        size_t depth = 0;
+        while (current != nullptr && depth < MAX_CAUSE_DEPTH) {
+            if (current == target) {
+                return true;
+            }
+            current = current->cause.get();
+            ++depth;
+        }
+        return false;
+    }
+
+    /**
      * @brief 包装底层错误为当前错误的直接原因
      * @details 拷贝自身后分配 shared_ptr 持有 underlying。
+     *          自环检测：若 underlying 是 this 本身或已在 this 的 cause 链中，跳过 cause 设置。
      *          分配失败时 cause 保持原值并记录日志，不抛异常。
      */
     error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
+        if (&underlying == this || underlying.has_cause_in_chain_(this)) {
+            std::fprintf(stderr, "[error_context] wrap: cycle detected, skipping cause\n");
+            return *this;
+        }
         error_context_t new_code_context = *this;
         try {
             new_code_context.cause = std::make_shared<error_context_t>(underlying);
@@ -198,9 +224,14 @@ namespace error_system::core {
     /**
      * @brief 包装底层错误为当前错误的直接原因（移动语义版本）
      * @details 拷贝自身后分配 shared_ptr 持有移动后的 underlying。
+     *          自环检测：若 underlying 是 this 本身或已在 this 的 cause 链中，跳过 cause 设置。
      *          分配失败时 cause 保持原值并记录日志，不抛异常。
      */
     error_context_t error_context_t::wrap(error_context_t&& underlying) const noexcept {
+        if (&underlying == this || underlying.has_cause_in_chain_(this)) {
+            std::fprintf(stderr, "[error_context] wrap(&&): cycle detected, skipping cause\n");
+            return *this;
+        }
         error_context_t new_code_context = *this;
         try {
             new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));

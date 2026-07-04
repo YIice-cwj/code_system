@@ -10,7 +10,7 @@
  * @brief 错误格式化
  * @details 定义错误格式化相关的函数，包括 error_context_t 的输出流运算符重载
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-05-06
  * @copyright Copyright (c) 2026
  */

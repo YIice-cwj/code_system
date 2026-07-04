@@ -24,7 +24,7 @@ using json_lexer_t = error_system::utils::detail::json_lexer_t;
  *          反序列化复用 utils::detail::json_lexer_t 进行 token 化解析，避免重复实现
  *          JSON 字符串/数字/关键字/跳过逻辑。
  * @author yiice
- * @version 1.1.0
+ * @version 3.0.0
  * @date 2026-07-01
  * @copyright Copyright (c) 2026
  */

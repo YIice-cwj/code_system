@@ -34,7 +34,7 @@ namespace error_system::core {
      * @brief 错误码注册器
      * @details 用于注册和查找错误码。错误码元数据定义见 error_metadata.h。
      * @author yiice
-     * @version 3.0.1
+     * @version 3.0.0
      * @date 2026-07-01
      */
     class error_registry_t {

@@ -6,14 +6,14 @@ namespace error_system::core {
     /**
      * @brief 插入或更新 payload 字段（核心逻辑）
      * @details 统一处理 SSO 查找→溢出查找→SSO 追加→溢出迁移四个分支
-     * @tparam K 键类型（支持 const string&/string&&/string_view）
+     * @tparam Key 键类型（支持 const string&/string&&/string_view）
      * @tparam V 值类型
      * @param key 键
      * @param value 值
      * @return error_context_t& 自身引用
      */
-    template <typename K, typename V>
-    inline error_context_t& error_context_t::insert_or_update_payload_(K&& key, V&& value) noexcept {
+    template <typename Key, typename V>
+    inline error_context_t& error_context_t::insert_or_update_payload_(Key&& key, V&& value) noexcept {
         try {
             const size_t sso_end = std::min<size_t>(payload_count_, PAYLOAD_SSO_CAPACITY);
             for (size_t i = 0; i < sso_end; ++i) {
@@ -24,12 +24,12 @@ namespace error_system::core {
             }
 
             if (payload_overflow_) {
-                payload_overflow_->insert_or_assign(std::forward<K>(key), std::forward<V>(value));
+                payload_overflow_->insert_or_assign(std::forward<Key>(key), std::forward<V>(value));
                 return *this;
             }
 
             if (payload_count_ < PAYLOAD_SSO_CAPACITY) {
-                payload_small_[payload_count_].first = std::forward<K>(key);
+                payload_small_[payload_count_].first = std::forward<Key>(key);
                 payload_small_[payload_count_].second = std::forward<V>(value);
                 ++payload_count_;
                 return *this;
@@ -39,7 +39,7 @@ namespace error_system::core {
             for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
                 overflow->emplace(std::move(payload_small_[i].first), std::move(payload_small_[i].second));
             }
-            overflow->insert_or_assign(std::forward<K>(key), std::forward<V>(value));
+            overflow->insert_or_assign(std::forward<Key>(key), std::forward<V>(value));
             payload_overflow_ = std::move(overflow);
             for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
                 payload_small_[i] = {};
@@ -57,7 +57,7 @@ namespace error_system::core {
      *          1. 格式化消息字符串
      *          2. 通过 located_code_t 捕获源位置（调用者真实位置）
      *          3. 根据全局配置校验错误码、抓取堆栈、通知插件
-     *          若错误码 sign=1（成功），则跳过步骤 3
+     *          若错误码 sign=0（成功），则跳过步骤 3
      * @tparam Args 格式化参数类型包
      * @param located_code 携带源位置的错误码（支持从 error_code_t 隐式构造）
      * @param message_format 错误信息格式化字符串（支持 {} 占位符）

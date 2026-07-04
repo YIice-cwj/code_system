@@ -8,10 +8,10 @@ namespace error_system::core {
 
     TEST_F(error_code_test_t, default_constructor_creates_success_code) {
         error_code_t code;
-        /** sign=1（成功）的默认成功码原始值 */
-        EXPECT_EQ(code.get_code(), 0x8000000000000000ULL);
-        /** sign=1 = true = 成功 */
-        EXPECT_EQ(code.get_sign(), 1);
+        /** sign=0（成功）的默认成功码原始值，遵循 Unix 约定 0=成功 */
+        EXPECT_EQ(code.get_code(), 0x0000000000000000ULL);
+        /** sign=0 = 成功 */
+        EXPECT_EQ(code.get_sign(), 0);
         EXPECT_EQ(code.get_level(), error_level_t::debug);
         EXPECT_EQ(code.get_system(), domain::system_domain_t::none);
         EXPECT_EQ(code.get_subsys(), 0);
@@ -44,7 +44,7 @@ namespace error_system::core {
 
     TEST_F(error_code_test_t, fields_are_correctly_extracted) {
         error_code_t code(0x0000000000000001ULL);
-        /** raw=0x01：sign=0、reserved=0、level=debug(0)、system=none(0)、subsys=0、module=0、number=1 */
+        /** raw=0x01：sign=0（成功）、reserved=0、level=debug(0)、system=none(0)、subsys=0、module=0、number=1 */
         EXPECT_EQ(code.get_sign(), 0);
         EXPECT_EQ(code.get_reserved(), 0);
         EXPECT_EQ(code.get_level(), error_level_t::debug);
@@ -60,11 +60,12 @@ namespace error_system::core {
         EXPECT_EQ(code.get_code(), 0x1234ULL);
     }
 
-    TEST_F(error_code_test_t, zero_raw_code_represents_error) {
-        /** raw=0 时 sign=0 表示错误码（而非成功码），is_error_code() 返回 true */
+    TEST_F(error_code_test_t, zero_raw_code_represents_success) {
+        /** raw=0 时 sign=0 表示成功码（遵循 Unix 约定 0=成功），is_success_code() 返回 true */
         constexpr error_code_t code(0);
         EXPECT_EQ(code.get_sign(), 0);
-        EXPECT_TRUE(code.is_error_code());
+        EXPECT_TRUE(code.is_success_code());
+        EXPECT_FALSE(code.is_error_code());
         EXPECT_EQ(code.get_level(), error_level_t::debug);
     }
 
@@ -77,7 +78,10 @@ namespace error_system::core {
             error_number_t{0x0506}
         );
 
-        EXPECT_EQ(code.get_sign(), 0);
+        /** 5 参数构造函数构造错误码，sign=1（失败） */
+        EXPECT_EQ(code.get_sign(), 1);
+        EXPECT_TRUE(code.is_error_code());
+        EXPECT_FALSE(code.is_success_code());
         EXPECT_EQ(code.get_level(), error_level_t::error);
         EXPECT_EQ(code.get_system(), domain::system_domain_t::database);
         EXPECT_EQ(code.get_subsys(), 0x0102);

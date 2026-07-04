@@ -24,7 +24,7 @@
  *          序列化职责委托给 error_context_serializer_t，运行时特性初始化职责
  *          委托给 error_context_initializer_t，遵循单一职责原则。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-11
  * @copyright Copyright (c) 2026
  */
@@ -53,7 +53,7 @@ namespace error_system::core {
      *          序列化（文本/JSON/二进制）由 error_context_serializer_t 提供。
      *          payload 采用 SSO（Small Size Optimization），≤4 项时栈上存储零堆分配。
      *
-     * @note 构造成功码（sign=1）的上下文时，跳过所有运行时特性以提升性能。
+     * @note 构造成功码（sign=0）的上下文时，跳过所有运行时特性以提升性能。
      * @note source_location 通过 located_code_t 在调用点捕获真实位置，
      *       而非构造函数体内调用 current()（那样会捕获库内部位置）。
      *
@@ -152,14 +152,14 @@ namespace error_system::core {
         /**
          * @brief 插入或更新 payload 字段（核心逻辑）
          * @details 统一处理 SSO 查找→溢出查找→SSO 追加→溢出迁移四个分支
-         * @tparam K 键类型（支持 const string&/string&&/string_view）
+         * @tparam Key 键类型（支持 const string&/string&&/string_view）
          * @tparam V 值类型
          * @param key 键
          * @param value 值
          * @return error_context_t& 自身引用
          */
-        template <typename K, typename V>
-        error_context_t& insert_or_update_payload_(K&& key, V&& value) noexcept;
+        template <typename Key, typename V>
+        error_context_t& insert_or_update_payload_(Key&& key, V&& value) noexcept;
 
         /**
          * @brief 根据编译期 LOCATION_ENABLED 开关写入源位置
@@ -196,6 +196,14 @@ namespace error_system::core {
          * @param other 源对象
          */
         void copy_cause_(const error_context_t& other);
+
+        /**
+         * @brief 检测指定对象是否在当前 cause 链中
+         * @details 沿 cause 链向下遍历，深度上限 MAX_CAUSE_DEPTH，用于 wrap() 循环引用检测
+         * @param target 目标对象指针
+         * @return bool 在链中找到返回 true
+         */
+        bool has_cause_in_chain_(const error_context_t* target) const noexcept;
 
         /**
          * @brief 拷贝堆栈帧
@@ -251,7 +259,7 @@ namespace error_system::core {
          *          1. 格式化消息字符串
          *          2. 通过 located_code_t 捕获源位置（调用者真实位置）
          *          3. 根据全局配置校验错误码、抓取堆栈、通知插件
-         *          若错误码 sign=1（成功），则跳过步骤 3
+         *          若错误码 sign=0（成功），则跳过步骤 3
          * @param located_code 携带源位置的错误码（支持从 error_code_t 隐式构造）
          * @param message_format 错误信息格式化字符串（支持 {} 占位符）
          * @param args 格式化参数列表
@@ -306,13 +314,13 @@ namespace error_system::core {
 
         /**
          * @brief 检查错误上下文是否表示成功
-         * @return bool 若 sign 位为 1（成功码）则返回 true
+         * @return bool 若 sign 位为 0（成功码）则返回 true
          */
         [[nodiscard]] bool is_success() const noexcept;
 
         /**
          * @brief 检查错误上下文是否包含错误
-         * @return bool 若 sign 位为 0（错误码）则返回 true
+         * @return bool 若 sign 位为非 0（错误码）则返回 true
          */
         [[nodiscard]] bool is_error() const noexcept;
 

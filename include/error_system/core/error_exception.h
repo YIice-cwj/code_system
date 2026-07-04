@@ -9,7 +9,7 @@
  * @brief 错误异常数据类定义
  * @details 定义错误异常数据结构
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-05-01
  * @copyright Copyright (c) 2026
  */

@@ -9,7 +9,7 @@
  * @brief 错误码构建器
  * @details 提供编译期类型安全的错误码构造，支持枚举类型参数防止 ID 传反
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-11
  * @copyright Copyright (c) 2026
  */
@@ -19,14 +19,14 @@ namespace error_system::core {
      * @brief 约束枚举类型大小不超过 2 字节（uint16_t 可容纳）
      * @details 使用 SFINAE 在编译期校验，仅接受大小不超过 2 字节的枚举类型
      */
-    template<typename E, typename = void>
+    template<typename Enum, typename = void>
     struct is_uint16_enum : std::false_type {};
 
-    template<typename E>
-    struct is_uint16_enum<E, std::enable_if_t<std::is_enum_v<E> && sizeof(E) <= 2>> : std::true_type {};
+    template<typename Enum>
+    struct is_uint16_enum<Enum, std::enable_if_t<std::is_enum_v<Enum> && sizeof(Enum) <= 2>> : std::true_type {};
 
-    template<typename E>
-    inline constexpr bool is_uint16_enum_v = is_uint16_enum<E>::value;
+    template<typename Enum>
+    inline constexpr bool is_uint16_enum_v = is_uint16_enum<Enum>::value;
 
     /**
      * @brief 错误码构建器

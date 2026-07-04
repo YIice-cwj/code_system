@@ -14,7 +14,7 @@
  *          人类可读文本、JSON 字符串和紧凑二进制表示。所有方法均为静态方法，
  *          接受 const error_context_t& 参数，不持有任何状态。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-27
  * @copyright Copyright (c) 2026
  */

@@ -6,7 +6,7 @@
  * @details 提供错误码的注册、注销、查询能力，含主索引、名称索引、模块组索引、子系统索引。
  *          基于纪元机制 + 线程本地环形缓存实现低开销的元数据查询，写操作时 bump 纪元使缓存失效。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

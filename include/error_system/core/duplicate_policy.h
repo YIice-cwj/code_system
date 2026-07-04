@@ -10,7 +10,7 @@
  * @details 定义重复错误码的处理策略枚举与策略处理器，封装 skip/overwrite/warn 三种行为，
  *          从 error_registry_t 中拆分以遵循单一职责原则
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-27
  * @copyright Copyright (c) 2026
  */

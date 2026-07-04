@@ -11,7 +11,7 @@
  *          从 error_registry.h 中提取为独立头文件，降低 core 层内部模块间耦合，
  *          便于 serializer、builder、context 等组件按需包含，而不必引入完整的注册表。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-07-01
  * @copyright Copyright (c) 2026
  */

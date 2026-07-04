@@ -10,7 +10,7 @@
  *          放置于 src/core/ 目录下，不随公共头文件安装。
  *          各 .cc 文件按需 include 本头文件以获取共用工具。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */
@@ -19,6 +19,7 @@ namespace error_system::core {
 constexpr size_t MAX_PAYLOAD_ITEMS = 100000;   ///< 反序列化 payload 最大项数
 constexpr size_t MAX_STACK_FRAMES = 100000;    ///< 反序列化堆栈帧最大数量
 constexpr size_t MAX_CAUSE_DEPTH = 32;         ///< cause 链最大递归深度
+constexpr size_t MAX_STRING_LENGTH = 1048576;  ///< 反序列化单字符串最大长度（1MB），防止恶意输入触发 OOM
 
 }  // namespace error_system::core
 

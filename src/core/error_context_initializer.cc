@@ -19,7 +19,7 @@ using error_system::config::stacktrace_config_t;
  *          包含错误码校验、堆栈捕获、源位置记录和插件通知。从 error_context.cc 拆分而来。
  *          插件通知通过 i_error_notifier_t 抽象接口完成，不再直接依赖 plugin 层。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-27
  * @copyright Copyright (c) 2026
  */
