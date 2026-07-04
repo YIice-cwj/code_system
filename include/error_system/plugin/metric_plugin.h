@@ -18,7 +18,7 @@
  *          线程安全：内部用 std::mutex 保护，on_error()/snapshot()/reset() 可并发调用。
  *          适用场景：错误率监控、热点错误码定位、子系统健康度评估。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */

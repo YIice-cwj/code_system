@@ -39,7 +39,7 @@ namespace error_system::plugin {
         void SetUp() override {
             plugin_registry_t::instance().clear();
             error_system::core::error_registry_t::instance().register_error(
-                error_system::core::error_code_t(42), "TEST_CODE_42", "test");
+                error_system::core::error_code_t(0x800000000000002AULL), "TEST_CODE_42", "test");
         }
 
         void TearDown() override { plugin_registry_t::instance().clear(); }
@@ -125,10 +125,10 @@ namespace error_system::plugin {
         mock_plugin_t plugin("test");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        core::error_context_t context(core::located_code_t{core::error_code_t(42)}, "test message");
+        core::error_context_t context(core::located_code_t{core::error_code_t(0x800000000000002AULL)}, "test message");
         plugin_registry_t::instance().notify_error(context);
 
-        EXPECT_EQ(plugin.last_context->get_code().get_code(), 42ULL);
+        EXPECT_EQ(plugin.last_context->get_code().get_code(), 0x800000000000002AULL);
     }
 
     TEST_F(plugin_registry_test_t, concurrent_notify_with_stable_registry) {
@@ -141,7 +141,7 @@ namespace error_system::plugin {
         for (int i = 0; i < 10; ++i) {
             threads.emplace_back([&notify_count]() {
                 for (int j = 0; j < 100; ++j) {
-                    core::error_context_t context(core::located_code_t{core::error_code_t(42)}, "test");
+                    core::error_context_t context(core::located_code_t{core::error_code_t(0x800000000000002AULL)}, "test");
                     plugin_registry_t::instance().notify_error(context);
                     notify_count.fetch_add(1);
                 }
@@ -195,7 +195,7 @@ namespace error_system::plugin {
         std::thread notifier([&notification_started]() {
             notification_started.store(true);
             for (int i = 0; i < 2000; ++i) {
-                core::error_context_t context(core::located_code_t{core::error_code_t(42)}, "stress");
+                core::error_context_t context(core::located_code_t{core::error_code_t(0x800000000000002AULL)}, "stress");
                 plugin_registry_t::instance().notify_error(context);
             }
         });
@@ -242,7 +242,7 @@ namespace error_system::plugin {
 
         std::thread notifier([]() {
             for (int i = 0; i < 30; ++i) {
-                core::error_context_t context(core::located_code_t{core::error_code_t(42)}, "test");
+                core::error_context_t context(core::located_code_t{core::error_code_t(0x800000000000002AULL)}, "test");
                 plugin_registry_t::instance().notify_error(context);
             }
         });
@@ -374,7 +374,7 @@ namespace error_system::plugin {
             registry.unregister_all();
             registry.set_duplicate_policy(error_system::core::duplicate_policy_t::skip);
             registry.register_error(
-                error_system::core::error_code_t(42), "TEST_CODE_42", "test");
+                error_system::core::error_code_t(0x800000000000002AULL), "TEST_CODE_42", "test");
             registry.register_error(
                 error_code_t(error_system::core::error_level_t::error, error_system::domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{1}),
                 "TEST_ERR_1", "test error 1");
@@ -393,7 +393,7 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "buffered error");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "buffered error");
 
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
         EXPECT_EQ(plugin.call_count.load(), 0);
@@ -404,9 +404,9 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx1(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "error 1");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "error 1");
         error_system::core::error_context_t ctx2(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "error 2");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "error 2");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 2UL);
 
         plugin_registry_t::instance().flush_deferred_notifications();
@@ -428,7 +428,7 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "to be dropped");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "to be dropped");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
         const size_t dropped = plugin_registry_t::instance().clear_deferred_notifications();
@@ -447,7 +447,7 @@ namespace error_system::plugin {
         EXPECT_FALSE(plugin_registry_t::instance().deferred_buffer_overflowed());
 
         error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "overflow test");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "overflow test");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
         plugin_registry_t::instance().enqueue_deferred_notification(ctx);
@@ -504,7 +504,7 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "unlimited");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "unlimited");
         for (int i = 0; i < 1099; ++i) {
             plugin_registry_t::instance().enqueue_deferred_notification(ctx);
         }
@@ -519,12 +519,12 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "main thread");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "main thread");
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
         std::thread t([] {
             error_system::core::error_context_t child_ctx(
-                error_system::core::located_code_t{error_system::core::error_code_t(42)}, "child thread");
+                error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "child thread");
             EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
             plugin_registry_t::instance().flush_deferred_notifications();
             EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 0UL);
@@ -545,7 +545,7 @@ namespace error_system::plugin {
             std::string_view name() const noexcept override { return "reentrant"; }
             void on_error(const core::error_context_t&) noexcept override {
                 call_count.fetch_add(1);
-                core::error_context_t nested(core::located_code_t{core::error_code_t(42)}, "nested during flush");
+                core::error_context_t nested(core::located_code_t{core::error_code_t(0x800000000000002AULL)}, "nested during flush");
                 (void)nested;
             }
             std::atomic<int> call_count{0};
@@ -555,7 +555,7 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "outer error");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "outer error");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
         plugin_registry_t::instance().flush_deferred_notifications();
@@ -585,15 +585,15 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx1(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "first message");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "first message");
         error_system::core::error_context_t ctx2(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "second message");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "second message");
 
         plugin_registry_t::instance().flush_deferred_notifications();
 
         ASSERT_EQ(plugin.seen_codes.size(), 2UL);
-        EXPECT_EQ(plugin.seen_codes[0], 42ULL);
-        EXPECT_EQ(plugin.seen_codes[1], 42ULL);
+        EXPECT_EQ(plugin.seen_codes[0], 0x800000000000002AULL);
+        EXPECT_EQ(plugin.seen_codes[1], 0x800000000000002AULL);
         EXPECT_EQ(plugin.seen_messages[0], "first message");
         EXPECT_EQ(plugin.seen_messages[1], "second message");
     }
@@ -603,9 +603,9 @@ namespace error_system::plugin {
      */
     TEST_F(deferred_notify_test_t, flush_with_no_plugins_is_noop) {
         error_system::core::error_context_t ctx1(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "no plugin 1");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "no plugin 1");
         error_system::core::error_context_t ctx2(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "no plugin 2");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "no plugin 2");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 2UL);
         ASSERT_EQ(plugin_registry_t::instance().size(), 0UL);
 
@@ -642,7 +642,7 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(third);
 
         error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "ordering test");
+            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "ordering test");
 
         plugin_registry_t::instance().flush_deferred_notifications();
 

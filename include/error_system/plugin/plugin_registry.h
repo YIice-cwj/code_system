@@ -33,7 +33,7 @@
  *   仅操作当前线程的缓冲，必须由同一线程调用。
  *
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-05-01
  * @copyright Copyright (c) 2026
  */

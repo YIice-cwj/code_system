@@ -17,7 +17,7 @@
  *          打破与具体注册表实现的循环依赖，遵循单一职责原则（SRP）。
  *          自动管理后台线程生命周期，支持背压控制（队列满时丢弃新通知）。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-27
  * @copyright Copyright (c) 2026
  */

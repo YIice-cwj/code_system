@@ -6,7 +6,7 @@
  * @details 提供基于时间窗口的错误去重和基于速率的错误采样能力，
  *          用于高并发场景下抑制重复错误洪水、降低下游通知压力。
  * @author yiice
- * @version 1.1.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

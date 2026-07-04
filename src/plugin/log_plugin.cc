@@ -5,7 +5,7 @@
  * @brief 错误日志插件实现
  * @details 将 error_context_t 格式化后写入目标流，mutex 保护避免多线程交错。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */

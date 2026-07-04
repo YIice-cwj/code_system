@@ -19,7 +19,7 @@
  *          线程安全，可被多个生产者线程共享调用。
  * @note 本头文件仅含声明，实现见 error_dedup_sampler.cc
  * @author yiice
- * @version 1.1.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

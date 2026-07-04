@@ -8,7 +8,7 @@
  *          本类实现 core::i_error_notifier_t 接口，并在 instance() 中自注册为默认通知器，
  *          使 core 层经由抽象接口完成通知，解耦 core→plugin 反向依赖。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

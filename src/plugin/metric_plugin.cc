@@ -5,7 +5,7 @@
  * @brief 错误指标统计插件实现
  * @details 按 错误码/级别/子系统 三维度计数，mutex 保护，noexcept 安全。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */

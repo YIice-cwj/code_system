@@ -6,7 +6,7 @@
  * @details 实现按错误码、模块组 ID、系统域三级匹配的处理函数分发，匹配优先级为 码 > 模块组 > 域。
  *          基于 std::call_once 实现线程安全的单例初始化。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

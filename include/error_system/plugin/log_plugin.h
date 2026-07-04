@@ -19,7 +19,7 @@
  *          不内置文件管理逻辑（KISS 原则），调用方负责流的生命周期；
  *          默认输出到 std::cerr，构造时传入自定义流即可重定向。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */
