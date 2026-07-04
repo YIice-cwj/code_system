@@ -108,6 +108,8 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/migration/error_migration.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/error_dedup_sampler.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/error_router_plugin.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/log_plugin.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/metric_plugin.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/plugin_registry.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/file_utils.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/json_lexer.cc

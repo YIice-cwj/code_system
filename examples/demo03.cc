@@ -35,7 +35,7 @@ void section(const std::string& title) {
  * @brief 自定义日志插件：打印所有级别错误
  * @details 继承 i_error_plugin_t，实现 name()/on_error()/min_level() 三个纯虚函数
  */
-class log_plugin_t : public i_error_plugin_t {
+class demo_log_plugin_t : public i_error_plugin_t {
 public:
     std::string_view name() const noexcept override { return "logger"; }
 
@@ -82,7 +82,7 @@ int main() {
     // 一、插件注册：3 种方式
     // ============================================================
     section("1.1 register_plugin_ref 注册引用（栈对象）");
-    log_plugin_t logger;
+    demo_log_plugin_t logger;
     registry.register_plugin_ref(logger);
     std::cout << "  插件数: " << registry.size() << std::endl;
 
@@ -163,7 +163,7 @@ int main() {
     // ============================================================
     // 六、通知模式：sync / async / sync_deferred
     // ============================================================
-    log_plugin_t logger2;
+    demo_log_plugin_t logger2;
     registry.register_plugin_ref(logger2);
 
     section("6.1 sync 同步模式（默认）");

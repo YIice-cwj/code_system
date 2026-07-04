@@ -53,6 +53,8 @@
 #include "error_system/plugin/error_dedup_sampler.h"
 #include "error_system/plugin/error_router_plugin.h"
 #include "error_system/plugin/i_error_plugin.h"
+#include "error_system/plugin/log_plugin.h"
+#include "error_system/plugin/metric_plugin.h"
 #include "error_system/plugin/plugin_registry.h"
 
 #include "error_system/utils/async_queue.h"
