@@ -1,4 +1,6 @@
 #pragma once
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
 #include "error_system/core/error_level.h"
@@ -335,5 +337,32 @@ namespace error_system::core {
          */
         [[nodiscard]] constexpr bool operator<(const error_code_t& other) const noexcept { return code_ < other.code_; }
     };
+
+    /**
+     * @brief 编译期检测错误码数组中是否存在重复
+     * @details O(n^2) constexpr 暴力比较，适合小规模（<100）编译期常量数组。
+     *          配合 static_assert 使用，在编译期捕获重复错误码定义。
+     * @tparam N 数组大小
+     * @param codes 错误码数组
+     * @return bool 无重复返回 true
+     *
+     * @code
+     *   constexpr std::array<error_code_t, 3> codes = {
+     *       ERR_A, ERR_B, ERR_C
+     *   };
+     *   static_assert(all_unique(codes), "Duplicate error codes detected");
+     * @endcode
+     */
+    template <size_t N>
+    [[nodiscard]] constexpr bool all_unique(const std::array<error_code_t, N>& codes) noexcept {
+        for (size_t i = 0; i < N; ++i) {
+            for (size_t j = i + 1; j < N; ++j) {
+                if (codes[i] == codes[j]) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 
 }  // namespace error_system::core

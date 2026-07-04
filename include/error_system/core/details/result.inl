@@ -24,6 +24,7 @@ namespace error_system::core {
     template <typename T, bool Lean>
     result_t<T, Lean> result_t<T, Lean>::make_error(error_code_t code, const std::string& message,
                                                      utils::source_location_t location) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
+        assert(!code.is_success_code() && "make_error called with a success code");
         if constexpr (Lean) {
             (void)message;
             (void)location;
@@ -36,6 +37,7 @@ namespace error_system::core {
     template <typename T, bool Lean>
     result_t<T, Lean> result_t<T, Lean>::make_error(error_code_t code, std::string&& message,
                                                      utils::source_location_t location) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
+        assert(!code.is_success_code() && "make_error called with a success code");
         if constexpr (Lean) {
             (void)message;
             (void)location;
@@ -556,6 +558,7 @@ namespace error_system::core {
     template <bool Lean>
     inline result_t<void, Lean> result_t<void, Lean>::make_error(error_code_t code, const std::string& message,
                                                                   utils::source_location_t location) noexcept {
+        assert(!code.is_success_code() && "make_error called with a success code");
         if constexpr (Lean) {
             (void)message;
             (void)location;
@@ -568,6 +571,7 @@ namespace error_system::core {
     template <bool Lean>
     inline result_t<void, Lean> result_t<void, Lean>::make_error(error_code_t code, std::string&& message,
                                                                   utils::source_location_t location) noexcept {
+        assert(!code.is_success_code() && "make_error called with a success code");
         if constexpr (Lean) {
             (void)message;
             (void)location;
