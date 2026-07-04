@@ -1,3 +1,4 @@
+#include "error_system/config/i18n_config.h"
 #include "error_system/i18n/i18n.h"
 #include "error_system/i18n/locale.h"
 
@@ -17,12 +18,14 @@ namespace error_system::core {
             catalog_->clear_all();
             catalog_->set_default_locale(error_system::i18n::locale_t::zh_CN);
             catalog_->clear_active_locale();
+            error_system::config::i18n_config_t::reset_all_locale_parents();
         }
 
         void TearDown() override {
             catalog_->clear_all();
             catalog_->set_default_locale(error_system::i18n::locale_t::zh_CN);
             catalog_->clear_active_locale();
+            error_system::config::i18n_config_t::reset_all_locale_parents();
         }
 
         error_system::i18n::i18n_t* catalog_{nullptr};
@@ -42,19 +45,80 @@ namespace error_system::core {
         EXPECT_TRUE(catalog_->get_message(error_system::i18n::locale_t::zh_CN, code).empty());
     }
 
-    TEST_F(i18n_test_t, fallback_to_default_locale_when_locale_unregistered) {
-        // fr_FR 未注册，应回退到默认 locale（zh_CN）的消息
+    TEST_F(i18n_test_t, fallback_to_parent_locale_when_locale_unregistered) {
+        // fr_FR 未注册，应沿 parent 链回退到 en_US（fr_FR → en_US）
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        catalog_->register_message(error_system::i18n::locale_t::en_US, code, "Database connection timeout");
+
+        EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::fr_FR, code), "Database connection timeout");
+    }
+
+    TEST_F(i18n_test_t, returns_empty_when_chain_exhausted) {
+        // en_US 是链终点，未注册该 code 时返回空串，不再回退到 default_locale
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "默认中文");
+
+        EXPECT_TRUE(catalog_->get_message(error_system::i18n::locale_t::en_US, code).empty());
+    }
+
+    TEST_F(i18n_test_t, fallback_zh_tw_to_zh_cn) {
+        // zh_TW → zh_CN（繁体回退到简体）
         const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "数据库连接超时");
 
-        EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::fr_FR, code), "数据库连接超时");
+        EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::zh_TW, code), "数据库连接超时");
     }
 
-    TEST_F(i18n_test_t, fallback_to_default_locale_when_code_missing) {
+    TEST_F(i18n_test_t, fallback_zh_tw_to_zh_cn_to_en_us) {
+        // 三级链：zh_TW 未注册 → zh_CN 未注册 → en_US 命中
         const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
-        catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "默认描述");
+        catalog_->register_message(error_system::i18n::locale_t::en_US, code, "Database connection timeout");
 
-        EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::en_US, code), "默认描述");
+        EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::zh_TW, code), "Database connection timeout");
+    }
+
+    TEST_F(i18n_test_t, en_us_is_chain_terminus) {
+        // en_US 的 parent 是自身，链在此终止
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        // 仅有 zh_CN 消息，en_US 查询时不会回退到 zh_CN
+        catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "中文消息");
+
+        EXPECT_TRUE(catalog_->get_message(error_system::i18n::locale_t::en_US, code).empty());
+    }
+
+    TEST_F(i18n_test_t, custom_parent_override) {
+        // 覆盖 zh_TW 的 parent 为 en_US（跳过 zh_CN）
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "中文");
+        catalog_->register_message(error_system::i18n::locale_t::en_US, code, "English");
+
+        // 默认 zh_TW → zh_CN
+        EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::zh_TW, code), "中文");
+
+        // 覆盖为 zh_TW → en_US
+        error_system::config::i18n_config_t::set_locale_parent(
+            error_system::i18n::locale_t::zh_TW, error_system::i18n::locale_t::en_US);
+        EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::zh_TW, code), "English");
+    }
+
+    TEST_F(i18n_test_t, en_us_parent_cannot_be_overridden) {
+        // en_US 作为全局链终点，set_locale_parent 应被忽略
+        error_system::config::i18n_config_t::set_locale_parent(
+            error_system::i18n::locale_t::en_US, error_system::i18n::locale_t::zh_CN);
+        EXPECT_EQ(error_system::config::i18n_config_t::get_locale_parent(error_system::i18n::locale_t::en_US),
+                  error_system::i18n::locale_t::en_US);
+    }
+
+    TEST_F(i18n_test_t, reset_locale_parent_restores_default) {
+        // 覆盖后 reset 应恢复内置默认值
+        error_system::config::i18n_config_t::set_locale_parent(
+            error_system::i18n::locale_t::zh_TW, error_system::i18n::locale_t::en_US);
+        EXPECT_EQ(error_system::config::i18n_config_t::get_locale_parent(error_system::i18n::locale_t::zh_TW),
+                  error_system::i18n::locale_t::en_US);
+
+        error_system::config::i18n_config_t::reset_locale_parent(error_system::i18n::locale_t::zh_TW);
+        EXPECT_EQ(error_system::config::i18n_config_t::get_locale_parent(error_system::i18n::locale_t::zh_TW),
+                  error_system::i18n::locale_t::zh_CN);
     }
 
     TEST_F(i18n_test_t, no_fallback_when_locale_equals_default_but_missing) {
@@ -191,12 +255,17 @@ namespace error_system::core {
         EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::zh_CN, code), "并发写入");
     }
 
-    TEST_F(i18n_test_t, set_default_locale_changes_fallback) {
+    TEST_F(i18n_test_t, set_default_locale_affects_output_locale_resolution) {
+        // default_locale 影响 resolve_output_locale()，即 get_message(code) 单参版本的起始 locale
         const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
-        catalog_->register_message(error_system::i18n::locale_t::en_US, code, "English fallback");
+        catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "中文");
+        catalog_->register_message(error_system::i18n::locale_t::en_US, code, "English");
+
+        catalog_->set_default_locale(error_system::i18n::locale_t::zh_CN);
+        EXPECT_EQ(catalog_->get_message(code), "中文");
 
         catalog_->set_default_locale(error_system::i18n::locale_t::en_US);
-        EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::fr_FR, code), "English fallback");
+        EXPECT_EQ(catalog_->get_message(code), "English");
 
         EXPECT_EQ(catalog_->get_default_locale(), error_system::i18n::locale_t::en_US);
     }

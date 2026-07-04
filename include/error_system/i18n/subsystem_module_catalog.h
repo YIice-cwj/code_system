@@ -23,7 +23,7 @@
  *
  *          线程安全（读多写少场景使用 shared_mutex）。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

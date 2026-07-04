@@ -12,7 +12,7 @@
  *          i18n 层提供具体实现（如 subsystem_module_catalog_t）。
  *          本头文件仅包含数据结构与接口声明，不依赖 core 层类型。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-07-01
  * @copyright Copyright (c) 2026
  */

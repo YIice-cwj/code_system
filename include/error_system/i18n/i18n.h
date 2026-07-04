@@ -26,7 +26,7 @@
  *          查询时从 i18n_config_t 读取输出/默认 locale，避免双源配置不同步。
  * @note 本头文件仅含声明，实现见 i18n.cc
  * @author yiice
- * @version 2.2.0
+ * @version 3.0.0
  * @date 2026-07-01
  * @copyright Copyright (c) 2026
  */
@@ -38,8 +38,9 @@ namespace error_system::i18n {
     /**
      * @brief 多语言消息目录
      * @details 单例模式，按 locale_t 枚举分组管理错误码的本地化描述。
- *          查询路径：output locale → default locale → 空字符串
- *          （由调用方决定回退到 registry 默认描述）。
+ *          查询路径：指定 locale → parent(locale) → ... → en_US（链终点）→ 空字符串
+ *          parent 链由 config::i18n_config_t::get_locale_parent() 决定，
+ *          默认按语言前缀推断（如 zh_TW → zh_CN → en_US），可运行时覆盖。
  *
  *          locale 状态不再由本类持有，统一委托给 config::i18n_config_t。
  *          set_default_locale / set_active_locale 等接口保留以兼容现有调用方，
@@ -116,7 +117,7 @@ namespace error_system::i18n {
 
         /**
          * @brief 查询本地化消息
-         * @details 查询顺序：指定 locale → 默认 locale → 空字符串
+         * @details 查询顺序：指定 locale → parent(locale) → ... → en_US（链终点）→ 空字符串
          * @param locale 语言区域
          * @param code 错误码
          * @return std::string 本地化描述，未命中返回空 string
@@ -126,7 +127,7 @@ namespace error_system::i18n {
         /**
          * @brief 使用当前输出 locale 查询
          * @details 从 config::i18n_config_t 解析最终输出 locale（output_locale 优先，
-         *          未设置则回退 default_locale）。两参版本内部已完成 default_locale 回退，
+         *          未设置则回退 default_locale）。两参版本内部已沿 parent 链回退至 en_US，
          *          本重载无需再次显式回退。
          * @param code 错误码
          * @return std::string 本地化描述，未命中返回空 string

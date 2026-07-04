@@ -4,12 +4,14 @@
  * @file i18n.cc
  * @brief 多语言消息目录实现
  * @details 提供多语言错误消息的注册与查询能力，基于 std::call_once 实现线程安全的单例初始化。
- *          查询路径：output locale → default locale → 空字符串。
+ *          查询路径：指定 locale → parent(locale) → ... → en_US（链终点）→ 空字符串。
+ *          parent 链由 config::i18n_config_t::get_locale_parent() 决定，
+ *          默认按语言前缀推断（如 zh_TW → zh_CN → en_US），可运行时覆盖。
  *          locale 配置统一由 config::i18n_config_t 管理，本类仅保留消息目录。
  *          线程安全（读多写少场景使用 shared_mutex）。
  * @author yiice
- * @version 2.2.0
- * @date 2026-07-01
+ * @version 3.0.0
+ * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */
 
@@ -82,7 +84,10 @@ namespace error_system::i18n {
 
     /**
      * @brief 查询本地化消息
-     * @details 查询顺序：指定 locale → 默认 locale → 空字符串
+     * @details 查询顺序：指定 locale → parent(locale) → parent(parent(locale)) → ... → en_US → 空字符串
+     *          parent 链由 i18n_config_t::get_locale_parent() 决定（内置默认 + 运行时覆盖），
+     *          en_US 作为链终点（其 parent 为自身），终止递归。
+     *          链路长度上限为 LOCALE_COUNT，防御性避免潜在环。
      * @param locale 语言区域
      * @param code 错误码
      * @return std::string 本地化描述，未命中返回空 string
@@ -92,23 +97,20 @@ namespace error_system::i18n {
             std::shared_lock<std::shared_mutex> lock(mutex_);
             const auto identity = code.get_identity_code();
 
-            auto loc_it = catalog_.find(locale);
-            if (loc_it != catalog_.end()) {
-                auto msg_it = loc_it->second.find(identity);
-                if (msg_it != loc_it->second.end()) {
-                    return msg_it->second;
-                }
-            }
-
-            const auto default_locale = config::i18n_config_t::get_default_locale();
-            if (locale != default_locale) {
-                auto def_it = catalog_.find(default_locale);
-                if (def_it != catalog_.end()) {
-                    auto msg_it = def_it->second.find(identity);
-                    if (msg_it != def_it->second.end()) {
+            locale_t current = locale;
+            for (size_t step = 0; step <= error_system::i18n::LOCALE_COUNT; ++step) {
+                auto loc_it = catalog_.find(current);
+                if (loc_it != catalog_.end()) {
+                    auto msg_it = loc_it->second.find(identity);
+                    if (msg_it != loc_it->second.end()) {
                         return msg_it->second;
                     }
                 }
+                const locale_t parent = config::i18n_config_t::get_locale_parent(current);
+                if (parent == current) {
+                    break;
+                }
+                current = parent;
             }
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[i18n] get_message: std::bad_alloc\n");
@@ -119,7 +121,7 @@ namespace error_system::i18n {
     /**
      * @brief 使用当前输出 locale 查询
      * @details 从 config::i18n_config_t 解析最终输出 locale，委托两参版本完成
-     *          output locale → default locale → 空字符串 的回退查询。
+     *          指定 locale → parent 链 → en_US → 空字符串 的回退查询。
      * @param code 错误码
      * @return std::string 本地化描述，未命中返回空 string
      */

@@ -12,7 +12,7 @@
  *          使用枚举替代裸字符串，提供类型安全的 locale 标识。
  *          所有 locale 名称集中维护在 LOCALE_TABLE 中，新增 locale 只需在枚举与表末尾追加。
  * @author yiice
- * @version 1.1.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */
@@ -69,6 +69,45 @@ namespace error_system::i18n {
         {locale_t::th_TH, "th_TH"},
         {locale_t::vi_VN, "vi_VN"},
     }};
+
+    /**
+     * @brief 内置 locale parent 映射表（按 enum 值顺序排列）
+     * @details 按语言前缀自动推断的默认 parent 链，en_US 为全局终点（自环）。
+     *          - zh_TW → zh_CN（繁体回退到简体，唯一一条非平凡同语言链）
+     *          - 其他非 en_US locale → en_US（直接回退到英语作为 lingua franca）
+     *          - en_US → en_US（自环，标志链终点）
+     *          调用方可通过 config::i18n_config_t::set_locale_parent() 覆盖个别 locale 的 parent。
+     */
+    inline constexpr std::array<locale_t, LOCALE_COUNT> LOCALE_PARENT_TABLE = {{
+        locale_t::en_US,  // en_US → en_US (链终点)
+        locale_t::en_US,  // zh_CN → en_US
+        locale_t::zh_CN,  // zh_TW → zh_CN
+        locale_t::en_US,  // ja_JP → en_US
+        locale_t::en_US,  // ko_KR → en_US
+        locale_t::en_US,  // fr_FR → en_US
+        locale_t::en_US,  // de_DE → en_US
+        locale_t::en_US,  // es_ES → en_US
+        locale_t::en_US,  // ru_RU → en_US
+        locale_t::en_US,  // pt_BR → en_US
+        locale_t::en_US,  // it_IT → en_US
+        locale_t::en_US,  // ar_SA → en_US
+        locale_t::en_US,  // hi_IN → en_US
+        locale_t::en_US,  // th_TH → en_US
+        locale_t::en_US,  // vi_VN → en_US
+    }};
+
+    /**
+     * @brief 查询 locale 的内置 parent（不含运行时覆盖）
+     * @param locale 语言区域
+     * @return locale_t parent locale；en_US 返回自身（链终点）；非法值返回 en_US
+     */
+    [[nodiscard]] inline constexpr locale_t parent_locale(locale_t locale) noexcept {
+        const auto index = static_cast<size_t>(locale);
+        if (index < LOCALE_COUNT) {
+            return LOCALE_PARENT_TABLE[index];
+        }
+        return locale_t::en_US;
+    }
 
     /**
      * @brief 将 locale_t 转换为字符串标识（如 "zh_CN"）

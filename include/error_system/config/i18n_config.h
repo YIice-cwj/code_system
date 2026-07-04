@@ -1,6 +1,7 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <optional>
 
 #include "error_system/i18n/locale.h"
@@ -21,7 +22,7 @@
  *          本类仅持有配置状态，不直接调用 i18n_t / error_registry_t。
  *          序列化器从本类读取 locale 后，显式传给 registry / i18n_t 查询本地化文本。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-06-29
  * @copyright Copyright (c) 2026
  */
@@ -166,6 +167,81 @@ namespace error_system::config {
                 return static_cast<locale_t>(static_cast<uint8_t>(value));
             }
             return static_cast<locale_t>(get_default_locale_storage_().load());
+        }
+
+        /**
+         * @brief locale parent 覆盖存储（运行时可配置的 parent 链）
+         * @details 使用 LOCALE_COUNT 个 std::atomic<uint8_t> 数组，每个 locale 对应一个槽位。
+         *          首次访问时通过 std::call_once 用 LOCALE_PARENT_TABLE 初始化默认值，
+         *          之后调用方可通过 set_locale_parent() 覆盖个别 locale 的 parent。
+         * @return std::atomic<uint8_t>(&)[LOCALE_COUNT] parent 存储数组引用
+         */
+        static std::atomic<uint8_t>* get_locale_parent_storage_() noexcept {
+            static std::atomic<uint8_t> parents[error_system::i18n::LOCALE_COUNT];
+            static std::once_flag init_flag;
+            std::call_once(init_flag, [] {
+                for (size_t i = 0; i < error_system::i18n::LOCALE_COUNT; ++i) {
+                    parents[i].store(static_cast<uint8_t>(error_system::i18n::LOCALE_PARENT_TABLE[i]));
+                }
+            });
+            return parents;
+        }
+
+    public:
+        /**
+         * @brief 覆盖指定 locale 的 parent（运行时自定义回退链）
+         * @details 覆盖 i18n::parent_locale() 的内置默认值。例如可将 fr_CA（若新增）的 parent
+         *          设为 fr_FR，或将 zh_TW 的 parent 改为 en_US 跳过 zh_CN。
+         * @note child == parent 时表示该 locale 为链终点；child == en_US 时不允许覆盖（始终为链终点）
+         * @param child 子 locale
+         * @param parent 父 locale
+         */
+        static void set_locale_parent(locale_t child, locale_t parent) noexcept {
+            const auto idx = static_cast<size_t>(child);
+            if (idx >= error_system::i18n::LOCALE_COUNT) {
+                return;
+            }
+            // en_US 作为全局链终点，不允许覆盖
+            if (child == locale_t::en_US) {
+                return;
+            }
+            get_locale_parent_storage_()[idx].store(static_cast<uint8_t>(parent));
+        }
+
+        /**
+         * @brief 查询指定 locale 的当前 parent（含运行时覆盖）
+         * @param child 子 locale
+         * @return locale_t parent locale；非法值或 en_US 返回 en_US
+         */
+        [[nodiscard]] static locale_t get_locale_parent(locale_t child) noexcept {
+            const auto idx = static_cast<size_t>(child);
+            if (idx >= error_system::i18n::LOCALE_COUNT) {
+                return locale_t::en_US;
+            }
+            return static_cast<locale_t>(get_locale_parent_storage_()[idx].load());
+        }
+
+        /**
+         * @brief 重置指定 locale 的 parent 为内置默认值
+         * @param child 子 locale
+         */
+        static void reset_locale_parent(locale_t child) noexcept {
+            const auto idx = static_cast<size_t>(child);
+            if (idx >= error_system::i18n::LOCALE_COUNT) {
+                return;
+            }
+            get_locale_parent_storage_()[idx].store(
+                static_cast<uint8_t>(error_system::i18n::LOCALE_PARENT_TABLE[idx]));
+        }
+
+        /**
+         * @brief 重置所有 locale 的 parent 为内置默认值
+         */
+        static void reset_all_locale_parents() noexcept {
+            for (size_t i = 0; i < error_system::i18n::LOCALE_COUNT; ++i) {
+                get_locale_parent_storage_()[i].store(
+                    static_cast<uint8_t>(error_system::i18n::LOCALE_PARENT_TABLE[i]));
+            }
         }
     };
 

@@ -11,7 +11,7 @@
  *          写入方法使用 unique_lock，读取方法使用 shared_lock，适配读多写少场景。
  *          bad_alloc 等异常在内部 try-catch 捕获并记录到 stderr，保持 noexcept 安全。
  * @author yiice
- * @version 1.1.0
+ * @version 3.0.0
  * @date 2026-06-29
  * @copyright Copyright (c) 2026
  */
