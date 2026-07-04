@@ -66,10 +66,18 @@ namespace error_system::core {
     struct error_context_t {
         /**
          * @brief SSO（Small Size Optimization）负载上限
-         * @details payload 项数 ≤ 4 时存于栈上 std::array，零堆分配；
-         *          超过后自动溢出到 std::unordered_map
+         * @details payload 项数 ≤ 此值时存于栈上 std::array，零堆分配；
+         *          超过后自动溢出到 std::unordered_map。
+         *          默认值 4 适用于大多数场景；如需调整，编译时通过
+         *          -DERROR_SYSTEM_PAYLOAD_SSO_CAPACITY=N 覆盖（N 为 1~16 的合理值）。
+         *          增大可减少堆分配但增加 error_context_t 自身尺寸；
+         *          减小可缩小对象尺寸但增加堆分配频率。
          */
+#ifndef ERROR_SYSTEM_PAYLOAD_SSO_CAPACITY
         static constexpr size_t PAYLOAD_SSO_CAPACITY = 4;
+#else
+        static constexpr size_t PAYLOAD_SSO_CAPACITY = ERROR_SYSTEM_PAYLOAD_SSO_CAPACITY;
+#endif
 
     private:
         friend class error_context_serializer_t;
