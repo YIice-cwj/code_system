@@ -93,6 +93,7 @@ else()
 endif()
 
 set(SOURCE_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/c_abi_export.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/duplicate_policy.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_initializer.cc

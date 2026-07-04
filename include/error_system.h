@@ -13,6 +13,9 @@
 
 // IWYU pragma: begin_exports
 
+#include "error_system/bridge/c_abi_export.h"
+#include "error_system/bridge/std_error_code_bridge.h"
+
 #include "error_system/core/duplicate_policy.h"
 #include "error_system/core/error_builder.h"
 #include "error_system/core/error_code.h"
