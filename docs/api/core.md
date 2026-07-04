@@ -6,13 +6,13 @@
 
 ## error_code_t
 
-64 位错误码数据类。基于位移与掩码实现字段解析，100% 避免严格别名与位域 UB。默认构造为成功码（sign=1，其余字段为 0），可作为函数成功返回值的零成本默认。
+64 位错误码数据类。基于位移与掩码实现字段解析，100% 避免严格别名与位域 UB。默认构造为成功码（sign=0，其余字段为 0，遵循 Unix 约定：0=成功，非0=失败），可作为函数成功返回值的零成本默认。
 
 ### 位域布局
 
 | 位域 | 位数 | 说明 |
 |------|:---:|------|
-| Sign | 1 | `0` = 错误 · `1` = 成功 |
+| Sign | 1 | `0` = 成功 · `1` = 失败 |
 | Reserved | 3 | bit0 `retryable` · bit1 `transient` · bit2 预留 |
 | Level | 4 | debug · info · warn · error · fatal |
 | System Domain | 8 | 6 大系统域 |
@@ -36,9 +36,9 @@
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| 默认构造 | `constexpr error_code_t() noexcept` | sign=1 的成功码 |
+| 默认构造 | `constexpr error_code_t() noexcept` | sign=0 的成功码 |
 | 原始码构造 | `constexpr explicit error_code_t(code_t code) noexcept` | 直接传入 64 位原始值 |
-| 五参构造 | `constexpr error_code_t(error_level_t level, domain::system_domain_t system, subsystem_id_t subsystem, module_id_t module, error_number_t number) noexcept` | 按字段构造，sign=0 |
+| 五参构造 | `constexpr error_code_t(error_level_t level, domain::system_domain_t system, subsystem_id_t subsystem, module_id_t module, error_number_t number) noexcept` | 按字段构造，sign=1（失败） |
 | 成功码工厂 | `static constexpr error_code_t make_success() noexcept` | 等价默认构造，语义更清晰 |
 | 拷贝/移动构造 | `= default`（全部 `noexcept`） | Rule of 5 |
 | 拷贝/移动赋值 | `= default`（全部 `noexcept`） | Rule of 5 |
@@ -60,8 +60,8 @@
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `is_success_code` | `[[nodiscard]] constexpr bool is_success_code() const noexcept` | sign=1 |
-| `is_error_code` | `[[nodiscard]] constexpr bool is_error_code() const noexcept` | sign=0 |
+| `is_success_code` | `[[nodiscard]] constexpr bool is_success_code() const noexcept` | sign==0 |
+| `is_error_code` | `[[nodiscard]] constexpr bool is_error_code() const noexcept` | sign!=0 |
 | `is_retryable` | `[[nodiscard]] constexpr bool is_retryable() const noexcept` | Reserved.bit0 |
 | `is_transient` | `[[nodiscard]] constexpr bool is_transient() const noexcept` | Reserved.bit1 |
 | `operator code_t` | `explicit constexpr operator code_t() const noexcept` | 显式转原始 64 位码 |
@@ -71,9 +71,9 @@
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `get_sign` | `[[nodiscard]] constexpr uint8_t get_sign() const noexcept` | 符号位（0/1） |
+| `get_sign` | `[[nodiscard]] constexpr uint8_t get_sign() const noexcept` | 符号位（0=成功，1=失败） |
 | `get_reserved` | `[[nodiscard]] constexpr uint8_t get_reserved() const noexcept` | 预留位（0-7） |
-| `set_sign` | `constexpr void set_sign(uint8_t sign) noexcept` | 设置符号位（超范围视为 0） |
+| `set_sign` | `constexpr void set_sign(uint8_t sign) noexcept` | 设置符号位（超范围视为 1 即失败） |
 | `set_reserved` | `constexpr void set_reserved(uint8_t reserved) noexcept` | 设置预留位（超范围视为 0） |
 | `set_retryable` | `constexpr void set_retryable(bool retryable) noexcept` | 写入 Reserved.bit0 |
 | `set_transient` | `constexpr void set_transient(bool transient) noexcept` | 写入 Reserved.bit1 |
@@ -86,6 +86,20 @@ error_code_t code(error_level_t::error, system_domain_t::database,
 code.set_retryable(true);
 if (code.is_retryable()) { /* 重试逻辑 */ }
 auto ok = error_code_t::make_success();
+```
+
+### 编译期冲突检测
+
+```cpp
+template <size_t N>
+[[nodiscard]] constexpr bool all_unique(const std::array<error_code_t, N>& codes) noexcept;
+```
+
+O(n²) constexpr 暴力比较，配合 `static_assert` 在编译期捕获重复错误码定义：
+
+```cpp
+constexpr std::array<error_code_t, 3> codes = {ERR_A, ERR_B, ERR_C};
+static_assert(all_unique(codes), "Duplicate error codes detected");
 ```
 
 ---
@@ -115,7 +129,7 @@ auto ok = error_code_t::make_success();
 | `cause` | `std::shared_ptr<error_context_t>` | `nullptr` | 因果链底层错误 |
 | `stack_frames` | `std::vector<std::string>` | `{}` | 堆栈帧（由 `STACKTRACE_ENABLED` 控制） |
 
-静态常量 `PAYLOAD_SSO_CAPACITY = 4`：负载项 ≤ 4 时栈上存储零堆分配，超过后溢出到 `std::unordered_map`。
+静态常量 `PAYLOAD_SSO_CAPACITY = 4`：负载项 ≤ 4 时栈上存储零堆分配，超过后溢出到 `std::unordered_map`。可通过 `-DERROR_SYSTEM_PAYLOAD_SSO_CAPACITY=N` 编译期覆盖（默认 4，建议 1~16）。
 
 ### 构造
 
@@ -124,6 +138,7 @@ auto ok = error_code_t::make_success();
 | 默认构造 | `constexpr error_context_t() noexcept = default` | 成功码空上下文 |
 | located_code 构造 | `template <typename... Args> error_context_t(located_code_t lc, std::string message_format, Args&&... args) noexcept` | 自动捕获源位置、格式化消息、触发初始化 |
 | 异常转换工厂 | `static error_context_t from_exception(error_code_t code, const std::exception& e, utils::source_location_t loc = current()) noexcept` | 从 `std::exception` 创建 |
+| `make_minimal` | `[[nodiscard]] static error_context_t make_minimal(error_code_t code, utils::source_location_t loc = current()) noexcept` | 跳过 validation/stacktrace/notification，仅供 Lean 模式读取路径使用 |
 | 拷贝构造 | `error_context_t(const error_context_t&) noexcept` | 深拷贝（bad_alloc 内部捕获） |
 | 移动构造 | `error_context_t(error_context_t&&) noexcept` | 显式清零源对象 |
 | 拷贝赋值 | `= delete` | 禁用 |
@@ -149,8 +164,8 @@ auto ok = error_code_t::make_success();
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | `get_code` | `[[nodiscard]] const error_code_t& get_code() const noexcept` | 错误码只读引用 |
-| `is_success` | `bool is_success() const noexcept` | sign=1 |
-| `is_error` | `bool is_error() const noexcept` | sign=0 |
+| `is_success` | `bool is_success() const noexcept` | sign==0 |
+| `is_error` | `bool is_error() const noexcept` | sign!=0 |
 | `is_fatal` | `[[nodiscard]] bool is_fatal() const noexcept` | level == fatal |
 | `is_retryable` | `[[nodiscard]] bool is_retryable() const noexcept` | 委托 error_code_t |
 | `is_transient` | `[[nodiscard]] bool is_transient() const noexcept` | 委托 error_code_t |
@@ -200,16 +215,16 @@ return join_errors(std::move(errs));
 
 ---
 
-## result_t<T>
+## result_t<T, bool Lean = false>
 
-类 Rust Result，零异常错误传递。内部使用 `std::variant<T, error_context_t>` + `std::get_if` + 哨兵值，永不抛异常。
+类 Rust Result，零异常错误传递。内部使用 `std::variant<T, error_storage_t>` + `std::get_if` + 哨兵值，永不抛异常。`error_storage_t = std::conditional_t<Lean, error_code_t, error_context_t>`：Lean=true 时仅存储 error_code_t（省去 message/payload/cause/stack），适用于热路径；Lean=false（默认）为完整模式。
 
 ### 工厂方法
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | `make_success` | `[[nodiscard]] static result_t make_success(T value) noexcept` | 成功结果 |
-| `make_error` | `[[nodiscard]] static result_t make_error(error_code_t code, const std::string& message = "", utils::source_location_t loc = current()) noexcept` | 错误结果（const&/&& message / 从 context 共 4 重载） |
+| `make_error` | `[[nodiscard]] static result_t make_error(error_code_t code, const std::string& message = "", utils::source_location_t loc = current()) noexcept` | 错误结果（const&/&& message / 从 context 共 4 重载）。Lean 模式下忽略 message/location，仅存 code |
 
 ### 状态查询
 
@@ -228,7 +243,9 @@ return join_errors(std::move(errs));
 | `value_or` | `[[nodiscard]] const T& value_or(const T& default_value) const noexcept` | 失败返回默认值 |
 | `operator*` | `[[nodiscard]] const T& operator*() const noexcept` | 等价 value()（另有无 const 重载） |
 | `operator->` | `[[nodiscard]] const T* operator->() const noexcept` | 等价 value_pointer()（另有无 const 重载） |
-| `error` | `[[nodiscard]] const error_context_t& error() const noexcept` | 失败时返回错误上下文（另有 mutable 重载 `error() noexcept`） |
+| `error` | `[[nodiscard]] auto error() const noexcept -> std::conditional_t<Lean, error_context_t, const error_context_t&>` | 完整模式返回 const 引用；Lean 模式返回值（临时构造仅含 code） |
+| `error`（mutable） | `template <bool IsLean = Lean, typename = std::enable_if_t<!IsLean>> [[nodiscard]] error_context_t& error() noexcept` | 可变引用，仅完整模式可用（Lean 模式 SFINAE 禁用） |
+| `error_code` | `[[nodiscard]] error_code_t error_code() const noexcept` | Lean 模式直接返回存储的 error_code_t；完整模式从 context 提取 |
 
 `value()` 含 `static_assert` 要求 T 可默认构造，否则编译失败 — 此时改用 `value_pointer()` 或 `operator->`。
 
@@ -242,10 +259,18 @@ return join_errors(std::move(errs));
 | `or_else` | `template <typename F> [[nodiscard]] result_t or_else(F&& fn) noexcept` | 错误时调用 fn(error) 返回其 result_t（`&` / `&&` 两重载） |
 | `map` | `template <typename F> [[nodiscard]] auto map(F&& fn) noexcept` | 成功时映射值类型（`const&` / `&&` 两重载） |
 | `map_error` | `template <typename F> [[nodiscard]] result_t map_error(F&& fn) noexcept` | 错误时映射 error_context_t（`const&` / `&&` 两重载） |
-| `context` | `template <typename K, typename V> ... context(K&& key, V&& value) noexcept` | 传播时附加 payload，成功时无操作（`&` 返回引用，`&&` 返回移动后对象） |
+| `context` | `template <typename K, typename V> ... context(K&& key, V&& value) noexcept` | 传播时附加 payload，成功时无操作（`&` 返回引用，`&&` 返回移动后对象）。Lean 模式 SFINAE 禁用 |
 | `match` | `template <typename S, typename E> [[nodiscard]] auto match(S&&, E&&) const noexcept` | 模式匹配，强制同时处理两条路径 |
 
 `match` 的 noexcept 性跟随用户回调：仅当两个回调均 noexcept 时本方法才 noexcept，否则异常会传播给调用方。
+
+### 强制错误检查
+
+Debug 构建下，`result_t` 析构时若处于错误状态且未被检查，触发 `assert` 提示调用方漏检错误。Release 构建下 `checked_` 标志被编译器优化掉，零开销。
+
+以下方法会标记"已检查"：`is_success` / `is_error` / `operator bool` / `value` / `value_or` / `value_pointer` / `error` / `error_code` / `match`。
+
+移动构造转移 `checked_` 状态（源对象标记为已检查避免其析构断言）；拷贝构造清空 `checked_`，新对象需独立检查。
 
 ### 示例
 
@@ -261,9 +286,9 @@ auto msg = r.match(
     [](const error_context_t& e) { return "fail: " + std::string(e.message); });
 ```
 
-### result_t<void> 特化
+### result_t<void, Lean> 特化
 
-仅列与主模板的差异。构造/析构/拷贝/移动 Rule of 5、`is_success`/`is_error`/`operator bool`/`make_error` 系列/`error() const`/`map_error`/`or_else`/`context` 均同主模板。
+仅列与主模板的差异。构造/析构/拷贝/移动 Rule of 5、`is_success`/`is_error`/`operator bool`/`make_error` 系列/`error() const`/`error_code`/`map_error`/`or_else`/`context` 均同主模板（含 Lean 模式行为）。
 
 | 差异点 | 说明 |
 |--------|------|

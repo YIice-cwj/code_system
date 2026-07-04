@@ -2,6 +2,8 @@
 
 `error_system::config`
 
+> 配置策略、场景推荐、性能数据、最佳实践请查阅 [系统配置指南](../configuration_guide.md)。
+
 原 `error_config_t` 已按单一职责原则拆分为四个独立配置类，`error_config.h` 仅作向后兼容的统一包含入口。新代码请直接包含对应的细分头文件。
 
 ---

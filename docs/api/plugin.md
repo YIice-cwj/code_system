@@ -183,6 +183,83 @@ if (sampler.should_be_forwarded(ctx)) { registry.enqueue_notification(ctx); }
 
 ---
 
+## metric_plugin_t
+
+头文件：`error_system/plugin/metric_plugin.h`
+
+继承 `i_error_plugin_t`，按 code/level/subsystem 三维度统计错误次数。线程安全（`std::mutex`），`on_error()` 路径为 O(1) 原子递增 + 一次 map 查找。适用场景：错误率监控、热点错误码定位、子系统健康度评估。
+
+### metric_snapshot_t
+
+`snapshot()` 返回的不可变统计快照，拷贝后可独立访问。`level_counts` 索引与 `error_level_t` 数值对应：0=debug, 1=info, 2=warn, 3=error, 4=fatal。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `total_count` | `uint64_t` | 总错误数 |
+| `level_counts` | `std::array<uint64_t, 5>` | 按等级计数（0=debug...4=fatal） |
+| `code_counts` | `std::unordered_map<uint64_t, uint64_t>` | 按完整 64 位码计数 |
+| `subsystem_counts` | `std::unordered_map<uint16_t, uint64_t>` | 按子系统计数 |
+
+### 构造与特殊成员
+
+| 成员 | 签名 | 说明 |
+|------|------|------|
+| 构造 | `explicit metric_plugin_t(string name = "metric", error_level_t min_level = error) noexcept` | 默认名称 `metric`，默认最低级别 `error` |
+| 拷贝/移动 | 全部 `= delete` | 不可拷贝不可移动 |
+
+### 方法
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `name` | `string_view name() const noexcept` | 插件名称 |
+| `min_level` | `error_level_t min_level() const noexcept` | 最低关注级别 |
+| `on_error` | `void on_error(const error_context_t&) noexcept` | 计数递增 |
+| `snapshot` | `[[nodiscard]] metric_snapshot_t snapshot() const noexcept` | 导出统计快照 |
+| `reset` | `void reset() noexcept` | 重置所有计数 |
+
+```cpp
+auto plugin = std::make_unique<plugin::metric_plugin_t>("app_metric", core::error_level_t::error);
+plugin::plugin_registry_t::instance().register_plugin(std::move(plugin));
+// ... 运行业务 ...
+auto snap = metric_plugin.snapshot();
+std::printf("total=%llu\n", static_cast<unsigned long long>(snap.total_count));
+```
+
+---
+
+## log_plugin_t
+
+头文件：`error_system/plugin/log_plugin.h`
+
+继承 `i_error_plugin_t`，将错误上下文格式化输出到 `std::ostream`。支持 text / json 两种格式，`min_level()` 过滤低级别事件。线程安全（`std::mutex` 保护流写入，避免多线程交错输出）。不内置文件管理逻辑（KISS 原则），调用方负责流的生命周期；默认输出到 `std::cerr`。
+
+输出格式枚举：`enum class format_t { text, json };`
+
+### 构造与特殊成员
+
+| 成员 | 签名 | 说明 |
+|------|------|------|
+| 构造 | `explicit log_plugin_t(string name = "logger", error_level_t min_level = warn, format_t format = text, ostream* stream = nullptr) noexcept` | 默认 `warn` + `text`，`stream=nullptr` 时使用 `std::cerr`（调用方需保证流生命周期长于插件） |
+| 拷贝/移动 | 全部 `= delete` | 不可拷贝不可移动 |
+
+### 方法
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `name` | `string_view name() const noexcept` | 插件名称 |
+| `min_level` | `error_level_t min_level() const noexcept` | 最低输出级别 |
+| `on_error` | `void on_error(const error_context_t&) noexcept` | 格式化并写入流 |
+
+```cpp
+auto plugin = std::make_unique<plugin::log_plugin_t>("app_log",
+                                                      core::error_level_t::warn,
+                                                      plugin::log_plugin_t::format_t::json,
+                                                      &file_stream);
+plugin::plugin_registry_t::instance().register_plugin(std::move(plugin));
+```
+
+---
+
 ## 插件开发指南
 
 ### 三步速查

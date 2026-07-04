@@ -10,8 +10,10 @@
 | Migration | `error_migration_registry_t` |
 | Core | `error_code_t` `error_context_t` `result_t<T>` `error_registry_t` `error_builder_t` `error_exception_t` `error_context_serializer_t` `error_context_initializer_t` |
 | Domain | 6 大系统域枚举 |
-| Plugin | `i_error_plugin_t` `plugin_registry_t` `error_router_plugin_t` `async_notification_channel_t` `error_dedup_sampler_t` |
+| Plugin | `i_error_plugin_t` `plugin_registry_t` `error_router_plugin_t` `async_notification_channel_t` `error_dedup_sampler_t` `log_plugin_t` `metric_plugin_t` |
 | Utils | `async_queue_t` `string_utils_t` `string_format_t` `json_dict_t` `json_lexer_t` `file_utils_t` `stack_trace_utils_t` `source_location_t` |
+| Bridge | `c_abi_export` `std_error_code_bridge` `error_system_category_t` |
+| Async | `async_result_t` |
 
 核心原则：下层不依赖上层，`error_code_t` 不感知 Plugin。原 `error_config_t` 与 `error_context_t` 已按 SRP 拆分，`error_config.h` 仅作向后兼容入口，新代码直接包含细分头文件。
 
@@ -25,8 +27,10 @@
 | Migration | 错误码废弃标记与迁移注册，单跳或递归迁移（环检测，最大深度 16）。 |
 | Core | 64 位错误码、错误上下文、序列化、注册表、Result 与异常封装。 |
 | Domain | 6 大系统域枚举（none/system/middleware/database/application/third_party）。 |
-| Plugin | 插件接口、RCU 无锁注册表、路由分发、异步通知通道、去重采样。 |
+| Plugin | 插件接口、RCU 无锁注册表、路由分发、异步通知通道、去重采样、日志插件、指标插件。 |
 | Utils | 异步队列、字符串处理、JSON 解析、文件操作、堆栈跟踪、源位置封装。 |
+| Bridge | C ABI 句柄导出、std::error_code 双向桥接。 |
+| Async | 基于 std::future 的 then/recover 链式异步错误处理。 |
 
 ## 关键设计决策
 
@@ -98,16 +102,18 @@ void bump_epoch_() noexcept { epoch_counter_.fetch_add(1, std::memory_order_rele
 
 ## 测试架构
 
-框架为 GoogleTest v1.14.0（`FetchContent`）+ `gtest_discover_tests` 注册到 CTest；单元测试镜像 `include/` 结构，链接 `error_system::error_system` + `gtest_main`，仅应用警告选项不应用 LTO/PGO/Sanitizer；性能基准 `tests/perf/` 共享 `perf_common.h` 覆盖 8 个场景；代码生成由 Python3 从 `config/errors/*.json` 产出头文件、O(1) 字典与文档。
+框架为 GoogleTest v1.14.0（`FetchContent`）+ `gtest_discover_tests` 注册到 CTest；单元测试镜像 `include/` 结构，链接 `error_system::error_system` + `gtest_main`，仅应用警告选项不应用 LTO/PGO/Sanitizer；性能基准 `tests/perf/` 含 4 个基准文件（Google Benchmark v1.8.3）；代码生成由 Python3 从 `config/errors/*.json` 产出头文件、O(1) 字典与文档。
 
 | 模块 | 文件数 | 用例数 |
 |------|:---:|:---:|
-| Core | 7 | 183 |
-| Plugin | 3 | 52 |
-| Utils | 5 | 129 |
+| Core | 13 | 260 |
+| Plugin | 7 | 89 |
+| Utils | 5 | 137 |
 | Config | 2 | 27 |
-| Domain | 1 | 9 |
-| i18n | 1 | 27 |
-| Mapping | 1 | 22 |
+| Domain | 1 | 12 |
+| i18n | 2 | 43 |
+| Mapping | 1 | 27 |
 | Migration | 1 | 32 |
-| **总计** | **21** | **481** |
+| Async | 1 | 18 |
+| Bridge | 2 | 21 |
+| **总计** | **35** | **661** |
