@@ -17,7 +17,7 @@
  *          支持背压控制，队列满时拒绝新任务。
  *          处理器异常不会导致工作线程退出。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-14
  * @copyright Copyright (c) 2026
  */

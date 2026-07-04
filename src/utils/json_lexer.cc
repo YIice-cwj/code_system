@@ -6,7 +6,7 @@
  * @details 实现 JSON 字符串的词法分析，支持字符串（含 \uXXXX 转义与 UTF-16 代理对）、
  *          标点符号（{}[],:）、空白跳过等 token 识别，遵循 RFC 8259 §7。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

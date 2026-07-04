@@ -6,7 +6,7 @@
  * @details 提供文件读取、写入、创建、删除、存在性检查等基础文件操作能力。
  *          读取时进行文件大小校验，避免恶意大文件导致 OOM。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

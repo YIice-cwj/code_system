@@ -9,7 +9,7 @@
  * @brief JSON工具函数
  * @details 定义JSON相关的工具函数，用于解析、序列化、验证等操作
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */

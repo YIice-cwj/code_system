@@ -7,7 +7,7 @@
  * @details 与 grpc::StatusCode 数值一致，避免引入 gRPC 依赖。
  *          提供 c_str / from_int / is_valid 等转换函数。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

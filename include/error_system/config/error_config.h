@@ -14,7 +14,7 @@
  *          - stacktrace_config_t：堆栈追踪全局阈值与 per-code 覆盖配置
  *          本文件仅作向后兼容的统一包含入口，新代码请直接包含对应的细分头文件。
  * @author yiice
- * @version 2.4.0
+ * @version 3.0.0
  * @date 2026-06-29
  * @copyright Copyright (c) 2026
  */

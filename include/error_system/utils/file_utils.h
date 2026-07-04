@@ -8,7 +8,7 @@
  * @brief 文件工具
  * @details 定义文件相关的函数，用于读取、写入、创建文件等
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */

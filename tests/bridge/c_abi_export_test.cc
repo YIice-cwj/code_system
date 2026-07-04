@@ -87,7 +87,7 @@ TEST(CAbiExportTest, retryable_and_transient_flags_read) {
 }
 
 TEST(CAbiExportTest, message_writes_hex_form) {
-    // level=error(3)、system=system(1)、number=1 → 0x0301000000000001
+    // level=error(3)、system=system(1)、number=1，sign=1(失败) → 0x8301000000000001
     const error_code_t code{error_level_t::error,
                             system_domain_t::system,
                             subsystem_id_t{0},
@@ -99,7 +99,7 @@ TEST(CAbiExportTest, message_writes_hex_form) {
     char buf[64]{};
     const int written = error_system_code_message(handle, buf, sizeof(buf));
     EXPECT_EQ(written, 19);
-    EXPECT_STREQ(buf, "0x0301000000000001");
+    EXPECT_STREQ(buf, "0x8301000000000001");
 
     error_system_code_handle_free(handle);
 }

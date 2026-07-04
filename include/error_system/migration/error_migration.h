@@ -25,7 +25,7 @@
  *          线程安全（读多写少场景使用 shared_mutex）。
  *          本头文件仅含声明，实现见 error_migration.cc（遵循规范第 5 条）。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

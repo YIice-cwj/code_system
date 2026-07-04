@@ -31,7 +31,7 @@
  *
  *          本头文件为可选包含，不污染 core 头文件依赖关系。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */

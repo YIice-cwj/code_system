@@ -5,7 +5,7 @@
  * @brief 字符串工具实现
  * @details 提供字符串替换、分割、合并、首尾空白去除、大小写转换等基础字符串操作能力。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

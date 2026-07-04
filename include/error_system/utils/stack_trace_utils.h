@@ -26,7 +26,7 @@
  * @brief 堆栈跟踪工具
  * @details 提供当前线程的函数调用栈抓取功能
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-05-03
  * @copyright Copyright (c) 2026
  */

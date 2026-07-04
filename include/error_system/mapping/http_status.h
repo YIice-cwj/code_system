@@ -7,7 +7,7 @@
  * @details 包装常用 HTTP 状态码，提供类型安全的转换接口。
  *          仅包含错误系统映射所需的状态码子集，非完整 HTTP 标准覆盖。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

@@ -15,7 +15,7 @@ namespace error_system::core {
  * @details 从 error_config_t 拆分而来，单一职责：管理错误上下文的自定义格式化函数。
  *          提供线程安全的 set/get 接口，通过 shared_mutex 实现读多写少场景下的并发访问。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-27
  * @copyright Copyright (c) 2026
  */

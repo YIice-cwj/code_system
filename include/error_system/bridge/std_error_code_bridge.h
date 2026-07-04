@@ -25,7 +25,7 @@
  *
  *          所有接口 noexcept，内部使用 try-catch 兜底 std::string 分配失败。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */
@@ -170,7 +170,7 @@ namespace error_system::bridge {
      *
      * 实现思路：
      *   - 默认构造（无错误）→ 成功码
-     *   - error_system_category → 从 int 反解 identity，重设 sign=0（错误）
+     *   - error_system_category → 从 int 反解 identity，重设 sign=1（失败）
      *   - std::generic_category → 调用 from_errno(ec.value())
      *   - std::system_category → 调用 from_errno(ec.value())
      *   - 其他未知 category → 退化构造一个 system 域 error 级错误码，number 携带 ec.value() 截断
@@ -182,7 +182,7 @@ namespace error_system::bridge {
         const std::error_category& cat = ec.category();
         if (&cat == &error_system_category()) {
             error_code_t reconstructed{static_cast<code_t>(static_cast<int64_t>(ec.value()))};
-            reconstructed.set_sign(0);
+            reconstructed.set_sign(1);
             return reconstructed;
         }
         if (&cat == &std::generic_category() || &cat == &std::system_category()) {

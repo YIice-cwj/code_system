@@ -14,7 +14,7 @@
  *          读取方法（get_deprecation_info / is_deprecated / migrate / migrate_recursive / count / list）使用 shared_lock，
  *          适配读多写少的运行时场景。bad_alloc 等异常在内部 try-catch 捕获并记录到 stderr，保持 noexcept 安全。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

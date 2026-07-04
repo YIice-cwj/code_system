@@ -6,7 +6,7 @@
  * @brief 源文件位置
  * @details 定义源文件位置相关的操作，如获取源文件位置
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-05-07
  * @copyright Copyright (c) 2026
  */

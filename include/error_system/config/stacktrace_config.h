@@ -16,7 +16,7 @@
  *          通过 if constexpr + 编译期常量 STACKTRACE_ENABLED 消除运行时开销，
  *          编译器死代码消除未启用分支。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-27
  * @copyright Copyright (c) 2026
  */

@@ -18,7 +18,7 @@
  *          - HTTP 状态码见 http_status.h（http_status_t）
  *          - gRPC 状态码见 grpc_status.h（grpc_status_t）
  * @author yiice
- * @version 1.1.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */
@@ -147,7 +147,7 @@ namespace error_system::mapping {
 
         /**
          * @brief 将错误码映射为 HTTP 状态码
-         * @details 成功码（sign=1）优先返回 200/OK，不进入等级判定；
+         * @details 成功码（sign=0）优先返回 200/OK，不进入等级判定；
          *          其余错误码按等级与系统域映射（详见 to_http_status_impl_）。
          * @param code 错误码
          * @return http_status_t HTTP 状态码

@@ -7,7 +7,7 @@
  *          + abi::__cxa_demangle；Windows 平台使用 CaptureStackBackTrace + DbgHelp。
  *          未启用 ERROR_SYSTEM_ENABLE_STACKTRACE 时返回空。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

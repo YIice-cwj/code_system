@@ -10,7 +10,7 @@
  * @details 定义错误码系统中的模块层级结构，包括系统域、子系统和功能模块三级分类，
  *          用于64位错误码bit位分配中的模块标识，支持大规模分布式系统的错误码管理
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */

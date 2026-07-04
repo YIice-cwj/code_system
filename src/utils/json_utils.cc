@@ -6,7 +6,7 @@
  * @details 实现基于状态机的 JSON 解析（支持嵌套对象与点分路径键）、JSON 字典查询、
  *          以及 JSON 字符串安全转义（含控制字符 \u00XX 编码）。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

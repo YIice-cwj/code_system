@@ -2,7 +2,7 @@
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/std/the-standard)
 [![CMake](https://img.shields.io/badge/CMake-3.15%2B-green.svg)](https://cmake.org)
-[![Tests](https://img.shields.io/badge/Tests-481%20passing-brightgreen.svg)](https://github.com/google/googletest)
+[![Tests](https://img.shields.io/badge/Tests-661%20passing-brightgreen.svg)](https://github.com/google/googletest)
 
 高性能 C++17 错误码管理系统 — 将完整错误上下文封装在一个 64 位整数中，零开销构建与解析。
 
@@ -103,7 +103,7 @@ ctest --test-dir build --output-on-failure  # 可选
 include(FetchContent)
 FetchContent_Declare(error_system
     GIT_REPOSITORY https://github.com/YIice-cwj/error_system.git
-    GIT_TAG v2.3.0)
+    GIT_TAG v2.4.0)
 FetchContent_MakeAvailable(error_system)
 target_link_libraries(my_app PRIVATE error_system::error_system)
 ```
@@ -129,6 +129,8 @@ cmake -S . -B build-min -DCMAKE_BUILD_TYPE=MinSizeRel \
 | [Migration API](docs/api/migration.md) | 错误码废弃与迁移 |
 | [Plugin API](docs/api/plugin.md) | 插件接口、注册表、路由、异步通知 |
 | [Utils API](docs/api/utils.md) | 字符串、JSON、文件、异步队列、堆栈 |
+| [Bridge API](docs/api/bridge.md) | C ABI 导出、std::error_code 桥接 |
+| [Async API](docs/api/async.md) | async_result_t 链式异步错误处理 |
 | [架构设计](docs/architecture.md) | 分层架构、关键设计决策、编译配置 |
 | [决策树](docs/decision_tree.md) | 通知模式、查询路径、序列化等选型指南 |
 | [错误码生成](docs/error_code_generation.md) | JSON 配置 → C++ 头文件 + 字典 + 文档 |

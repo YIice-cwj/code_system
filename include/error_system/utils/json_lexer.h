@@ -9,7 +9,7 @@
  * @brief JSON词法分析器
  * @details 定义JSON词法分析器相关的操作，如解析JSON字符串为JSON字典
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-04-28
  * @copyright Copyright (c) 2026
  */

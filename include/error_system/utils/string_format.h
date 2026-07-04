@@ -13,7 +13,7 @@
  * @brief 字符串格式化引擎
  * @details 提供 std::format 风格的占位符替换功能，支持算术类型、指针、bool 及自定义 to_string 类型
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-06-27
  * @copyright Copyright (c) 2026
  */

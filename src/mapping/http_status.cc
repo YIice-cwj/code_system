@@ -8,7 +8,7 @@
  *          constexpr 方法（from_int / is_valid / to_int / value / 比较运算符）
  *          仍保留在头文件中以支持编译期求值。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */

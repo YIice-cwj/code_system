@@ -7,7 +7,7 @@
  *          可被 Python/Go/Rust 等通过 FFI 直接消费。所有函数委托给
  *          error_system::abi 命名空间下的 inline C++ 实现，避免逻辑重复。
  * @author yiice
- * @version 1.0.0
+ * @version 3.0.0
  * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */

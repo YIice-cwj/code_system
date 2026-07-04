@@ -12,7 +12,7 @@
  *          文本/i18n 输出开关已统一迁移到 i18n_config_t::set_enable_i18n。
  *          编译期常量通过 if constexpr 消除运行时开销，由编译器死代码消除未启用分支。
  * @author yiice
- * @version 2.3.0
+ * @version 3.0.0
  * @date 2026-06-27
  * @copyright Copyright (c) 2026
  */
