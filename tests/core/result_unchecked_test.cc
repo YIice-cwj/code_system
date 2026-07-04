@@ -43,7 +43,6 @@ namespace {
 
 TEST(ResultUncheckedTest, success_result_no_check_safe_to_destroy) {
     result_t<int> r = result_t<int>::make_success(42);
-    // 成功状态，未调用 is_error 也应安全析构
 }
 
 TEST(ResultUncheckedTest, error_result_checked_via_is_error_safe) {
@@ -94,7 +93,6 @@ TEST(ResultUncheckedTest, void_error_result_checked_safe) {
 
 TEST(ResultUncheckedTest, void_success_result_no_check_safe) {
     result_t<void> r = result_t<void>::make_success();
-    // 成功状态，未调用 is_error 也应安全析构
 }
 
 // ========== 移动语义：源对象标记为已检查 ==========
@@ -103,7 +101,6 @@ TEST(ResultUncheckedTest, move_constructed_source_marked_checked) {
     result_t<int> r = result_t<int>::make_error(make_test_error_code(), "err");
     result_t<int> moved = std::move(r);
     (void)moved.is_error();
-    // r 析构时不应触发断言（已被移动构造标记为 checked_）
 }
 
 TEST(ResultUncheckedTest, move_assigned_source_marked_checked) {
@@ -111,12 +108,9 @@ TEST(ResultUncheckedTest, move_assigned_source_marked_checked) {
     result_t<int> target = result_t<int>::make_success(0);
     target = std::move(r);
     (void)target.is_error();
-    // r 析构时仍持有 error_context_t，但应被标记为 checked
 }
 
 TEST(ResultUncheckedTest, move_assign_overwrites_unchecked_self) {
-    // target 自身持有未检查错误，赋值新值前应先检查自身（避免漏检）
-    // 这里 target 是成功状态，无未检查错误，赋值安全
     result_t<int> target = result_t<int>::make_success(1);
     result_t<int> src = result_t<int>::make_success(2);
     target = std::move(src);
@@ -129,7 +123,6 @@ TEST(ResultUncheckedTest, copied_result_must_be_checked_independently) {
     result_t<int> original = result_t<int>::make_error(make_test_error_code(), "err");
     (void)original.is_error();
     result_t<int> copy = original;
-    // copy 析构前必须独立检查
     (void)copy.is_error();
 }
 
@@ -138,7 +131,6 @@ TEST(ResultUncheckedTest, copied_result_must_be_checked_independently) {
 TEST(ResultUncheckedTest, map_on_error_consumes_source_safe) {
     result_t<int> r = result_t<int>::make_error(make_test_error_code(), "err");
     auto mapped = r.map([](const int& v) { return v * 2; });
-    // r 通过 const& 调用 map，内部 is_error() 标记 checked_
     (void)mapped.is_error();
 }
 
@@ -146,19 +138,18 @@ TEST(ResultUncheckedTest, and_then_on_error_consumes_source_safe) {
     result_t<int> r = result_t<int>::make_error(make_test_error_code(), "err");
     auto next = std::move(r).and_then([](int&&) { return result_t<int>::make_success(0); });
     (void)next.is_error();
-    // r 已被移动，析构安全
 }
 
 // ========== Debug 断言死亡测试（仅 NDEBUG 未定义时生效）==========
+//
+// 死亡测试：构造错误 result 不检查直接析构，应触发 assert。
+// stderr 输出 "unchecked error result destroyed" 后 abort。
 
 #ifndef NDEBUG
 TEST(ResultUncheckedDeathTest, unchecked_error_result_triggers_assert) {
-    // 死亡测试：构造错误 result 不检查直接析构，应触发 assert
-    // 注意：stderr 输出 "unchecked error result destroyed" 后 abort
     EXPECT_DEATH(
         {
             result_t<int> r = result_t<int>::make_error(make_test_error_code(), "err");
-            // 不调用任何检查方法，直接析构
         },
         "unchecked error result destroyed");
 }
@@ -167,20 +158,16 @@ TEST(ResultUncheckedDeathTest, void_unchecked_error_result_triggers_assert) {
     EXPECT_DEATH(
         {
             result_t<void> r = result_t<void>::make_error(make_test_error_code(), "err");
-            // 不检查直接析构
         },
         "unchecked error result destroyed");
 }
 
 TEST(ResultUncheckedDeathTest, unchecked_error_after_move_assign_overwrite_triggers_assert) {
-    // target 持有未检查错误，被赋值新错误时应触发对自身的检查
     EXPECT_DEATH(
         {
             result_t<int> target = result_t<int>::make_error(make_test_error_code(1), "first");
             result_t<int> src = result_t<int>::make_error(make_test_error_code(2), "second");
             target = std::move(src);
-            // target 析构时 src 已被标记，但 src 自身的 error_context 已被移走，
-            // 此处主要验证 target 析构安全（target 持有 src 的错误，未检查）
         },
         "unchecked error result destroyed");
 }

@@ -114,7 +114,6 @@ namespace error_system::bridge {
                           core::subsystem_id_t{0},
                           core::module_id_t{0},
                           core::error_number_t{number}};
-        // 常见可重试 errno 标记 retryable
         if (err_no == EAGAIN || err_no == EWOULDBLOCK || err_no == ETIMEDOUT || err_no == EINTR) {
             code.set_retryable(true);
             code.set_transient(true);
@@ -189,7 +188,6 @@ namespace error_system::bridge {
         if (&cat == &std::generic_category() || &cat == &std::system_category()) {
             return from_errno(ec.value());
         }
-        // 未知 category：保守构造 system 域 error 级错误码，number 携带 ec.value() 截断
         return error_code_t{error_level_t::error,
                             system_domain_t::system,
                             core::subsystem_id_t{0},
