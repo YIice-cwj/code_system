@@ -11,7 +11,9 @@
 | [Migration 层](api/migration.md) | `error_migration_registry_t` 废弃标记、单跳/递归迁移 |
 | [Mapping 层](api/mapping.md) | `http_status_t` `grpc_status_t` `status_mapper_t` HTTP/gRPC 映射 |
 | [Config 层](api/config.md) | `feature_flags_t` `stacktrace_config_t` `formatter_config_t` `i18n_config_t` 三种通知模式 |
-| [Plugin 层](api/plugin.md) | 插件接口、注册表、路由分发、延迟通知、开发指南 |
+| [Plugin 层](api/plugin.md) | 插件接口、注册表、路由分发、日志/指标插件、开发指南 |
+| [Bridge 层](api/bridge.md) | C ABI 导出、std::error_code 桥接 |
+| [Async 层](api/async.md) | async_result_t 链式异步错误处理 |
 | [Utils 层](api/utils.md) | 字符串工具、JSON 解析、文件操作、异步队列、堆栈跟踪 |
 
 ## 设计文档
@@ -41,22 +43,22 @@
 
 ## 运行测试
 
-在 `build` 目录下执行 `ctest` 跑通全量用例。
-
 ```bash
 cd build && ctest --output-on-failure
 ```
 
 | 模块 | 文件数 | 用例数 |
 |------|:---:|:---:|
-| Core | 7 | 183 |
-| Plugin | 3 | 52 |
-| Utils | 5 | 129 |
+| Core | 13 | 260 |
+| Plugin | 7 | 89 |
+| Utils | 5 | 137 |
 | Config | 2 | 27 |
-| Domain | 1 | 9 |
-| i18n | 1 | 27 |
-| Mapping | 1 | 22 |
+| Domain | 1 | 12 |
+| i18n | 2 | 43 |
+| Mapping | 1 | 27 |
 | Migration | 1 | 32 |
-| **总计** | **21** | **481** |
+| Async | 1 | 18 |
+| Bridge | 2 | 21 |
+| **总计** | **35** | **661** |
 
-另有 `tests/perf/` 8 个性能基准场景（共享 `perf_common.h`）：基线、栈追踪、插件、栈追踪+插件、全特性、错误路由插件、去重采样器、i18n 翻译模块。
+另有 `tests/perf/` 4 个基准文件（Google Benchmark v1.8.3）：错误上下文、i18n、插件、Result Lean。

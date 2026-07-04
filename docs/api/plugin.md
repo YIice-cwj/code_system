@@ -67,7 +67,7 @@
 | `flush_deferred_notifications` | `void flush_deferred_notifications() noexcept` | 触发当前线程累积通知 |
 | `pending_deferred_notifications` | `[[nodiscard]] size_t pending_deferred_notifications() const noexcept` | 待 flush 数量 |
 | `clear_deferred_notifications` | `size_t clear_deferred_notifications() noexcept` | 清空缓冲（不触发通知），返回丢弃数 |
-| `set_deferred_buffer_size` | `void set_deferred_buffer_size(size_t max_size) noexcept` | 缓冲最大容量，0 = 无限制 |
+| `set_deferred_buffer_size` | `void set_deferred_buffer_size(size_t max_size) noexcept` | 缓冲最大容量，0 = 无限制（默认 1024） |
 | `get_deferred_buffer_size` | `[[nodiscard]] size_t get_deferred_buffer_size() const noexcept` | 缓冲最大容量 |
 | `deferred_buffer_overflowed` | `[[nodiscard]] bool deferred_buffer_overflowed() const noexcept` | 是否发生过溢出丢弃 |
 

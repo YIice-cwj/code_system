@@ -107,6 +107,10 @@ i18n 配置类，管理 i18n 启用开关与输出 locale 配置。类仅含静�
 | clear_output_locale | `static void clear_output_locale() noexcept` | 清除输出 locale，回退到默认 |
 | get_output_locale | `[[nodiscard]] static std::optional<locale_t> get_output_locale() noexcept` | 获取显式设置的输出 locale |
 | resolve_output_locale | `[[nodiscard]] static locale_t resolve_output_locale() noexcept` | 解析最终输出 locale |
+| set_locale_parent | `static void set_locale_parent(locale_t child, locale_t parent) noexcept` | 设置 locale 的 parent（覆盖内置映射） |
+| get_locale_parent | `[[nodiscard]] static locale_t get_locale_parent(locale_t child) noexcept` | 查询 locale 的当前 parent |
+| reset_locale_parent | `static void reset_locale_parent(locale_t child) noexcept` | 重置为内置默认 parent |
+| reset_all_locale_parents | `static void reset_all_locale_parents() noexcept` | 重置所有 parent 映射 |
 
 ### locale 解析顺序
 
@@ -114,6 +118,9 @@ i18n 配置类，管理 i18n 启用开关与输出 locale 配置。类仅含静�
 resolve_output_locale()
 1. output_locale 已设置 → 返回 output_locale
 2. 否则 → 返回 default_locale
+
+i18n_t::get_message(locale, code) 多级回退：
+指定 locale → parent(locale) → ... → en_US → ""
 ```
 
 ```cpp
@@ -137,6 +144,13 @@ i18n_config_t::resolve_output_locale();   // → zh_CN
 | `enable_source_location_` | `true` | 源位置追踪 |
 | `enable_short_filename_` | `true` | 短文件名模式 |
 | `notify_mode_` | `sync` | 插件通知模式 |
+| `enable_i18n` | `true` | i18n 总开关 |
+| `default_locale` | `zh_CN` | 默认 locale |
+| `output_locale` | 未设置 | 输出 locale（未设置时回退到 default） |
+| `custom_formatter` | `nullptr` | 自定义格式化函数 |
+| `max_queue_size` | `0`（无限） | 异步通知队列容量 |
+| `deferred_buffer_size` | `1024` | 延迟通知缓冲容量 |
+| `per_code_stacktrace_level` | 无 | per-code 堆栈阈值覆盖 |
 
 ---
 

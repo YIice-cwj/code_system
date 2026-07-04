@@ -7,7 +7,7 @@
  *          包括错误码定义、子系统/模块聚合、Traits 特化、国际化翻译等所有组件
  * @author yiice
  * @version 3.0.0
- * @date 2026-04-27
+ * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */
 

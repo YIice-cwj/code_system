@@ -27,7 +27,7 @@ API 细节请查阅 [Config 层 API](api/config.md)；通知模式选择细节�
 | `plugin_registry_t` | `max_queue_size` | `0`（无限） | 异步通知队列容量上限（背压） |
 | `plugin_registry_t` | `deferred_buffer_size` | `1024` | 线程本地延迟通知缓冲容量 |
 
-编译期宏（`ERROR_SYSTEM_ENABLE_STACKTRACE` / `VALIDATION` / `LOCATION`）通过 CMake 控制，决定 `feature_flags_t::STACKTRACE_ENABLED` 等 `constexpr` 值。编译期关闭后，对应的 `set_*` 调用变为无操作，`is_*_enabled()` 恒为 `false`，编译器死代码消除未启用分支。编译期宏细节见 [架构设计 · 编译配置](architecture.md#编译配置)。
+编译期宏（`-DERROR_SYSTEM_ENABLE_STACKTRACE` / `-DERROR_SYSTEM_ENABLE_VALIDATION` / `-DERROR_SYSTEM_ENABLE_LOCATION`）通过 CMake 控制，决定 `feature_flags_t::STACKTRACE_ENABLED` 等 `constexpr` 值。编译期关闭后，对应的 `set_*` 调用变为无操作，`is_*_enabled()` 恒为 `false`，编译器死代码消除未启用分支。编译期宏细节见 [架构设计 · 编译配置](architecture.md#编译配置)。
 
 ---
 

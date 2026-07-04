@@ -28,7 +28,7 @@ feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::async_queue);
 plugin::plugin_registry_t::instance().flush_deferred_notifications();  // 请求结束前 flush
 ```
 
-详见 [Plugin 层 API](api/plugin.md#通知模式)。
+详见 [Plugin 层 API · plugin_registry_t](api/plugin.md#plugin_registry_t)。
 
 ## 2. 错误码元数据查询路径选择
 
@@ -158,32 +158,29 @@ class my_plugin_t : public i_error_plugin_t {
 
 ## 7. 错误传递方式选择
 
-何时使用 `result_t<T>` vs `error_exception_t` vs 直接返回 `error_context_t`。
+何时使用 `result_t<T, Lean>` vs `error_exception_t` vs `async_result_t` vs 直接返回 `error_context_t`。
 
 ```
 错误传递方式？
-├─ 异常不可用 / 性能敏感 → result_t<T>       ← variant + getif + 哨兵值，链式操作
-├─ 需与异常生态集成     → error_exception_t  ← std::exception 子类，what() 返回缓存消息
-└─ 仅传递错误上下文     → error_context_t    ← 值语义，可直接作为参数/返回值
+├─ 异常不可用 / 性能敏感 → result_t<T, Lean>
+│   ├─ 需完整错误上下文 → result_t<T, false>（Full） ← variant + getif + 哨兵值，链式操作
+│   ├─ 热路径仅需错误码 → result_t<T, true>（Lean）  ← 8 字节 error_code_t，零堆分配
+│   └─ 异步链式         → async_result_t              ← then/recover，std::future 包装
+├─ 需与异常生态集成     → error_exception_t            ← std::exception 子类
+└─ 仅传递错误上下文     → error_context_t              ← 值语义，因果链 wrap
 ```
 
 | 方式 | 异常开销 | 链式操作 | 异常兼容 | 适用场景 |
 |------|:---:|:---:|:---:|------|
-| `result_t<T>` | 无 | map/and_then/or_else/match | 否 | 库内部、性能敏感路径 |
+| `result_t<T, false>`（Full） | 无 | map/and_then/or_else/match | 否 | 通用错误传递 |
+| `result_t<T, true>`（Lean） | 无 | map/and_then/or_else/match（无 context） | 否 | 热路径、仅需错误码 |
+| `async_result_t` | 无（回调异常→fatal） | then/recover | 否 | 异步操作链 |
 | `error_exception_t` | 有 | 无 | 是 | 跨异常/非异常边界 |
 | `error_context_t` | 无 | wrap（因果链） | 否 | 简单传递 |
 
-```cpp
-result_t<user_t> fetch_user(id_t id) noexcept {
-    if (id == 0) return result_t<user_t>::make_error(ERR_INVALID_ID, "id 不能为 0");
-    return result_t<user_t>::make_success(user_t{id});
-}
-auto name = fetch_user(42).map([](const user_t& u) { return u.name; }).value_or("unknown");
-auto r = fetch_user(id);
-if (r.is_error()) throw error_exception_t(r.error());  // 跨异常边界
-```
+注意：Debug 构建下 `result_t` 析构时若错误未被检查（is_success/is_error/value/error 等），触发 assert 防止吞错误；Release 构建零开销。
 
-详见 [Core 层 API · result_t](api/core.md#result_tt) 与 [error_exception_t](api/core.md#error_exception_t)。
+详见 [Core 层 API · result_t](api/core.md#result_tt)、[Async 层 API](api/async.md)、[error_exception_t](api/core.md#error_exception_t)。
 
 ## 8. HTTP/gRPC 状态码映射选择
 
