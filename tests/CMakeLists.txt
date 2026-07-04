@@ -35,13 +35,29 @@ foreach(test_source IN LISTS TEST_SOURCES)
 endforeach()
 
 if(ERROR_SYSTEM_BUILD_PERF_TESTS)
+    # Google Benchmark（仅性能测试依赖）
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_WERROR OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_USE_BUNDLED_GTEST OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        googlebenchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG        v1.8.3
+    )
+    FetchContent_MakeAvailable(googlebenchmark)
+
     file(GLOB PERF_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/perf/*_benchmark.cc)
 
     foreach(perf_source IN LISTS PERF_SOURCES)
         get_filename_component(perf_name ${perf_source} NAME_WE)
         add_executable(${perf_name} ${perf_source})
-        target_link_libraries(${perf_name} PRIVATE error_system)
+        target_link_libraries(${perf_name}
+            PRIVATE
+            error_system
+            benchmark::benchmark
+        )
         error_system_apply_warnings_only(${perf_name})
-        set_target_properties(${perf_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/perf)
+        set_target_properties(${perf_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/perf)
     endforeach()
 endif()
