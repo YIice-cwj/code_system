@@ -50,18 +50,59 @@ namespace error_system::core {
     result_t<T>::result_t(error_context_t&& error_context) noexcept(std::is_nothrow_move_constructible_v<error_context_t>) : value_or_error_(std::move(error_context)) {}
 
     template <typename T>
+    result_t<T>::result_t(const result_t& other) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>
+                                                          && std::is_nothrow_copy_constructible_v<error_context_t>)
+        : value_or_error_(other.value_or_error_), checked_(false) {}
+
+    template <typename T>
+    result_t<T>::result_t(result_t&& other) noexcept(std::is_nothrow_move_constructible_v<value_type_t>)
+        : value_or_error_(std::move(other.value_or_error_)), checked_(other.checked_) {
+        other.checked_ = true;
+    }
+
+    template <typename T>
+    result_t<T>& result_t<T>::operator=(result_t&& other) noexcept(std::is_nothrow_move_assignable_v<value_type_t>) {
+        if (this != &other) {
+            check_on_destroy_();
+            value_or_error_ = std::move(other.value_or_error_);
+            checked_ = other.checked_;
+            other.checked_ = true;
+        }
+        return *this;
+    }
+
+    template <typename T>
+    result_t<T>::~result_t() noexcept {
+        check_on_destroy_();
+    }
+
+    template <typename T>
+    void result_t<T>::check_on_destroy_() const noexcept {
+#ifndef NDEBUG
+        if (!checked_ && std::holds_alternative<error_context_t>(value_or_error_)) {
+            detail::report_unchecked_result(__FILE__, __LINE__);
+        }
+#else
+        (void)0;
+#endif
+    }
+
+    template <typename T>
     bool result_t<T>::is_error() const noexcept {
+        checked_ = true;
         return std::holds_alternative<error_context_t>(value_or_error_);
     }
 
     template <typename T>
     bool result_t<T>::is_success() const noexcept {
+        checked_ = true;
         return std::holds_alternative<value_type_t>(value_or_error_);
     }
 
     template <typename T>
     const error_context_t& result_t<T>::error() const noexcept {
-        assert(is_error() && "result_t::error() called on a success result");
+        checked_ = true;
+        assert(std::holds_alternative<error_context_t>(value_or_error_) && "result_t::error() called on a success result");
         auto* ptr = std::get_if<error_context_t>(&value_or_error_);
         if (ptr) {
             return *ptr;
@@ -72,7 +113,8 @@ namespace error_system::core {
 
     template <typename T>
     error_context_t& result_t<T>::error() noexcept {
-        assert(is_error() && "result_t::error() called on a success result");
+        checked_ = true;
+        assert(std::holds_alternative<error_context_t>(value_or_error_) && "result_t::error() called on a success result");
         auto* ptr = std::get_if<error_context_t>(&value_or_error_);
         if (ptr) {
             return *ptr;
@@ -86,7 +128,8 @@ namespace error_system::core {
         static_assert(std::is_default_constructible_v<value_type_t>,
                       "result_t::value() requires T to be default-constructible. "
                       "Use value_pointer() for non-default-constructible types.");
-        assert(is_success() && "result_t::value() called on an error result");
+        checked_ = true;
+        assert(std::holds_alternative<value_type_t>(value_or_error_) && "result_t::value() called on an error result");
         auto* ptr = std::get_if<value_type_t>(&value_or_error_);
         if (ptr) {
             return *ptr;
@@ -100,7 +143,8 @@ namespace error_system::core {
         static_assert(std::is_default_constructible_v<value_type_t>,
                       "result_t::value() requires T to be default-constructible. "
                       "Use value_pointer() for non-default-constructible types.");
-        assert(is_success() && "result_t::value() called on an error result");
+        checked_ = true;
+        assert(std::holds_alternative<value_type_t>(value_or_error_) && "result_t::value() called on an error result");
         auto* ptr = std::get_if<value_type_t>(&value_or_error_);
         if (ptr) {
             return *ptr;
@@ -111,16 +155,19 @@ namespace error_system::core {
 
     template <typename T>
     const T* result_t<T>::value_pointer() const noexcept {
+        checked_ = true;
         return std::get_if<value_type_t>(&value_or_error_);
     }
 
     template <typename T>
     T* result_t<T>::value_pointer() noexcept {
+        checked_ = true;
         return std::get_if<value_type_t>(&value_or_error_);
     }
 
     template <typename T>
     const T& result_t<T>::value_or(const value_type_t& default_value) const noexcept {
+        checked_ = true;
         auto* ptr = std::get_if<value_type_t>(&value_or_error_);
         return ptr ? *ptr : default_value;
     }
@@ -147,7 +194,8 @@ namespace error_system::core {
 
     template <typename T>
     result_t<T>::operator bool() const noexcept {
-        return is_success();
+        checked_ = true;
+        return std::holds_alternative<value_type_t>(value_or_error_);
     }
 
     template <typename T>
@@ -296,7 +344,8 @@ namespace error_system::core {
         noexcept(std::is_nothrow_invocable_v<SuccessFn&, const value_type_t&>
                  && std::is_nothrow_invocable_v<ErrorFn&, const error_context_t&>)
         -> decltype(success_fn(std::declval<const value_type_t&>())) {
-        if (is_success()) {
+        checked_ = true;
+        if (std::holds_alternative<value_type_t>(value_or_error_)) {
             auto* ptr = std::get_if<value_type_t>(&value_or_error_);
             if (ptr) {
                 return success_fn(*ptr);
@@ -340,6 +389,38 @@ namespace error_system::core {
     inline result_t<void>::result_t(error_context_t&& error_context) noexcept(std::is_nothrow_move_constructible_v<error_context_t>)
         : storage_(std::move(error_context)) {}
 
+    inline result_t<void>::result_t(const result_t& other) noexcept
+        : storage_(other.storage_), checked_(false) {}
+
+    inline result_t<void>::result_t(result_t&& other) noexcept
+        : storage_(std::move(other.storage_)), checked_(other.checked_) {
+        other.checked_ = true;
+    }
+
+    inline result_t<void>& result_t<void>::operator=(result_t&& other) noexcept {
+        if (this != &other) {
+            check_on_destroy_();
+            storage_ = std::move(other.storage_);
+            checked_ = other.checked_;
+            other.checked_ = true;
+        }
+        return *this;
+    }
+
+    inline result_t<void>::~result_t() noexcept {
+        check_on_destroy_();
+    }
+
+    inline void result_t<void>::check_on_destroy_() const noexcept {
+#ifndef NDEBUG
+        if (!checked_ && std::holds_alternative<error_context_t>(storage_)) {
+            detail::report_unchecked_result(__FILE__, __LINE__);
+        }
+#else
+        (void)0;
+#endif
+    }
+
     inline result_t<void> result_t<void>::make_error(error_code_t code, const std::string& message,
                                                      utils::source_location_t location) noexcept {
         return result_t<void>(error_context_t{located_code_t{code, location}, message});
@@ -359,19 +440,23 @@ namespace error_system::core {
     }
 
     inline result_t<void>::operator bool() const noexcept {
-        return is_success();
+        checked_ = true;
+        return std::holds_alternative<std::monostate>(storage_);
     }
 
     inline bool result_t<void>::is_error() const noexcept {
+        checked_ = true;
         return !std::holds_alternative<std::monostate>(storage_);
     }
 
     inline bool result_t<void>::is_success() const noexcept {
+        checked_ = true;
         return std::holds_alternative<std::monostate>(storage_);
     }
 
     inline const error_context_t& result_t<void>::error() const noexcept {
-        assert(is_error() && "result_t<void>::error() called on a success result");
+        checked_ = true;
+        assert(std::holds_alternative<error_context_t>(storage_) && "result_t<void>::error() called on a success result");
         auto* ptr = std::get_if<error_context_t>(&storage_);
         if (ptr) {
             return *ptr;
@@ -381,7 +466,8 @@ namespace error_system::core {
     }
 
     inline error_context_t& result_t<void>::error() noexcept {
-        assert(is_error() && "result_t<void>::error() called on a success result");
+        checked_ = true;
+        assert(std::holds_alternative<error_context_t>(storage_) && "result_t<void>::error() called on a success result");
         auto* ptr = std::get_if<error_context_t>(&storage_);
         if (ptr) {
             return *ptr;

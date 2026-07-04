@@ -1,5 +1,6 @@
 #pragma once
 #include <cassert>
+#include <cstdio>
 #include <functional>
 #include <string_view>
 #include <type_traits>
@@ -10,16 +11,37 @@
 /**
  * @file result.h
  * @brief 结果数据类定义
- * @details 定义结果数据结构、字段解析和访问接口
+ * @details 定义结果数据结构、字段解析和访问接口。
+ *          强制错误检查：Debug 构建下，result_t 析构时若处于错误状态且未被检查（is_error/
+ *          is_success/value/error/operator bool/value_pointer/value_or/match 任一未调用），
+ *          触发 assert 提示调用方漏检错误。Release 构建零开销，标志位被编译器优化掉。
  * @author yiice
- * @version 2.3.0
- * @date 2026-05-01
+ * @version 2.4.0
+ * @date 2026-07-04
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
 
     namespace detail {
         constexpr uint16_t FATAL_ERROR_NUMBER = 0xFFFE;  ///< 用户函数抛出异常时使用的 fatal 错误编号
+
+        /**
+         * @brief 未检查错误断言提示
+         * @details Debug 构建下 result_t 析构检测到未检查错误时调用，输出上下文后触发 assert。
+         *          Release 构建下整个调用路径被消除。函数 purposely_no_pretty 以避免污染符号表。
+         * @param file 源文件路径（由 __FILE__ 传入）
+         * @param line 行号（由 __LINE__ 传入）
+         */
+        inline void report_unchecked_result(const char* file, int line) noexcept {
+            std::fprintf(stderr,
+                         "[result_t] unchecked error result destroyed at %s:%d\n"
+                         "  call is_error()/is_success()/value()/error()/operator bool/\n"
+                         "  value_pointer()/value_or()/match() before destruction.\n",
+                         file, line);
+            assert(false && "unchecked error result destroyed");
+            (void)file;
+            (void)line;
+        }
 
         /**
          * @brief 构造用户函数抛出异常时的错误上下文
@@ -45,7 +67,8 @@ namespace error_system::core {
 
     /**
      * @brief 结果数据类
-     * @details 封装结果信息，提供字段解析和访问功能
+     * @details 封装结果信息，提供字段解析和访问功能。
+     *          强制错误检查：Debug 构建下析构时检测未检查的错误状态。
      * @tparam T 结果类型
      */
     template <typename T>
@@ -55,6 +78,20 @@ namespace error_system::core {
 
     private:
         std::variant<value_type_t, error_context_t> value_or_error_{};
+        /**
+         * @brief 错误检查标志位
+         * @details 调用 is_error/is_success/value/error/operator bool/value_pointer/
+         *          value_or/match 任一后置位。Debug 析构时检测错误状态下未置位的情况。
+         *          Release 构建下因 NDEBUG，检查逻辑被消除，标志位本身因无读者也被优化。
+         */
+        mutable bool checked_{false};
+
+        /**
+         * @brief 析构前检查未消费错误（仅 Debug 生效）
+         * @details 错误状态且未 checked_ 时调用 report_unchecked_result 触发 assert。
+         *          Release 构建下整段逻辑因 NDEBUG 消除，零开销。内联以让编译器完全消除。
+         */
+        void check_on_destroy_() const noexcept;
 
     public:
         /**
@@ -124,21 +161,29 @@ namespace error_system::core {
 
         /**
          * @brief 拷贝构造，noexcept 性跟随 value_type_t 与 error_context_t
+         * @details 拷贝时清空 checked_，新对象需要独立检查错误
          */
-        result_t(const result_t&) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>
-                                           && std::is_nothrow_copy_constructible_v<error_context_t>) = default;
+        result_t(const result_t& other) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>
+                                                 && std::is_nothrow_copy_constructible_v<error_context_t>);
         /**
          * @brief 移动构造，noexcept 性跟随 value_type_t
          * @details error_context_t 已保证 noexcept 移动。无条件 noexcept 会在 T 抛出移动异常时调用 std::terminate。
+         *          移动时转移 checked_ 状态，源对象标记为已检查避免其析构断言。
          */
-        result_t(result_t&&) noexcept(std::is_nothrow_move_constructible_v<value_type_t>) = default;
+        result_t(result_t&& other) noexcept(std::is_nothrow_move_constructible_v<value_type_t>);
         result_t& operator=(const result_t&) noexcept = delete;
         /**
          * @brief 移动赋值，noexcept 性跟随 value_type_t
          * @details error_context_t 已保证 noexcept 移动赋值。允许复用变量，改善易用性。
+         *          赋值前先检查自身未消费的错误，然后转移 checked_ 状态。
          */
-        result_t& operator=(result_t&&) noexcept(std::is_nothrow_move_assignable_v<value_type_t>) = default;
-        ~result_t() noexcept = default;
+        result_t& operator=(result_t&& other) noexcept(std::is_nothrow_move_assignable_v<value_type_t>);
+        /**
+         * @brief 析构函数
+         * @details Debug 构建下检测错误状态未被检查即析构的情况，触发 assert。
+         *          Release 构建下检查逻辑消除，零开销。
+         */
+        ~result_t() noexcept;
 
         /**
          * @brief 检查结果是否为错误
@@ -368,7 +413,8 @@ namespace error_system::core {
      * @brief 模板特化：当 T 为 void 时，特化为不包含值的 result_t
      * @details 特化 result_t 类模板，当 T 为 void 时，不存储值。
      *          成功路径持有 std::monostate（零 error_context_t 构造开销），
-     *          失败路径持有完整 error_context_t
+     *          失败路径持有完整 error_context_t。
+     *          强制错误检查：Debug 构建下析构时检测未检查的错误状态。
      */
     template <>
     class result_t<void> {
@@ -377,6 +423,13 @@ namespace error_system::core {
 
     private:
         std::variant<std::monostate, error_context_t> storage_;
+        mutable bool checked_{false};
+
+        /**
+         * @brief 析构前检查未消费错误（仅 Debug 生效）
+         * @details 与主模板同名方法语义一致
+         */
+        void check_on_destroy_() const noexcept;
 
     public:
         /**
@@ -384,11 +437,11 @@ namespace error_system::core {
          */
         result_t() noexcept;
 
-        result_t(const result_t&) noexcept = default;
-        result_t(result_t&&) noexcept = default;
+        result_t(const result_t& other) noexcept;
+        result_t(result_t&& other) noexcept;
         result_t& operator=(const result_t&) noexcept = delete;
-        result_t& operator=(result_t&&) noexcept = default;
-        ~result_t() noexcept = default;
+        result_t& operator=(result_t&& other) noexcept;
+        ~result_t() noexcept;
 
         /**
          * @brief 错误构造工厂函数
