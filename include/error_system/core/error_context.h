@@ -272,6 +272,25 @@ namespace error_system::core {
         }
 
         /**
+         * @brief 构造最小化错误上下文（跳过 validation/stacktrace/notification）
+         * @details 直接设置 code_ 不触发 error_context_initializer_t::initialize()，
+         *          避免 validation 覆盖未注册错误码、避免堆栈捕获与插件通知等副作用。
+         *          仅携带 code 与 source_location，不包含 message/payload/cause/stack。
+         *          仅供 result_t<T, true>（Lean 模式）的 error()/match() 等读取路径使用，
+         *          保持 Lean 模式读取错误的零副作用语义。
+         * @param code 错误码
+         * @param location 源位置（默认捕获调用者位置）
+         * @return error_context_t 最小化错误上下文
+         */
+        [[nodiscard]] static error_context_t make_minimal(error_code_t code,
+                                                          utils::source_location_t location = utils::source_location_t::current()) noexcept {
+            error_context_t ctx{};
+            ctx.code_ = code;
+            ctx.source_location = location;
+            return ctx;
+        }
+
+        /**
          * @brief 获取错误码的只读引用
          * @return const error_code_t& 错误码只读引用
          */
