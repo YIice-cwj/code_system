@@ -20,7 +20,7 @@ void string_format_t::format_appender_t::append_value(const T& value) noexcept {
         if constexpr (std::is_same_v<std::decay_t<T>, std::nullptr_t>) {
             result.append("nullptr");
         } else if constexpr (std::is_convertible_v<T, std::string_view>) {
-            if constexpr (std::is_pointer_v<std::decay_t<T>>) {
+            if constexpr (std::is_pointer_v<T>) {
                 if (value == nullptr) {
                     result.append("nullptr");
                     return;
@@ -29,7 +29,7 @@ void string_format_t::format_appender_t::append_value(const T& value) noexcept {
             result.append(std::string_view(value));
         } else if constexpr (std::is_same_v<T, char>) {
             result.push_back(value);
-        } else if constexpr (std::is_pointer_v<std::decay_t<T>>) {
+        } else if constexpr (std::is_pointer_v<T>) {
             if (value == nullptr) {
                 result.append("nullptr");
             } else {

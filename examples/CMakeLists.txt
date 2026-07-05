@@ -8,5 +8,6 @@ foreach(demo_source IN LISTS DEMO_SOURCES)
         error_system
     )
     error_system_apply_warnings_only(${demo_name})
+    error_system_apply_sanitizers(${demo_name})
 
 endforeach()

@@ -25,6 +25,7 @@ foreach(test_source IN LISTS TEST_SOURCES)
         GTest::gtest_main
     )
     error_system_apply_warnings_only(${test_name})
+    error_system_apply_sanitizers(${test_name})
 
     if (MSVC)
         target_compile_options(${test_name} PRIVATE /Zi)
@@ -35,7 +36,6 @@ foreach(test_source IN LISTS TEST_SOURCES)
 endforeach()
 
 if(ERROR_SYSTEM_BUILD_PERF_TESTS)
-    # Google Benchmark（仅性能测试依赖）
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_WERROR OFF CACHE BOOL "" FORCE)
@@ -58,6 +58,7 @@ if(ERROR_SYSTEM_BUILD_PERF_TESTS)
             benchmark::benchmark
         )
         error_system_apply_warnings_only(${perf_name})
+        error_system_apply_sanitizers(${perf_name})
         set_target_properties(${perf_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/perf)
     endforeach()
 endif()
