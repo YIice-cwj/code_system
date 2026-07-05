@@ -22,7 +22,6 @@
 |------|------|
 | [架构设计](architecture.md) | 分层架构、模块职责、关键设计决策（21 项）、编译配置 |
 | [系统配置指南](configuration_guide.md) | 配置项总览、Lean/Full 选择、场景配置、性能数据、最佳实践 |
-| [变更日志](CHANGELOG.md) | 版本演进、破坏性变更、新增功能、升级指南 |
 | [错误码自动生成](error_code_generation.md) | JSON 配置格式、生成脚本、CMake 集成、自定义错误码 |
 | [决策树](decision_tree.md) | 通知模式、查询路径、废弃/迁移、i18n 回退、序列化格式、插件开发、错误传递、HTTP/gRPC 映射 |
 
@@ -59,6 +58,6 @@ cd build && ctest --output-on-failure
 | Migration | 1 | 32 |
 | Async | 1 | 18 |
 | Bridge | 2 | 21 |
-| **总计** | **35** | **661** |
+| **总计** | **35** | **666** |
 
 另有 `tests/perf/` 4 个基准文件（Google Benchmark v1.8.3）：错误上下文、i18n、插件、Result Lean。

@@ -2,7 +2,7 @@
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/std/the-standard)
 [![CMake](https://img.shields.io/badge/CMake-3.15%2B-green.svg)](https://cmake.org)
-[![Tests](https://img.shields.io/badge/Tests-661%20passing-brightgreen.svg)](https://github.com/google/googletest)
+[![Tests](https://img.shields.io/badge/Tests-666%20passing-brightgreen.svg)](https://github.com/google/googletest)
 
 高性能 C++17 错误码管理系统 — 将完整错误上下文封装在一个 64 位整数中，零开销构建与解析。
 
