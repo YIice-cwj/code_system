@@ -104,9 +104,11 @@ void bump_epoch_() noexcept { epoch_counter_.fetch_add(1, std::memory_order_rele
 
 框架为 GoogleTest v1.14.0（`FetchContent`）+ `gtest_discover_tests` 注册到 CTest；单元测试镜像 `include/` 结构，链接 `error_system::error_system` + `gtest_main`，仅应用警告选项不应用 LTO/PGO/Sanitizer；性能基准 `tests/perf/` 含 4 个基准文件（Google Benchmark v1.8.3）；代码生成由 Python3 从 `config/errors/*.json` 产出头文件、O(1) 字典与文档。
 
+> **Debug vs Release 测试数量差异**：5 个 death test（`type_safety_test.cc` 中 2 个、`result_unchecked_test.cc` 中 3 个）使用 `EXPECT_DEATH` 断言，受 `#ifndef NDEBUG` 保护。Debug 构建（`NDEBUG` 未定义）编译 666 个用例，Release 构建（`NDEBUG` 定义）编译 661 个用例。两者都是正确的，文档以 Debug 全量值为准。
+
 | 模块 | 文件数 | 用例数 |
 |------|:---:|:---:|
-| Core | 13 | 260 |
+| Core | 13 | 260（Debug 全量） |
 | Plugin | 7 | 89 |
 | Utils | 5 | 137 |
 | Config | 2 | 27 |
@@ -116,4 +118,4 @@ void bump_epoch_() noexcept { epoch_counter_.fetch_add(1, std::memory_order_rele
 | Migration | 1 | 32 |
 | Async | 1 | 18 |
 | Bridge | 2 | 21 |
-| **总计** | **35** | **661** |
+| **总计** | **35** | **666**（Debug）/ **661**（Release） |

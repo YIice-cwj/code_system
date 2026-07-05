@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <mutex>
 #include <shared_mutex>
 
 #include "error_system/core/error_code.h"

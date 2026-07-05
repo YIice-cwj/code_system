@@ -84,6 +84,7 @@ std::string string_format_t::format(std::string_view format_str, Args&&... args)
         }
     };
     (add_size(args), ...);
+    (void)add_size;
     try {
         result.reserve(estimated_size);
     } catch (const std::bad_alloc&) {

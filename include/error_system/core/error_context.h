@@ -41,8 +41,8 @@ namespace error_system::core {
         error_code_t code;
         utils::source_location_t location;
 
-        located_code_t(error_code_t code, utils::source_location_t location = utils::source_location_t::current()) noexcept
-            : code(code), location(location) {}
+        located_code_t(error_code_t err_code, utils::source_location_t src_loc = utils::source_location_t::current()) noexcept
+            : code(err_code), location(src_loc) {}
     };
 
     /**
