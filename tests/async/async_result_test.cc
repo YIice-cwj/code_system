@@ -82,7 +82,7 @@ TEST(AsyncResultTest, valid_after_construction) {
 
 TEST(AsyncResultTest, then_transforms_success_value) {
     auto async_result = make_async([] { return make_sync_success(10); })
-                            .then([](result_t<int> result) { return result_t<int>::make_success(result.value() * 2); });
+                            .then([](result_t<int> res) { return result_t<int>::make_success(res.value() * 2); });
     auto result = async_result.get();
     ASSERT_TRUE(result.is_success());
     EXPECT_EQ(result.value(), 20);
@@ -90,8 +90,8 @@ TEST(AsyncResultTest, then_transforms_success_value) {
 
 TEST(AsyncResultTest, then_chains_multiple_transforms) {
     auto result = make_async([] { return make_sync_success(1); })
-                      .then([](result_t<int> result) { return result_t<int>::make_success(result.value() + 10); })
-                      .then([](result_t<int> result) { return result_t<int>::make_success(result.value() * 3); })
+                      .then([](result_t<int> res) { return result_t<int>::make_success(res.value() + 10); })
+                      .then([](result_t<int> res) { return result_t<int>::make_success(res.value() * 3); })
                       .get();
     ASSERT_TRUE(result.is_success());
     EXPECT_EQ(result.value(), 33);
@@ -99,9 +99,9 @@ TEST(AsyncResultTest, then_chains_multiple_transforms) {
 
 TEST(AsyncResultTest, then_propagates_error_unchanged) {
     auto result = make_async([] { return make_sync_error(7); })
-                      .then([](result_t<int> result) {
-                          if (result.is_error()) { return result_t<int>::make_error(result.error()); }
-                          return result_t<int>::make_success(result.value());
+                      .then([](result_t<int> res) {
+                          if (res.is_error()) { return result_t<int>::make_error(res.error()); }
+                          return result_t<int>::make_success(res.value());
                       })
                       .get();
     ASSERT_TRUE(result.is_error());
@@ -110,7 +110,7 @@ TEST(AsyncResultTest, then_propagates_error_unchanged) {
 
 TEST(AsyncResultTest, then_changes_value_type) {
     auto result = make_async([] { return make_sync_success(5); })
-                      .then([](result_t<int> result) { return result_t<std::string>::make_success(std::to_string(result.value())); })
+                      .then([](result_t<int> res) { return result_t<std::string>::make_success(std::to_string(res.value())); })
                       .get();
     ASSERT_TRUE(result.is_success());
     EXPECT_EQ(result.value(), "5");
@@ -134,7 +134,7 @@ TEST(AsyncResultTest, recover_passes_success_unchanged) {
 
 TEST(AsyncResultTest, then_recover_chain) {
     auto result = make_async([] { return make_sync_error(1); })
-                      .then([](result_t<int> result) { return result; })
+                      .then([](result_t<int> res) { return res; })
                       .recover([](error_context_t) { return result_t<int>::make_success(999); })
                       .get();
     ASSERT_TRUE(result.is_success());
@@ -175,8 +175,8 @@ TEST(AsyncResultTest, get_catches_inner_future_exception) {
 
 TEST(AsyncResultTest, void_result_supports_then) {
     auto result = make_async([] { return result_t<void>::make_success(); })
-                      .then([](result_t<void> result) {
-                          if (result.is_success()) { return result_t<int>::make_success(1); }
+                      .then([](result_t<void> res) {
+                          if (res.is_success()) { return result_t<int>::make_success(1); }
                           return result_t<int>::make_error(error_code_t::make_success());
                       })
                       .get();
@@ -186,7 +186,7 @@ TEST(AsyncResultTest, void_result_supports_then) {
 
 TEST(AsyncResultTest, lean_mode_then_propagates_error_code) {
     auto result = make_async([] { return result_t<int, true>::make_error(make_test_error_code(33), "err"); })
-                      .then([](result_t<int, true> result) { return result; })
+                      .then([](result_t<int, true> res) { return res; })
                       .get();
     ASSERT_TRUE(result.is_error());
     EXPECT_EQ(result.error_code().get_number(), 33);
