@@ -87,22 +87,22 @@ TEST(AsyncNotificationChannelTest, pending_notifications_reflects_queue_size) {
 
 TEST(AsyncNotificationChannelTest, set_max_queue_size_enforces_backpressure) {
     std::atomic<int> call_count{0};
-    std::mutex mtx;
-    std::condition_variable cv;
+    std::mutex block_mtx;
+    block_mtx.lock();
     async_notification_channel_t channel([&](const error_context_t&) {
-        std::lock_guard<std::mutex> lk(mtx);
         ++call_count;
-        cv.notify_one();
+        std::lock_guard<std::mutex> lk(block_mtx);
     });
-    channel.set_max_queue_size(2);
-    EXPECT_EQ(channel.get_max_queue_size(), 2u);
+    channel.set_max_queue_size(1);
 
     channel.enqueue_notification(make_context(1));
     channel.enqueue_notification(make_context(2));
     channel.enqueue_notification(make_context(3));
 
-    EXPECT_TRUE(wait_for(call_count, 3));
-    EXPECT_EQ(channel.get_max_queue_size(), 2u);
+    block_mtx.unlock();
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    EXPECT_LE(call_count.load(), 2);
+    EXPECT_EQ(channel.get_max_queue_size(), 1u);
 }
 
 TEST(AsyncNotificationChannelTest, get_max_queue_size_default_unlimited) {
