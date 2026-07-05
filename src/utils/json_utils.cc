@@ -15,6 +15,7 @@
 #include <charconv>
 #include <cstdint>
 #include <cstdio>
+#include <vector>
 
 #include "error_system/utils/file_utils.h"
 #include "error_system/utils/json_lexer.h"
@@ -44,7 +45,7 @@ namespace error_system::utils {
          * @details 用于存储解析器的状态、路径栈、当前键名、临时字典等信息
          */
         struct parser_context_t {
-            std::vector<std::string> path_stack{};
+            std::vector<std::string> path_stack;
             std::string current_key{};
             std::string path_prefix{};
             std::unordered_map<std::string, std::string> temp_dict{};

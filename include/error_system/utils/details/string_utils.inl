@@ -13,9 +13,21 @@ namespace error_system::utils {
     template <typename T>
     inline std::optional<T> string_utils_t::parse_number(std::string_view string) noexcept {
         T value{};
-        auto [pointer, error] = std::from_chars(string.data(), string.data() + string.size(), value);
-        if (error == std::errc{}) {
-            return value;
+        std::string str(string);
+        const char* start = str.data();
+        const char* end = start + str.size();
+
+        if constexpr (std::is_integral_v<T>) {
+            auto [ptr, ec] = std::from_chars(start, end, value);
+            if (ec == std::errc{}) {
+                return value;
+            }
+        } else if constexpr (std::is_floating_point_v<T>) {
+            char* end_ptr = nullptr;
+            auto result = std::strtod(start, &end_ptr);
+            if (end_ptr == end) {
+                return static_cast<T>(result);
+            }
         }
         return std::nullopt;
     }

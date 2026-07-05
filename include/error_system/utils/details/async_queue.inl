@@ -1,4 +1,5 @@
 #pragma once
+#include <system_error>
 
 namespace error_system::utils {
 

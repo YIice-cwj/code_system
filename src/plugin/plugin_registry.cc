@@ -73,11 +73,11 @@ namespace error_system::plugin {
                                           std::vector<shared_plugin_ptr_t>& owned) {
             auto name = shared_plugin->name();
             auto it = std::find_if(snapshot.begin(), snapshot.end(),
-                [&name](const shared_plugin_ptr_t& plugin) { return plugin->name() == name; });
+                [&name](const shared_plugin_ptr_t& sp) { return sp->name() == name; });
             if (it != snapshot.end()) {
                 auto* old_ptr = it->get();
                 owned.erase(std::remove_if(owned.begin(), owned.end(),
-                                [old_ptr](const shared_plugin_ptr_t& plugin) { return plugin.get() == old_ptr; }),
+                                [old_ptr](const shared_plugin_ptr_t& sp) { return sp.get() == old_ptr; }),
                             owned.end());
                 *it = shared_plugin;
             } else {
@@ -93,7 +93,7 @@ namespace error_system::plugin {
                                        std::vector<shared_plugin_ptr_t>& owned) {
             auto name = non_owning->name();
             auto it = std::find_if(snapshot.begin(), snapshot.end(),
-                [&name](const shared_plugin_ptr_t& plugin) { return plugin->name() == name; });
+                [&name](const shared_plugin_ptr_t& sp) { return sp->name() == name; });
             if (it != snapshot.end()) {
                 auto* old_ptr = it->get();
                 owned.erase(std::remove_if(owned.begin(), owned.end(),
