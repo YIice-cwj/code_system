@@ -22,11 +22,30 @@ namespace error_system::core {
      * @details 仅包含值语义字段，可复制，线程安全（注册表返回副本）。
      */
     struct error_metadata_t {
-        std::string name{};               ///< 错误码宏名称
-        std::string description{};        ///< 错误码描述文本
-        uint16_t module_id{0};            ///< 模块 ID
-        uint16_t error_number{0};         ///< 错误编号
-        error_level_t level{error_level_t::info};  ///< 错误等级
+        /**
+         * @brief 错误码宏名称
+         */
+        std::string name{};
+
+        /**
+         * @brief 错误码描述文本
+         */
+        std::string description{};
+
+        /**
+         * @brief 模块 ID
+         */
+        uint16_t module_id{0};
+
+        /**
+         * @brief 错误编号
+         */
+        uint16_t error_number{0};
+
+        /**
+         * @brief 错误等级
+         */
+        error_level_t level{error_level_t::info};
     };
 
 }  // namespace error_system::core

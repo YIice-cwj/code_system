@@ -74,6 +74,9 @@ namespace error_system::bridge {
          * @brief 等价性判断（与标准 default_equivalent 保持一致）
          * @details 仅当 code 域同属 error_system_category 时比较 identity 值，
          *          跨类别返回 false，遵循 std::error_code 默认等价语义。
+         * @param code 错误码整数值
+         * @param cond 错误条件
+         * @return bool 等价返回 true
          */
         [[nodiscard]] bool equivalent(int code, const std::error_condition& cond) const noexcept override {
             return std::error_category::equivalent(code, cond);
@@ -81,6 +84,9 @@ namespace error_system::bridge {
 
         /**
          * @brief 与其他 category 的等价判断（默认实现）
+         * @param code 标准错误码
+         * @param condition 错误条件整数值
+         * @return bool 等价返回 true
          */
         [[nodiscard]] bool equivalent(const std::error_code& code, int condition) const noexcept override {
             return std::error_category::equivalent(code, condition);
@@ -202,7 +208,7 @@ namespace error_system::bridge {
      *
      * 实现思路：在库边界需要异常时（如与 <system_error> 交互的旧代码），
      *           将 error_code_t 转为 std::error_code 后构造 std::system_error。
-     *           注意：本函数会抛异常，仅在库边界且必要时使用，符合规范第 14 条。
+     *           注意：本函数会抛异常，仅在库边界且必要时使用。
      */
     [[noreturn]] inline void throw_system_error(error_code_t code, std::string_view what_msg) {
         throw std::system_error{to_std_error_code(code), std::string{what_msg}};

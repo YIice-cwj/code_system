@@ -17,8 +17,7 @@
  */
 namespace error_system::core {
 
-    struct error_context_t;
-
+    class error_context_t;
     class i_error_notifier_t;
 
     /**
@@ -31,36 +30,21 @@ namespace error_system::core {
      */
     class error_context_initializer_t {
     private:
-        /**
-         * @brief 错误通知器指针
-         * @details 由 plugin 层通过 set_error_notifier() 注入，默认 nullptr。
-         *          通知时若为 nullptr 则跳过通知，保证 core 层无 plugin 依赖也能编译运行。
-         *          通过 instance() 自注册或应用启动时显式设置。
-         */
         static i_error_notifier_t* notifier_;
 
         /**
          * @brief 执行错误码合法性校验
          * @details 查询注册表，若错误码未注册则标记为 fatal 并附加 "[UNREGISTERED CODE]" 前缀。
-         *          是否调用由 initialize() 根据 is_validation_enabled 决定。
-         * @param context 待初始化的错误上下文
          */
         static void fill_validation_fields_(error_context_t& context) noexcept;
 
         /**
          * @brief 抓取当前线程调用栈
-         * @details 通过 utils::stack_trace_utils_t::generate 抓取调用栈并写入 context.stack_frames。
-         *          是否调用由 initialize() 根据 is_stacktrace_enabled 与 stacktrace_level 决定。
-         * @param context 待初始化的错误上下文
          */
         static void fill_stacktrace_(error_context_t& context) noexcept;
 
         /**
          * @brief 根据 short_filename_enabled 设置 context.file_name
-         * @details 指向 source_location.file_name() 或其短文件名形式（通过 extract_short_filename）。
-         *          是否调用由 initialize() 根据 is_source_location_enabled 决定。
-         * @param context 待初始化的错误上下文
-         * @param short_filename_enabled 是否使用短文件名
          */
         static void fill_source_location_(error_context_t& context, bool short_filename_enabled) noexcept;
 
@@ -73,31 +57,33 @@ namespace error_system::core {
         error_context_initializer_t& operator=(error_context_initializer_t&&) = delete;
 
         /**
-         * @brief 设置错误通知器
-         * @details 注入 i_error_notifier_t 实现，解耦 core 层对 plugin 层的直接依赖。
-         *          通常由 plugin_registry_t::instance() 自注册，或应用启动时显式注入
-         *          自定义实现。传 nullptr 可清除已有通知器。
-         *          注：该接口非线程安全，预期在初始化阶段（通知发生前）调用一次。
-         * @param notifier 通知器指针，可为 nullptr
-         */
-        static void set_error_notifier(i_error_notifier_t* notifier) noexcept;
-
-        /**
-         * @brief 获取当前错误通知器
-         * @details 返回 set_error_notifier 设置的通知器指针，未设置时返回 nullptr。
-         * @return i_error_notifier_t* 通知器指针，可能为 nullptr
-         */
-        [[nodiscard]] static i_error_notifier_t* get_error_notifier() noexcept;
-
-        /**
          * @brief 执行运行时特性初始化
-         * @details 替代原 error_context_t::finalize_runtime_features_()。
-         *          根据全局配置依次完成：错误码校验 → 堆栈捕获 → 源位置记录 → 插件通知。
+         * @details 根据全局配置依次完成：错误码校验 → 堆栈捕获 → 源位置记录 → 插件通知。
          *          成功码上下文（sign=0）由调用方在调用前自行跳过。
          *          插件通知通过 i_error_notifier_t 接口完成，若未设置通知器则跳过通知。
          * @param context 待初始化的错误上下文
          */
         static void initialize(error_context_t& context) noexcept;
+
+        /**
+         * @brief 设置错误通知器
+         * @details 注入 i_error_notifier_t 实现，解耦 core 层对 plugin 层的直接依赖。
+         *          通常由 plugin_registry_t::instance() 自注册，或应用启动时显式注入。
+         *          传 nullptr 可清除已有通知器。
+         * @note 非线程安全，预期在初始化阶段（通知发生前）调用一次。
+         * @param notifier 通知器指针
+         */
+        static void set_error_notifier(i_error_notifier_t* notifier) noexcept {
+            notifier_ = notifier;
+        }
+
+        /**
+         * @brief 获取当前错误通知器
+         * @return 通知器指针，未设置时返回 nullptr
+         */
+        [[nodiscard]] static i_error_notifier_t* get_error_notifier() noexcept {
+            return notifier_;
+        }
     };
 
 }  // namespace error_system::core

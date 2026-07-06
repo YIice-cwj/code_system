@@ -4,7 +4,7 @@
 
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_context.h"
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 #include "error_system/core/i_error_notifier.h"
 #include "error_system/utils/source_location.h"
 #include "error_system/utils/stack_trace_utils.h"
@@ -28,7 +28,8 @@ namespace error_system::core {
     i_error_notifier_t* error_context_initializer_t::notifier_{nullptr};
 
     namespace {
-        constexpr uint16_t FALLBACK_ERROR_NUMBER = 0xFFFF;  ///< 未注册错误码的回退错误编号
+        /** 未注册错误码的回退错误编号 */
+        constexpr uint16_t FALLBACK_ERROR_NUMBER = 0xFFFF;
 
         /**
          * @brief 获取错误通知器并在未设置时输出一次性告警
@@ -74,23 +75,29 @@ namespace error_system::core {
 
         try {
             context.with("illegal_raw_code", std::to_string(context.code_.get_code()));
-            std::string prefixed_message = "[UNREGISTERED CODE] ";
-            prefixed_message += context.message;
-            context.message = std::move(prefixed_message);
+            if (context.block_) {
+                std::string prefixed_message = "[UNREGISTERED CODE] ";
+                prefixed_message += context.block_->message;
+                context.block_->message = std::move(prefixed_message);
+            }
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context_initializer] fill_validation_fields_: std::bad_alloc\n");
         }
         context.code_ = error_code_t(error_level_t::fatal, domain::system_domain_t::none, subsystem_id_t{0}, module_id_t{0}, error_number_t{FALLBACK_ERROR_NUMBER});
-        auto fallback = error_registry_t::instance().get_info_cached(context.code_);
-        if (fallback) {
-            context.metadata_ = std::move(*fallback);
+        context.ensure_block_();
+        if (context.block_) {
+            context.block_->metadata = error_registry_t::instance().get_info_cached(context.code_);
         }
     }
 
     void error_context_initializer_t::fill_stacktrace_(error_context_t& context) noexcept {
         if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
             try {
-                context.stack_frames = utils::stack_trace_utils_t::generate(1);
+                context.ensure_block_();
+                if (context.block_) {
+                    context.block_->raw_frames = std::make_shared<const std::vector<void*>>(
+                        utils::stack_trace_utils_t::capture(1));
+                }
             } catch (const std::bad_alloc&) {
                 std::fprintf(stderr, "[error_context_initializer] fill_stacktrace_: std::bad_alloc\n");
             }
@@ -99,8 +106,12 @@ namespace error_system::core {
 
     void error_context_initializer_t::fill_source_location_(error_context_t& context, bool short_filename_enabled) noexcept {
         if constexpr (feature_flags_t::LOCATION_ENABLED) {
-            context.file_name = short_filename_enabled ? utils::extract_short_filename(context.source_location.file_name())
-                                                       : context.source_location.file_name();
+            context.ensure_block_();
+            if (context.block_) {
+                const char* src = context.block_->source_location.file_name();
+                context.block_->file_name = short_filename_enabled ? utils::extract_short_filename(src)
+                                                                   : src;
+            }
         }
     }
 
@@ -160,14 +171,6 @@ namespace error_system::core {
         } else {
             notify_plugins(context);
         }
-    }
-
-    void error_context_initializer_t::set_error_notifier(i_error_notifier_t* notifier) noexcept {
-        notifier_ = notifier;
-    }
-
-    i_error_notifier_t* error_context_initializer_t::get_error_notifier() noexcept {
-        return notifier_;
     }
 
 }  // namespace error_system::core

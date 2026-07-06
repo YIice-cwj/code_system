@@ -1,6 +1,16 @@
 #pragma once
 #include "error_system/core/error_builder.h"
 
+/**
+ * @file error_builder.inl
+ * @brief 错误码构建器模板实现
+ * @details 提供 error_builder_t::make_error_code 模板成员函数的实现，
+ *          通过 static_cast 将枚举类型转换为 uint16_t 后委托 error_code_t 构造函数。
+ * @author yiice
+ * @version 3.0.0
+ * @date 2026-06-11
+ * @copyright Copyright (c) 2026
+ */
 namespace error_system::core {
 
     /**

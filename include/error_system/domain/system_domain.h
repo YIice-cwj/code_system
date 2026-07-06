@@ -44,9 +44,7 @@ namespace error_system::domain {
      * @param domain 系统域
      * @return uint8_t 系统域整数
      */
-    [[nodiscard]] constexpr uint8_t to_int(system_domain_t domain) noexcept {
-        return static_cast<uint8_t>(domain);
-    }
+    [[nodiscard]] inline constexpr uint8_t to_int(system_domain_t domain) noexcept;
 
     /**
      * @brief 系统域字符串
@@ -54,12 +52,7 @@ namespace error_system::domain {
      * @param domain 系统域
      * @return const char* 系统域字符串
      */
-    [[nodiscard]] constexpr const char* to_string(system_domain_t domain) noexcept {
-        if (to_int(domain) >= to_int(system_domain_t::count)) {
-            return "unknown";
-        }
-        return SYSTEM_DOMAIN_STRING[to_int(domain)];
-    }
+    [[nodiscard]] inline constexpr const char* to_string(system_domain_t domain) noexcept;
 
     /**
      * @brief 系统域整数是否有效
@@ -67,9 +60,7 @@ namespace error_system::domain {
      * @param domain 系统域整数
      * @return bool 系统域整数是否有效
      */
-    [[nodiscard]] constexpr bool is_valid(uint8_t domain) noexcept {
-        return domain < to_int(system_domain_t::count);
-    }
+    [[nodiscard]] inline constexpr bool is_valid(uint8_t domain) noexcept;
 
     /**
      * @brief 系统域整数转换为系统域
@@ -77,12 +68,7 @@ namespace error_system::domain {
      * @param domain 系统域整数
      * @return system_domain_t 系统域
      */
-    [[nodiscard]] constexpr system_domain_t from_int(uint8_t domain) noexcept {
-        if (!is_valid(domain)) {
-            return system_domain_t::none;
-        }
-        return static_cast<system_domain_t>(domain);
-    }
+    [[nodiscard]] inline constexpr system_domain_t from_int(uint8_t domain) noexcept;
 
     /**
      * @brief 系统域字符串转换为系统域
@@ -91,7 +77,31 @@ namespace error_system::domain {
      * @param string 系统域字符串
      * @return system_domain_t 系统域
      */
-    [[nodiscard]] constexpr system_domain_t from_string(const char* string) noexcept {
+    [[nodiscard]] inline constexpr system_domain_t from_string(const char* string) noexcept;
+
+    [[nodiscard]] inline constexpr uint8_t to_int(system_domain_t domain) noexcept {
+        return static_cast<uint8_t>(domain);
+    }
+
+    [[nodiscard]] inline constexpr const char* to_string(system_domain_t domain) noexcept {
+        if (to_int(domain) >= to_int(system_domain_t::count)) {
+            return "unknown";
+        }
+        return SYSTEM_DOMAIN_STRING[to_int(domain)];
+    }
+
+    [[nodiscard]] inline constexpr bool is_valid(uint8_t domain) noexcept {
+        return domain < to_int(system_domain_t::count);
+    }
+
+    [[nodiscard]] inline constexpr system_domain_t from_int(uint8_t domain) noexcept {
+        if (!is_valid(domain)) {
+            return system_domain_t::none;
+        }
+        return static_cast<system_domain_t>(domain);
+    }
+
+    [[nodiscard]] inline constexpr system_domain_t from_string(const char* string) noexcept {
         if (string == nullptr) {
             return system_domain_t::none;
         }

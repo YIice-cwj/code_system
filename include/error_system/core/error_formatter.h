@@ -3,7 +3,7 @@
 #include <ostream>
 
 #include "error_system/core/error_context.h"
-#include "error_system/core/error_context_serializer.h"
+#include "error_system/core/serializer/error_context_serializer.h"
 
 /**
  * @file error_formatter.h

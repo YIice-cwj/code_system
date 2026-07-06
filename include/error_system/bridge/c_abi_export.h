@@ -73,6 +73,8 @@ namespace error_system::abi {
     /**
      * @brief void* 转 handle_t（边界转换辅助）
      * @details 将 C ABI 边界传入的 const void* 安全转换为内部 handle_t
+     * @param opaque C ABI 边界传入的不透明指针
+     * @return handle_t 转换后的句柄，可为 nullptr
      */
     inline handle_t to_handle(const void* opaque) noexcept {
         return static_cast<handle_t>(opaque);
@@ -80,6 +82,8 @@ namespace error_system::abi {
 
     /**
      * @brief handle_t 转 void*（边界转换辅助）
+     * @param handle 待转换句柄，可为 nullptr
+     * @return const void* C ABI 边界可用的不透明指针
      */
     inline const void* from_handle(handle_t handle) noexcept {
         return static_cast<const void*>(handle);
@@ -114,6 +118,8 @@ namespace error_system::abi {
 
     /**
      * @brief 获取错误等级（C++ 侧实现）
+     * @param handle 句柄，可为 nullptr
+     * @return uint8_t 错误等级；handle 为 nullptr 时返回 0
      */
     inline uint8_t get_level(handle_t handle) noexcept {
         if (handle == nullptr) { return 0; }
@@ -122,6 +128,8 @@ namespace error_system::abi {
 
     /**
      * @brief 获取系统域（C++ 侧实现）
+     * @param handle 句柄，可为 nullptr
+     * @return uint8_t 系统域；handle 为 nullptr 时返回 0
      */
     inline uint8_t get_system(handle_t handle) noexcept {
         if (handle == nullptr) { return 0; }
@@ -130,6 +138,8 @@ namespace error_system::abi {
 
     /**
      * @brief 获取子系统 ID（C++ 侧实现）
+     * @param handle 句柄，可为 nullptr
+     * @return uint16_t 子系统 ID；handle 为 nullptr 时返回 0
      */
     inline uint16_t get_subsystem(handle_t handle) noexcept {
         if (handle == nullptr) { return 0; }
@@ -138,6 +148,8 @@ namespace error_system::abi {
 
     /**
      * @brief 获取模块 ID（C++ 侧实现）
+     * @param handle 句柄，可为 nullptr
+     * @return uint16_t 模块 ID；handle 为 nullptr 时返回 0
      */
     inline uint16_t get_module(handle_t handle) noexcept {
         if (handle == nullptr) { return 0; }
@@ -146,6 +158,8 @@ namespace error_system::abi {
 
     /**
      * @brief 获取错误编号（C++ 侧实现）
+     * @param handle 句柄，可为 nullptr
+     * @return uint16_t 错误编号；handle 为 nullptr 时返回 0
      */
     inline uint16_t get_number(handle_t handle) noexcept {
         if (handle == nullptr) { return 0; }
@@ -154,6 +168,8 @@ namespace error_system::abi {
 
     /**
      * @brief 判断是否可重试（C++ 侧实现）
+     * @param handle 句柄，可为 nullptr
+     * @return int 1=可重试，0=不可重试或 handle 无效
      */
     inline int is_retryable(handle_t handle) noexcept {
         if (handle == nullptr) { return 0; }
@@ -162,6 +178,8 @@ namespace error_system::abi {
 
     /**
      * @brief 判断是否为瞬态错误（C++ 侧实现）
+     * @param handle 句柄，可为 nullptr
+     * @return int 1=瞬态错误，0=非瞬态或 handle 无效
      */
     inline int is_transient(handle_t handle) noexcept {
         if (handle == nullptr) { return 0; }
