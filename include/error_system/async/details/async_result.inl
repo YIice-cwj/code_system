@@ -37,7 +37,7 @@ namespace error_system::async {
             } catch (const std::bad_alloc&) {
                 std::fprintf(stderr, "[async_result] make_async_exception_context: std::bad_alloc\n");
                 static thread_local core::error_context_t fallback{};
-                return fallback;
+                return fallback.clone();
             }
         }
     }  // namespace detail

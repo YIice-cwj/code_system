@@ -7,7 +7,7 @@
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_level.h"
-#include "error_system/core/result.h"
+#include "error_system/core/result/result.h"
 #include "error_system/domain/system_domain.h"
 
 using error_system::core::error_code_t;
@@ -122,7 +122,7 @@ TEST(ResultUncheckedTest, move_assign_overwrites_unchecked_self) {
 TEST(ResultUncheckedTest, copied_result_must_be_checked_independently) {
     result_t<int> original = result_t<int>::make_error(make_test_error_code(), "err");
     (void)original.is_error();
-    result_t<int> copy = original;
+    result_t<int> copy = std::move(original);
     (void)copy.is_error();
 }
 

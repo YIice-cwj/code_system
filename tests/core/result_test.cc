@@ -1,4 +1,4 @@
-#include "error_system/core/result.h"
+#include "error_system/core/result/result.h"
 
 #include <stdexcept>
 #include <string>
@@ -6,7 +6,7 @@
 
 #include <gtest/gtest.h>
 
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 
 namespace error_system::core {
 
@@ -29,7 +29,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_1", "Test error 1");
 
         error_context_t context(located_code_t{code}, "test error");
-        result_t<int> result(context);
+        result_t<int> result(std::move(context));
         EXPECT_FALSE(result.is_success());
         EXPECT_TRUE(result.is_error());
         EXPECT_EQ(result.error().get_code().get_code(), code.get_code());
@@ -40,7 +40,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_100", "Error 100");
 
         error_context_t context(located_code_t{code}, "error message");
-        result_t<int> result(context);
+        result_t<int> result(std::move(context));
         EXPECT_TRUE(result.is_error());
         EXPECT_EQ(result.error().get_code().get_code(), code.get_code());
     }
@@ -63,7 +63,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t context(located_code_t{code}, "error");
-        result_t<int> result(context);
+        result_t<int> result(std::move(context));
         bool called = false;
         auto new_result = std::move(result).and_then([&called](int value) -> result_t<int> {
             called = true;
@@ -78,7 +78,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t context(located_code_t{code}, "error");
-        result_t<int> result(context);
+        result_t<int> result(std::move(context));
         auto new_result =
             std::move(result).or_else([](const error_context_t&) -> result_t<int> { return result_t<int>(42); });
         EXPECT_TRUE(new_result.is_success());
@@ -108,7 +108,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t context(located_code_t{code}, "error");
-        result_t<void> result(context);
+        result_t<void> result(std::move(context));
         EXPECT_FALSE(result.is_success());
         EXPECT_TRUE(result.is_error());
     }
@@ -129,7 +129,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t context(located_code_t{code}, "error");
-        result_t<void> result(context);
+        result_t<void> result(std::move(context));
         auto new_result =
             std::move(result).or_else([](const error_context_t&) -> result_t<void> { return result_t<void>(); });
         EXPECT_TRUE(new_result.is_success());
@@ -147,7 +147,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t context(located_code_t{code}, "error");
-        result_t<int> result(context);
+        result_t<int> result(std::move(context));
         auto new_result = result.or_else([](const error_context_t&) -> result_t<int> { return result_t<int>(99); });
         EXPECT_TRUE(new_result.is_success());
         EXPECT_EQ(new_result.value(), 99);
@@ -160,7 +160,7 @@ namespace error_system::core {
         auto result = result_t<int>::make_error(code, "factory error");
         EXPECT_TRUE(result.is_error());
         EXPECT_EQ(result.error().get_code().get_code(), code.get_code());
-        EXPECT_EQ(result.error().message, "factory error");
+        EXPECT_EQ(result.error().get_message(), "factory error");
     }
 
     TEST_F(result_test_t, make_error_with_code_only) {
@@ -170,7 +170,7 @@ namespace error_system::core {
         auto result = result_t<int>::make_error(code);
         EXPECT_TRUE(result.is_error());
         EXPECT_EQ(result.error().get_code().get_code(), code.get_code());
-        EXPECT_EQ(result.error().message, "");
+        EXPECT_EQ(result.error().get_message(), "");
     }
 
     TEST_F(result_test_t, make_error_from_context) {
@@ -178,10 +178,10 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t context(located_code_t{code}, "from context");
-        auto result = result_t<int>::make_error(context);
+        auto result = result_t<int>::make_error(std::move(context));
         EXPECT_TRUE(result.is_error());
         EXPECT_EQ(result.error().get_code().get_code(), code.get_code());
-        EXPECT_EQ(result.error().message, "from context");
+        EXPECT_EQ(result.error().get_message(), "from context");
     }
 
 
@@ -325,7 +325,7 @@ namespace error_system::core {
     TEST_F(result_test_t, try_macro_returns_error_when_inner_fails) {
         auto result = try_helper_error();
         EXPECT_TRUE(result.is_error());
-        EXPECT_EQ(result.error().message, "inner failure");
+        EXPECT_EQ(result.error().get_message(), "inner failure");
     }
 
     TEST_F(result_test_t, try_discard_macro_returns_value_when_success) {
@@ -337,7 +337,7 @@ namespace error_system::core {
     TEST_F(result_test_t, try_discard_macro_returns_error_when_inner_fails) {
         auto result = try_discard_error_helper();
         EXPECT_TRUE(result.is_error());
-        EXPECT_EQ(result.error().message, "discarded failure");
+        EXPECT_EQ(result.error().get_message(), "discarded failure");
     }
 
     // ===== context() 传播时附加上下文测试 =====
@@ -347,7 +347,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_CTX1", "context error 1");
         auto result = result_t<int>::make_error(code, "inner").context("host", "192.168.1.1");
         EXPECT_TRUE(result.is_error());
-        EXPECT_EQ(result.error().message, "inner");
+        EXPECT_EQ(result.error().get_message(), "inner");
         EXPECT_EQ(result.error().payload_size(), 1u);
         auto host = result.error().get_payload_value("host");
         ASSERT_TRUE(host.has_value());
@@ -367,7 +367,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_CTX2", "context error 2");
         auto result = result_t<int>::make_error(code, "rvalue").context("port", 3306);
         EXPECT_TRUE(result.is_error());
-        EXPECT_EQ(result.error().message, "rvalue");
+        EXPECT_EQ(result.error().get_message(), "rvalue");
         EXPECT_EQ(result.error().payload_size(), 1u);
         auto port = result.error().get_payload_value("port");
         ASSERT_TRUE(port.has_value());
@@ -389,7 +389,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_VCTX", "void context error");
         auto result = result_t<void>::make_error(code, "void inner").context("host", "127.0.0.1");
         EXPECT_TRUE(result.is_error());
-        EXPECT_EQ(result.error().message, "void inner");
+        EXPECT_EQ(result.error().get_message(), "void inner");
         EXPECT_EQ(result.error().payload_size(), 1u);
     }
 

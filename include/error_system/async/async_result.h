@@ -3,7 +3,7 @@
 #include <type_traits>
 #include <utility>
 
-#include "error_system/core/result.h"
+#include "error_system/core/result/result.h"
 
 /**
  * @file async_result.h

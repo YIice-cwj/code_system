@@ -20,7 +20,7 @@
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_level.h"
-#include "error_system/core/result.h"
+#include "error_system/core/result/result.h"
 #include "error_system/domain/system_domain.h"
 
 using error_system::config::feature_flags_t;
@@ -118,8 +118,8 @@ TEST_F(result_lean_comparison_test_t, error_message_not_preserved_in_lean_mode) 
     auto full = result_t<int, false>::make_error(make_err(7), "完整模式消息");
     auto lean = result_t<int, true>::make_error(make_err(7), "Lean 模式消息");
 
-    EXPECT_EQ(full.error().message, "完整模式消息");
-    EXPECT_NE(lean.error().message, "Lean 模式消息");
+    EXPECT_EQ(full.error().get_message(), "完整模式消息");
+    EXPECT_NE(lean.error().get_message(), "Lean 模式消息");
 }
 
 TEST_F(result_lean_comparison_test_t, error_payload_not_preserved_in_lean_mode) {
@@ -127,7 +127,7 @@ TEST_F(result_lean_comparison_test_t, error_payload_not_preserved_in_lean_mode) 
     ctx.with("user_id", "8848");
 
     auto full = result_t<int, false>::make_error(ctx);
-    auto lean = result_t<int, true>::make_error(ctx);
+    auto lean = result_t<int, true>::make_error(std::move(ctx));
 
     EXPECT_EQ(full.error().payload_size(), 1u);
     EXPECT_EQ(lean.error().payload_size(), 0u);
@@ -236,7 +236,7 @@ TEST_F(result_lean_comparison_test_t, make_error_from_context_extracts_code_in_b
     ctx.with("k", "v");
 
     auto full = result_t<int, false>::make_error(ctx);
-    auto lean = result_t<int, true>::make_error(ctx);
+    auto lean = result_t<int, true>::make_error(std::move(ctx));
 
     EXPECT_EQ(full.error_code().get_code(), lean.error_code().get_code());
     EXPECT_EQ(full.error_code().get_code(), ctx.get_code().get_code());

@@ -6,7 +6,7 @@
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_level.h"
-#include "error_system/core/result.h"
+#include "error_system/core/result/result.h"
 #include "error_system/domain/system_domain.h"
 
 using error_system::core::error_code_t;
@@ -68,7 +68,7 @@ TEST(ResultLeanTest, lean_void_success_result_safe) {
 
 TEST(ResultLeanTest, lean_error_code_extracted_from_context) {
     error_context_t ctx = error_context_t::make_minimal(make_test_error_code(55));
-    auto r = result_t<int, true>::make_error(ctx);
+    auto r = result_t<int, true>::make_error(std::move(ctx));
     EXPECT_TRUE(r.is_error());
     EXPECT_EQ(r.error_code().get_number(), 55);
 }
