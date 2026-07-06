@@ -48,6 +48,11 @@ namespace error_system::plugin {
         struct context_processor_t {
             notify_callback_t callback;
 
+            /**
+             * @brief 处理出队的错误上下文
+             * @details 回调为空或上下文为空时静默丢弃
+             * @param context 待处理的错误上下文 shared_ptr
+             */
             void operator()(context_ptr_t& context) const noexcept {
                 if (callback && context) {
                     callback(*context);
@@ -88,15 +93,7 @@ namespace error_system::plugin {
          *          首次调用时自动启动后台工作线程。内存分配失败时记录日志并丢弃。
          * @param context 错误上下文
          */
-        void enqueue_notification(const core::error_context_t& context) noexcept {
-            try {
-                auto copy = std::make_shared<core::error_context_t>(context);
-                async_queue_.enqueue(std::move(copy));
-            } catch (const std::bad_alloc&) {
-                std::fprintf(stderr,
-                             "[async_notification_channel] enqueue_notification failed to allocate memory\n");
-            }
-        }
+        void enqueue_notification(const core::error_context_t& context) noexcept;
 
         /**
          * @brief 获取待处理通知数量

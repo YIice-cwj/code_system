@@ -23,7 +23,7 @@
  *          2. 错误码重构（如子系统重新编号），自动将旧码映射到新码。
  *
  *          线程安全（读多写少场景使用 shared_mutex）。
- *          本头文件仅含声明，实现见 error_migration.cc（遵循规范第 5 条）。
+ *          本头文件仅含声明，实现见 error_migration.cc。
  * @author yiice
  * @version 3.0.0
  * @date 2026-06-28

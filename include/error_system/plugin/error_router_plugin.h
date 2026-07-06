@@ -43,7 +43,8 @@ namespace error_system::plugin {
 
         mutable std::shared_mutex mutex_;
 
-    private:
+        static std::once_flag once_flag_;
+
         error_router_plugin_t() = default;
 
         error_router_plugin_t(const error_router_plugin_t&) = delete;
@@ -56,13 +57,6 @@ namespace error_system::plugin {
 
     public:
         ~error_router_plugin_t() noexcept override = default;
-
-        /**
-         * @brief 获取插件名称
-         * @details 用于标识插件，注册时若名称重复则替换旧插件
-         * @return std::string_view 插件名称
-         */
-        std::string_view name() const noexcept override;
 
         /**
          * @brief 错误事件回调
@@ -111,15 +105,20 @@ namespace error_system::plugin {
          */
         void unregister_handler_by_domain(domain::system_domain_t domain) noexcept;
 
-    public:
+        /**
+         * @brief 获取插件名称
+         * @details 用于标识插件，注册时若名称重复则替换旧插件
+         * @return std::string_view 插件名称
+         */
+        [[nodiscard]] std::string_view name() const noexcept override {
+            return name_;
+        }
+
         /**
          * @brief 获取路由插件单例
-         * @details 使用 std::call_once + std::once_flag 保证线程安全初始化（规范 22）
+         * @details 使用 std::call_once + std::once_flag 保证线程安全初始化
          * @return error_router_plugin_t& 插件的全局单例引用
          */
         static error_router_plugin_t& instance() noexcept;
-
-    private:
-        static std::once_flag once_flag_;
     };
 }  // namespace error_system::plugin

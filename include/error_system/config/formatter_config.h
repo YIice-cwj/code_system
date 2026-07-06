@@ -6,7 +6,7 @@
 #include <string>
 
 namespace error_system::core {
-    struct error_context_t;
+    class error_context_t;
 }
 
 /**
@@ -39,20 +39,14 @@ namespace error_system::config {
          * @details 保护自定义格式化函数的互斥锁
          * @return std::shared_mutex& 共享锁引用
          */
-        static std::shared_mutex& get_formatter_mutex_() noexcept {
-            static std::shared_mutex mutex;
-            return mutex;
-        }
+        static std::shared_mutex& get_formatter_mutex_() noexcept;
 
         /**
          * @brief 自定义格式化函数存储
          * @details 使用 shared_mutex 保护并发读写
          * @return formatter_callback_t& 自定义格式化函数引用
          */
-        static formatter_callback_t& get_custom_formatter_() noexcept {
-            static formatter_callback_t formatter{nullptr};
-            return formatter;
-        }
+        static formatter_callback_t& get_custom_formatter_() noexcept;
 
     public:
         formatter_config_t() = delete;
@@ -66,14 +60,7 @@ namespace error_system::config {
          * @brief 设置自定义格式化函数
          * @param formatter 自定义格式化函数
          */
-        static void set_custom_formatter(formatter_callback_t formatter) noexcept {
-            try {
-                std::unique_lock<std::shared_mutex> lock(get_formatter_mutex_());
-                get_custom_formatter_() = std::move(formatter);
-            } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[formatter_config] set_custom_formatter: std::bad_alloc\n");
-            }
-        }
+        static void set_custom_formatter(formatter_callback_t formatter) noexcept;
 
         /**
          * @brief 获取自定义格式化函数副本
@@ -81,15 +68,17 @@ namespace error_system::config {
          *          内存不足时返回空回调（nullptr）。
          * @return formatter_callback_t 格式化函数副本
          */
-        [[nodiscard]] static formatter_callback_t get_custom_formatter() noexcept {
-            try {
-                std::shared_lock<std::shared_mutex> lock(get_formatter_mutex_());
-                return get_custom_formatter_();
-            } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[formatter_config] get_custom_formatter: std::bad_alloc\n");
-                return formatter_callback_t{nullptr};
-            }
-        }
+        [[nodiscard]] static formatter_callback_t get_custom_formatter() noexcept;
     };
+
+    inline std::shared_mutex& formatter_config_t::get_formatter_mutex_() noexcept {
+        static std::shared_mutex mutex;
+        return mutex;
+    }
+
+    inline formatter_callback_t& formatter_config_t::get_custom_formatter_() noexcept {
+        static formatter_callback_t formatter{nullptr};
+        return formatter;
+    }
 
 }  // namespace error_system::config

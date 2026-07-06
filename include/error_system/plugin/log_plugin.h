@@ -48,6 +48,14 @@ namespace error_system::plugin {
             json,
         };
 
+    private:
+        std::string name_;
+        core::error_level_t min_level_;
+        format_t format_;
+        std::ostream* stream_;
+        mutable std::mutex mutex_;
+
+    public:
         /**
          * @brief 构造日志插件
          * @param name 插件名称（注册时用于去重替换）
@@ -68,29 +76,26 @@ namespace error_system::plugin {
         log_plugin_t& operator=(log_plugin_t&&) = delete;
 
         /**
-         * @brief 获取插件名称
-         * @return std::string_view 插件名称
-         */
-        [[nodiscard]] std::string_view name() const noexcept override;
-
-        /**
-         * @brief 获取最低输出级别
-         * @return core::error_level_t 最低级别
-         */
-        [[nodiscard]] core::error_level_t min_level() const noexcept override;
-
-        /**
          * @brief 错误事件回调（格式化并写入流）
          * @param context 错误上下文
          */
         void on_error(const core::error_context_t& context) noexcept override;
 
-    private:
-        std::string name_;
-        core::error_level_t min_level_;
-        format_t format_;
-        std::ostream* stream_;
-        mutable std::mutex mutex_;
+        /**
+         * @brief 获取插件名称
+         * @return std::string_view 插件名称
+         */
+        [[nodiscard]] std::string_view name() const noexcept override {
+            return name_;
+        }
+
+        /**
+         * @brief 获取最低输出级别
+         * @return core::error_level_t 最低级别
+         */
+        [[nodiscard]] core::error_level_t min_level() const noexcept override {
+            return min_level_;
+        }
     };
 
 }  // namespace error_system::plugin

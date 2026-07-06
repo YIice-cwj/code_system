@@ -93,7 +93,7 @@ namespace error_system::mapping {
         /**
          * @brief 转换为可读字符串（用于日志/序列化）
          * @return const char* 状态码描述（如 "OK"、"Service Unavailable"）
-         * @note 实现位于 http_status.cc（非 constexpr，分离以遵循规范第 5 条）
+         * @note 非常量表达式，实现位于 http_status.cc
          */
         [[nodiscard]] const char* c_str() const noexcept;
 
@@ -144,6 +144,7 @@ namespace error_system::mapping {
 
         /**
          * @brief 是否为成功状态码（200 OK）
+         * @return bool 成功返回 true
          */
         [[nodiscard]] constexpr bool is_success() const noexcept {
             return value_ == value_t::ok;
@@ -151,6 +152,7 @@ namespace error_system::mapping {
 
         /**
          * @brief 是否为客户端错误（4xx）
+         * @return bool 客户端错误返回 true
          */
         [[nodiscard]] constexpr bool is_client_error() const noexcept {
             return to_int() >= 400 && to_int() < 500;
@@ -158,6 +160,7 @@ namespace error_system::mapping {
 
         /**
          * @brief 是否为服务器错误（5xx）
+         * @return bool 服务器错误返回 true
          */
         [[nodiscard]] constexpr bool is_server_error() const noexcept {
             return to_int() >= 500;
@@ -165,11 +168,15 @@ namespace error_system::mapping {
 
         /**
          * @brief 相等比较
+         * @param other 另一个 HTTP 状态码
+         * @return bool 相等返回 true
          */
         constexpr bool operator==(http_status_t other) const noexcept { return value_ == other.value_; }
 
         /**
          * @brief 不等比较
+         * @param other 另一个 HTTP 状态码
+         * @return bool 不等返回 true
          */
         constexpr bool operator!=(http_status_t other) const noexcept { return value_ != other.value_; }
     };

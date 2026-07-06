@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_level.h"
@@ -50,6 +51,15 @@ namespace error_system::plugin {
      * @endcode
      */
     class metric_plugin_t : public i_error_plugin_t {
+    private:
+        std::string name_;
+        core::error_level_t min_level_;
+        mutable std::mutex mutex_;
+        uint64_t total_count_{0};
+        std::array<uint64_t, 5> level_counts_{0, 0, 0, 0, 0};
+        std::unordered_map<uint64_t, uint64_t> code_counts_;
+        std::unordered_map<uint16_t, uint64_t> subsystem_counts_;
+
     public:
         /**
          * @brief 构造指标插件
@@ -57,7 +67,8 @@ namespace error_system::plugin {
          * @param min_level 最低关注级别，低于此级别的错误事件不计数（默认 error）
          */
         explicit metric_plugin_t(std::string name = "metric",
-                                  core::error_level_t min_level = core::error_level_t::error) noexcept;
+                                  core::error_level_t min_level = core::error_level_t::error) noexcept
+            : name_(std::move(name)), min_level_(min_level) {}
 
         ~metric_plugin_t() noexcept override = default;
 
@@ -65,18 +76,6 @@ namespace error_system::plugin {
         metric_plugin_t& operator=(const metric_plugin_t&) = delete;
         metric_plugin_t(metric_plugin_t&&) = delete;
         metric_plugin_t& operator=(metric_plugin_t&&) = delete;
-
-        /**
-         * @brief 获取插件名称
-         * @return std::string_view 插件名称
-         */
-        [[nodiscard]] std::string_view name() const noexcept override;
-
-        /**
-         * @brief 获取最低关注级别
-         * @return core::error_level_t 最低级别
-         */
-        [[nodiscard]] core::error_level_t min_level() const noexcept override;
 
         /**
          * @brief 错误事件回调（更新计数）
@@ -95,14 +94,21 @@ namespace error_system::plugin {
          */
         void reset() noexcept;
 
-    private:
-        std::string name_;
-        core::error_level_t min_level_;
-        mutable std::mutex mutex_;
-        uint64_t total_count_{0};
-        std::array<uint64_t, 5> level_counts_{0, 0, 0, 0, 0};
-        std::unordered_map<uint64_t, uint64_t> code_counts_;
-        std::unordered_map<uint16_t, uint64_t> subsystem_counts_;
+        /**
+         * @brief 获取插件名称
+         * @return std::string_view 插件名称
+         */
+        [[nodiscard]] std::string_view name() const noexcept override {
+            return name_;
+        }
+
+        /**
+         * @brief 获取最低关注级别
+         * @return core::error_level_t 最低级别
+         */
+        [[nodiscard]] core::error_level_t min_level() const noexcept override {
+            return min_level_;
+        }
     };
 
 }  // namespace error_system::plugin

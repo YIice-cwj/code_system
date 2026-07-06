@@ -84,7 +84,7 @@ namespace error_system::mapping {
         /**
          * @brief 转换为字符串名称（用于日志/序列化）
          * @return const char* 状态码名称（如 "OK"、"INTERNAL"）
-         * @note 实现位于 grpc_status.cc（非 constexpr，分离以遵循规范第 5 条）
+         * @note 非常量表达式，实现位于 grpc_status.cc
          */
         [[nodiscard]] const char* c_str() const noexcept;
 
@@ -113,11 +113,15 @@ namespace error_system::mapping {
 
         /**
          * @brief 相等比较
+         * @param other 另一个 gRPC 状态码
+         * @return bool 相等返回 true
          */
         constexpr bool operator==(grpc_status_t other) const noexcept { return value_ == other.value_; }
 
         /**
          * @brief 不等比较
+         * @param other 另一个 gRPC 状态码
+         * @return bool 不等返回 true
          */
         constexpr bool operator!=(grpc_status_t other) const noexcept { return value_ != other.value_; }
     };
