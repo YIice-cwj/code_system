@@ -18,17 +18,17 @@
 
 #include "error_system/async/async_result.h"
 
-#include "error_system/core/duplicate_policy.h"
+#include "error_system/core/registry/duplicate_policy.h"
 #include "error_system/core/error_builder.h"
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_context_initializer.h"
-#include "error_system/core/error_context_serializer.h"
+#include "error_system/core/serializer/error_context_serializer.h"
 #include "error_system/core/error_exception.h"
 #include "error_system/core/error_formatter.h"
 #include "error_system/core/error_level.h"
-#include "error_system/core/error_registry.h"
-#include "error_system/core/result.h"
+#include "error_system/core/registry/error_registry.h"
+#include "error_system/core/result/result.h"
 
 #include "error_system/config/error_config.h"
 #include "error_system/config/feature_flags.h"

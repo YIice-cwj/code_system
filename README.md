@@ -134,6 +134,7 @@ cmake -S . -B build-min -DCMAKE_BUILD_TYPE=MinSizeRel \
 | [架构设计](docs/architecture.md) | 分层架构、关键设计决策、编译配置 |
 | [决策树](docs/decision_tree.md) | 通知模式、查询路径、序列化等选型指南 |
 | [错误码生成](docs/error_code_generation.md) | JSON 配置 → C++ 头文件 + 字典 + 文档 |
+| [基准对比](docs/benchmark_comparison.md) | plain int / std::error_code / error_system 性能对比 |
 
 ## 示例
 

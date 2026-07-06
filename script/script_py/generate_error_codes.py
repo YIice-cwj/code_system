@@ -144,7 +144,7 @@ def generate_header(json_file, out_dir):
         " *          4. i18n 静态注册（错误码消息按 locale 注册到 i18n_t）",
         " */",
         "",
-        '#include "error_system/core/error_registry.h"',
+        '#include "error_system/core/registry/error_registry.h"',
         '#include "error_system/domain/system_domain.h"',
         '#include "error_system/i18n/i18n.h"',
         '#include "error_system/i18n/subsystem_module_catalog.h"',

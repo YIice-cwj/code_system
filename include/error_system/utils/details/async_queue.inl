@@ -66,7 +66,7 @@ bool async_queue_t<T, Processor>::enqueue(value_type_t item) noexcept {
                 running_.store(true);
             } catch (const std::system_error&) {
                 std::fprintf(stderr, "[async_queue] enqueue: failed to create worker thread\n");
-                return false;  // 线程启动失败，拒绝入队
+                return false;
             }
         }
         if (max_size_ > 0 && queue_.size() >= max_size_) {

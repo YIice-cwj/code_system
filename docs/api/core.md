@@ -2,6 +2,8 @@
 
 命名空间 `error_system::core`。本层提供错误码、错误上下文、结果类型与注册表的纯数据抽象，不依赖任何外部 IO 或日志后端。所有方法 `noexcept`，`std::bad_alloc` 等异常在内部捕获并记录到 `stderr`，对象保持可安全析构状态。
 
+> **v4.0.0 头文件布局**：`core/error_code.h` · `core/error_context.h` · `core/runtime_block.h` · `core/error_context_initializer.h` · `core/error_exception.h` · `core/error_level.h` · `core/error_metadata.h` · `core/error_builder.h` · `core/i_error_notifier.h` · `core/result/result.h` · `core/registry/error_registry.h` · `core/registry/duplicate_policy.h` · `core/serializer/error_context_serializer.h`
+
 ---
 
 ## error_code_t
@@ -106,7 +108,14 @@ static_assert(all_unique(codes), "Duplicate error codes detected");
 
 ## error_context_t
 
-错误上下文数据类。封装错误码 + 消息 + 结构化负载 + 因果链 + 堆栈 + 源位置。序列化职责委托给 `error_context_serializer_t`，运行时特性初始化委托给 `error_context_initializer_t`，遵循单一职责原则。`source_location` / `file_name` / `stack_frames` 的填充由编译期特性开关（`LOCATION_ENABLED` / `STACKTRACE_ENABLED`）控制，内部使用 `if constexpr` 由编译器死代码消除未启用分支。
+错误上下文数据类（24 字节 Move-Only）。封装错误码 + 动态运行时块 + 因果链。
+
+- **物理布局严格 24 字节**：8B `error_code` + 8B `runtime_block_t*` + 8B `cause*`
+- **动静分离**：静态数据（`error_code`）内联，动态数据（message/payload/stack/source_location/metadata）收拢到 `runtime_block_t` 堆块，按需分配（`block_ == nullptr` 表示无动态数据，零开销）
+- **Move-Only**：禁用拷贝构造/赋值，仅支持移动；如需共享，调用方自行用 `shared_ptr` 包装或调用 `clone()`
+- **因果链**：采用 `std::unique_ptr<error_context_t>` 独占所有权，零引用计数
+- 序列化职责委托给 `error_context_serializer_t`，运行时特性初始化委托给 `error_context_initializer_t`，遵循单一职责原则
+- `source_location` / `file_name` / `stack_frames` 的填充由编译期特性开关（`LOCATION_ENABLED` / `STACKTRACE_ENABLED`）控制，内部使用 `if constexpr` 由编译器死代码消除未启用分支
 
 ### located_code_t
 
@@ -119,30 +128,55 @@ static_assert(all_unique(codes), "Duplicate error codes detected");
 
 构造签名：`located_code_t(error_code_t code, utils::source_location_t location = utils::source_location_t::current()) noexcept`
 
-### 公共数据成员
+### runtime_block_t
+
+动态运行时上下文堆块（公开类型，头文件 `core/runtime_block.h`）。持有 `error_context_t` 的所有动态字段，字段为 public，仅供 `error_context_t` 及其友元（serializer/initializer）直接访问。按需分配：构造成功码或 `make_minimal` 时不分配（`block_ == nullptr`），仅在需要消息/payload/堆栈等动态数据时分配。
 
 | 成员 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `message` | `std::string` | `{}` | 错误消息 |
+| `metadata` | `std::optional<error_metadata_t>` | `nullopt` | 错误码元数据（懒查询缓存） |
 | `source_location` | `utils::source_location_t` | `{}` | 源位置（由 `LOCATION_ENABLED` 控制） |
-| `file_name` | `const char*` | `nullptr` | 文件名（由 `LOCATION_ENABLED` 控制） |
-| `cause` | `std::shared_ptr<error_context_t>` | `nullptr` | 因果链底层错误 |
-| `stack_frames` | `std::vector<std::string>` | `{}` | 堆栈帧（由 `STACKTRACE_ENABLED` 控制） |
+| `file_name` | `const char*` | `nullptr` | 文件名指针，指向 `loc_file_storage` 或字面量（由 `LOCATION_ENABLED` 控制） |
+| `loc_file_storage` | `std::string` | `{}` | 反序列化场景下的文件名存储（保证 `file_name` 生命周期安全） |
+| `loc_func_storage` | `std::string` | `{}` | 反序列化场景下的函数名存储 |
+| `raw_frames` | `std::shared_ptr<const std::vector<void*>>` | `nullptr` | 原始栈帧指针（capture 时存入） |
+| `resolved_frames` | `std::shared_ptr<const std::vector<std::string>>` | `nullptr` | 已符号化栈帧字符串（测试接口或延迟符号化结果） |
+| `payload_count` | `uint8_t` | `0` | payload 项数 |
+| `payload_small` | `std::array<std::pair<std::string, std::string>, 4>` | `{}` | SSO 区，前 4 项内联 |
+| `payload_overflow` | `std::unique_ptr<std::unordered_map<std::string, std::string>>` | `nullptr` | 溢出区 |
 
-静态常量 `PAYLOAD_SSO_CAPACITY = 4`：负载项 ≤ 4 时栈上存储零堆分配，超过后溢出到 `std::unordered_map`。可通过 `-DERROR_SYSTEM_PAYLOAD_SSO_CAPACITY=N` 编译期覆盖（默认 4，建议 1~16）。
+栈帧延迟符号化：`raw_frames` 与 `resolved_frames` 互斥——生产路径用 `raw_frames`，输出时按需 resolve（带 `thread_local` 缓存）；测试路径用 `resolved_frames`。均使用 `shared_ptr<const>` 实现零拷贝共享。
+
+深拷贝：`[[nodiscard]] static std::unique_ptr<runtime_block_t> deep_copy(const runtime_block_t&)`，用于 `error_context_t::clone()` 和 `wrap()` 场景。
+
+静态常量 `error_context_t::PAYLOAD_SSO_CAPACITY = 4`：负载项 ≤ 4 时栈上存储零堆分配，超出后溢出到 `payload_overflow`。**v4.0.0 起该容量为 `runtime_block_t` 类型布局的硬编码常量**（`std::array` 大小是类型的一部分），不再支持通过 `-DERROR_SYSTEM_PAYLOAD_SSO_CAPACITY=N` 宏覆盖；如需调整需修改 `runtime_block.h` 并重新编译整个库。
 
 ### 构造
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| 默认构造 | `constexpr error_context_t() noexcept = default` | 成功码空上下文 |
-| located_code 构造 | `template <typename... Args> error_context_t(located_code_t lc, std::string message_format, Args&&... args) noexcept` | 自动捕获源位置、格式化消息、触发初始化 |
-| 异常转换工厂 | `static error_context_t from_exception(error_code_t code, const std::exception& e, utils::source_location_t loc = current()) noexcept` | 从 `std::exception` 创建 |
-| `make_minimal` | `[[nodiscard]] static error_context_t make_minimal(error_code_t code, utils::source_location_t loc = current()) noexcept` | 跳过 validation/stacktrace/notification，仅供 Lean 模式读取路径使用 |
-| 拷贝构造 | `error_context_t(const error_context_t&) noexcept` | 深拷贝（bad_alloc 内部捕获） |
-| 移动构造 | `error_context_t(error_context_t&&) noexcept` | 显式清零源对象 |
-| 拷贝赋值 | `= delete` | 禁用 |
-| 移动赋值 | `error_context_t& operator=(error_context_t&&) noexcept` | 自赋值安全，允许变量复用 |
+| 默认构造 | `error_context_t() noexcept = default` | 成功码空上下文，`block_ == nullptr` |
+| located_code 构造 | `template <typename... Args> error_context_t(located_code_t lc, std::string message_format, Args&&... args) noexcept` | 自动捕获源位置、格式化消息、触发初始化；成功码跳过初始化且不分配 `block_` |
+| 异常转换工厂 | `[[nodiscard]] static error_context_t from_exception(error_code_t code, const std::exception& e, utils::source_location_t loc = current()) noexcept` | 从 `std::exception` 创建 |
+| `make_minimal` | `[[nodiscard]] static error_context_t make_minimal(error_code_t code, utils::source_location_t loc = current()) noexcept` | 跳过 validation/stacktrace/notification，仅分配 `block_` 存 `source_location`，仅供 Lean 模式读取路径使用 |
+| `clone` | `[[nodiscard]] error_context_t clone() const noexcept` | 深拷贝（含 cause 链递归克隆）。Move-Only 语义下不可拷贝，需显式调用；用于通知系统异步入队、延迟缓冲等场景。分配失败时返回部分拷贝 |
+| 拷贝构造 | `error_context_t(const error_context_t&) = delete` | 禁用（Move-Only） |
+| 移动构造 | `error_context_t(error_context_t&&) noexcept = default` | 移动所有权，源对象置空 |
+| 拷贝赋值 | `error_context_t& operator=(const error_context_t&) = delete` | 禁用（Move-Only） |
+| 移动赋值 | `error_context_t& operator=(error_context_t&&) noexcept = default` | 自赋值安全 |
+
+### 动态块与因果链访问
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `block` | `[[nodiscard]] const runtime_block_t* block() const noexcept` | 只读访问动态块，未分配时返回 nullptr |
+| `cause` | `[[nodiscard]] const error_context_t* cause() const noexcept` | 只读访问因果链下游节点，无因果链时返回 nullptr |
+| `get_message` | `[[nodiscard]] const std::string& get_message() const noexcept` | 消息引用，未分配 `block_` 时返回空字符串哨兵 |
+| `get_file_name` | `[[nodiscard]] const char* get_file_name() const noexcept` | 文件名指针，未分配 `block_` 时返回 nullptr |
+| `get_source_location` | `[[nodiscard]] const utils::source_location_t& get_source_location() const noexcept` | 源位置引用，未分配 `block_` 时返回空哨兵 |
+| `get_stack_frames` | `[[nodiscard]] std::shared_ptr<const std::vector<std::string>> get_stack_frames() const noexcept` | 堆栈帧（延迟符号化，未分配或无帧时返回 nullptr） |
+| `with_stack_frames` | `error_context_t& with_stack_frames(std::vector<std::string> frames) noexcept` | 测试场景手动设置栈帧，链式 |
 
 ### 负载操作
 
@@ -184,7 +218,7 @@ static_assert(all_unique(codes), "Duplicate error codes detected");
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `wrap` | `[[nodiscard]] error_context_t wrap(const error_context_t& underlying) const noexcept` | 返回包含 cause 的新对象（const&/&& 两重载） |
+| `wrap` | `[[nodiscard]] error_context_t wrap(error_context_t&& underlying) const noexcept` | 返回包含 cause 的新对象：当前对象深拷贝，`underlying` 移动到新对象的 cause 链（含自环检测，避免循环引用） |
 | `join_errors` | `[[nodiscard]] error_context_t join_errors(std::vector<error_context_t>&& errors) noexcept` | 批量校验聚合，主错误取首个，其余以 `joined_error_N` 为键附加 |
 
 ### 序列化便捷方法
@@ -202,14 +236,14 @@ static_assert(all_unique(codes), "Duplicate error codes detected");
 ```cpp
 error_context_t ctx(ERR_DB_TIMEOUT, "连接超时: {}ms", 3000);
 ctx.with("host", "192.168.1.1").with("port", 3306);
-auto chained = biz_error.wrap(db_error);
+auto chained = biz_error.wrap(std::move(db_error));  // wrap 接受右值
 auto host = ctx.get_payload_value("host");  // std::optional
 ```
 
 ```cpp
 std::vector<error_context_t> errs;
-if (!validate_a()) errs.push_back(err_a);
-if (!validate_b()) errs.push_back(err_b);
+if (!validate_a()) errs.push_back(std::move(err_a));  // Move-Only：必须移动
+if (!validate_b()) errs.push_back(std::move(err_b));
 return join_errors(std::move(errs));
 ```
 
@@ -217,14 +251,19 @@ return join_errors(std::move(errs));
 
 ## result_t<T, bool Lean = false>
 
-类 Rust Result，零异常错误传递。内部使用 `std::variant<T, error_storage_t>` + `std::get_if` + 哨兵值，永不抛异常。`error_storage_t = std::conditional_t<Lean, error_code_t, error_context_t>`：Lean=true 时仅存储 error_code_t（省去 message/payload/cause/stack），适用于热路径；Lean=false（默认）为完整模式。
+类 Rust Result，零异常错误传递。**v4.0.0 起内部使用 `union` + `result_state_t` 手写判别式替代 `std::variant`**——因 `error_context_t` 现为 Move-Only，而 C++17 `std::variant` 要求元素可拷贝。`error_storage_t = std::conditional_t<Lean, error_code_t, error_context_t>`：Lean=true 时仅存储 `error_code_t`（省去 message/payload/cause/stack），适用于热路径；Lean=false（默认）为完整模式。
+
+**Move-Only 语义**：Lean=false 时 `result_t` 整体为 Move-Only（拷贝构造/赋值 `= delete`）；Lean=true 时若 `T` 可拷贝则 `result_t` 可拷贝。任何错误结果必须通过 `make_error` 工厂或移动构造传播，跨函数返回依赖 NRVO/移动。
 
 ### 工厂方法
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | `make_success` | `[[nodiscard]] static result_t make_success(T value) noexcept` | 成功结果 |
-| `make_error` | `[[nodiscard]] static result_t make_error(error_code_t code, const std::string& message = "", utils::source_location_t loc = current()) noexcept` | 错误结果（const&/&& message / 从 context 共 4 重载）。Lean 模式下忽略 message/location，仅存 code |
+| `make_error`（code + const& message） | `[[nodiscard]] static result_t make_error(error_code_t code, const std::string& message = "", utils::source_location_t loc = current()) noexcept` | 错误结果。Lean 模式下忽略 message/location，仅存 code |
+| `make_error`（code + && message） | `[[nodiscard]] static result_t make_error(error_code_t code, std::string&& message, utils::source_location_t loc = current()) noexcept` | 移动 message 版本 |
+| `make_error`（const context&） | `[[nodiscard]] static result_t make_error(const error_context_t& context) noexcept` | 完整模式内部 `clone()`；Lean 模式提取 code |
+| `make_error`（context&&） | `[[nodiscard]] static result_t make_error(error_context_t&& context) noexcept` | 移动构造，无克隆开销 |
 
 ### 状态查询
 
@@ -270,7 +309,7 @@ Debug 构建下，`result_t` 析构时若处于错误状态且未被检查，触
 
 以下方法会标记"已检查"：`is_success` / `is_error` / `operator bool` / `value` / `value_or` / `value_pointer` / `error` / `error_code` / `match`。
 
-移动构造转移 `checked_` 状态（源对象标记为已检查避免其析构断言）；拷贝构造清空 `checked_`，新对象需独立检查。
+移动构造转移 `checked_` 状态（源对象标记为已检查避免其析构断言）。Lean=false 时拷贝构造已 `= delete`，无 `checked_` 转移问题；Lean=true 且 `T` 可拷贝时拷贝构造清空新对象 `checked_`，需独立检查。
 
 ### 示例
 
@@ -283,23 +322,23 @@ return inner_call().context("host", host_).context("port", port_);
 ```cpp
 auto msg = r.match(
     [](const std::string& s) { return "ok: " + s; },
-    [](const error_context_t& e) { return "fail: " + std::string(e.message); });
+    [](const error_context_t& e) { return "fail: " + e.get_message(); });
 ```
 
 ### result_t<void, Lean> 特化
 
-仅列与主模板的差异。构造/析构/拷贝/移动 Rule of 5、`is_success`/`is_error`/`operator bool`/`make_error` 系列/`error() const`/`error_code`/`map_error`/`or_else`/`context` 均同主模板（含 Lean 模式行为）。
+仅列与主模板的差异。构造/析构/移动 Rule of 5（拷贝 `= delete`）、`is_success`/`is_error`/`operator bool`/`make_error` 系列/`error() const`/`error_code`/`map_error`/`or_else`/`context` 均同主模板（含 Lean 模式行为）。
 
 | 差异点 | 说明 |
 |--------|------|
-| 默认构造 | `result_t() noexcept` — 成功（持有 monostate，零 error_context_t 构造） |
+| 默认构造 | `result_t() noexcept` — 成功（`state_ = empty`，零 error_storage_t 构造） |
 | `make_success` | `[[nodiscard]] static result_t make_success() noexcept`（无参） |
 | 无 `value` / `value_or` / `value_pointer` / `operator*` / `operator->` | void 无值可读 |
 | 无 mutable `error()` 重载 | — |
 | 无 `map()` / `match()` | — |
 | `and_then` 仅 `&` / `&&` 两个重载 | 无 const&，因 void 无值可读 |
 
-惰性上下文设计：内部用 `std::variant<std::monostate, error_context_t>` 存储。成功路径只持有 `monostate`（trivial 构造），不构造 `error_context_t` 的任何成员，避免成功时无谓构造 13 个空 `std::string`。对象 sizeof 与 `error_context_t` 基本持平（424 vs 416）。
+惰性上下文设计：v4.0.0 起 `union` 仅持有 `error_storage_t` 一个成员，成功路径 `state_ = empty` 不构造任何 error 存储，零开销。失败路径才就地构造 `error_storage_t`。
 
 ```cpp
 result_t<void> ok;
@@ -444,16 +483,16 @@ error_code_t restored = error_builder_t::from_raw(recv_from_network());
 
 ## error_exception_t
 
-将 `error_context_t` 封装为可抛出异常，继承 `std::exception`。构造时通过 `error_context_serializer_t::to_string` 缓存错误详情字符串，`what()` 在异常传播期间返回稳定指针。
+将 `error_context_t` 封装为可抛出异常，继承 `std::exception`。**v4.0.0 起 `error_context_t` 为 Move-Only，无法直接满足 C++ 异常的可拷贝要求，故内部用 `std::shared_ptr<const error_context_t>` 持有**：构造时 `make_shared` 转移所有权（零深拷贝），拷贝异常仅增加引用计数。构造时通过 `error_context_serializer_t::to_string` 缓存错误详情字符串，`what()` 在异常传播期间返回稳定指针。
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| 构造 | `explicit error_exception_t(error_context_t context) noexcept` | 移动构造上下文并缓存 to_string 结果 |
+| 构造 | `explicit error_exception_t(error_context_t context) noexcept` | 按值接收以支持移动，内部 `make_shared` 转移所有权，缓存 `to_string` 结果 |
 | `what` | `const char* what() const noexcept override` | 返回缓存的完整错误详情 |
-| `context` | `[[nodiscard]] const error_context_t& context() const noexcept` | 原始错误上下文 |
-| `code` | `[[nodiscard]] error_code_t code() const noexcept` | 原始错误码 |
+| `context` | `[[nodiscard]] const error_context_t& context() const noexcept` | 原始错误上下文（未持有时返回空哨兵） |
+| `code` | `[[nodiscard]] error_code_t code() const noexcept` | 原始错误码（未持有时返回默认成功码） |
 
-拷贝/移动构造 `= default`，赋值运算符 `= delete`。
+拷贝构造 `= default`、移动构造 `noexcept = default`；拷贝/移动赋值均 `= delete`。
 
 ---
 

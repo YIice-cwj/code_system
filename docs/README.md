@@ -20,10 +20,11 @@
 
 | 文档 | 内容 |
 |------|------|
-| [架构设计](architecture.md) | 分层架构、模块职责、关键设计决策（21 项）、编译配置 |
+| [架构设计](architecture.md) | 分层架构、模块职责、关键设计决策（23 项）、编译配置 |
 | [系统配置指南](configuration_guide.md) | 配置项总览、Lean/Full 选择、场景配置、性能数据、最佳实践 |
 | [错误码自动生成](error_code_generation.md) | JSON 配置格式、生成脚本、CMake 集成、自定义错误码 |
 | [决策树](decision_tree.md) | 通知模式、查询路径、废弃/迁移、i18n 回退、序列化格式、插件开发、错误传递、HTTP/gRPC 映射 |
+| [基准对比](benchmark_comparison.md) | plain int / std::error_code / error_system 构造、传播、序列化对比 |
 
 ## 快速导航
 
@@ -38,6 +39,7 @@
 - **配置策略与场景推荐** → [系统配置指南](configuration_guide.md)
 - **插件通知** → [plugin_registry_t](api/plugin.md#plugin_registry_t)
 - **选型决策** → [决策树](decision_tree.md)
+- **基准对比** → [基准对比](benchmark_comparison.md)
 - **代码生成工具** → [错误码自动生成](error_code_generation.md)
 
 ## 运行测试
@@ -60,4 +62,4 @@ cd build && ctest --output-on-failure
 | Bridge | 2 | 21 |
 | **总计** | **35** | **666** |
 
-另有 `tests/perf/` 4 个基准文件（Google Benchmark v1.8.3）：错误上下文、i18n、插件、Result Lean。
+另有 `tests/migration/perf/` 5 个基准文件（Google Benchmark v1.8.3）：错误上下文、i18n、插件、Result Lean、plain_error_code。

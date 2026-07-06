@@ -47,7 +47,7 @@ if(ERROR_SYSTEM_BUILD_PERF_TESTS)
     )
     FetchContent_MakeAvailable(googlebenchmark)
 
-    file(GLOB PERF_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/perf/*_benchmark.cc)
+    file(GLOB PERF_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/migration/perf/*_benchmark.cc)
 
     foreach(perf_source IN LISTS PERF_SOURCES)
         get_filename_component(perf_name ${perf_source} NAME_WE)

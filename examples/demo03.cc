@@ -41,7 +41,7 @@ public:
     }
 
     void on_error(const error_context_t& context) noexcept override {
-        std::cerr << "[LOG] " << context.message << std::endl;
+        std::cerr << "[LOG] " << context.get_message() << std::endl;
     }
 };
 
@@ -177,7 +177,7 @@ void demo_router_by_code() {
     error_router_plugin_t::instance().register_handler_by_code(
         biz::trade_errors::ERR_ORDER_NOT_FOUND,
         [](const error_context_t& ctx) {
-            std::cout << "  [路由] 订单错误: " << ctx.message << std::endl;
+            std::cout << "  [路由] 订单错误: " << ctx.get_message() << std::endl;
         });
     registry.register_plugin_ref(error_router_plugin_t::instance());
     error_context_t ctx_route{biz::trade_errors::ERR_ORDER_NOT_FOUND, "路由测试"};
@@ -191,7 +191,7 @@ void demo_router_by_domain() {
     error_router_plugin_t::instance().register_handler_by_domain(
         system_domain_t::middleware,
         [](const error_context_t& ctx) {
-            std::cout << "  [中间件域] " << ctx.message << std::endl;
+            std::cout << "  [中间件域] " << ctx.get_message() << std::endl;
         });
     error_context_t ctx_mid{infra::redis_errors::ERR_POOL_EXHAUSTED, "Redis 故障"};
     std::cout << "  (上方应出现中间件域输出)" << std::endl;

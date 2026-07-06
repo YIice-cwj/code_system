@@ -1,5 +1,5 @@
 #include "error_system/core/error_context.h"
-#include "error_system/core/error_context_serializer.h"
+#include "error_system/core/serializer/error_context_serializer.h"
 
 #include <string_view>
 #include <unordered_map>
@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "error_system/config/error_config.h"
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 #include "error_system/i18n/subsystem_module_catalog.h"
 #include "error_system/plugin/plugin_registry.h"
 
@@ -84,7 +84,7 @@ namespace error_system::core {
         error_context_t context(located_code_t{registered_code_}, "hello {}", "world");
 
         EXPECT_EQ(context.get_code().get_code(), registered_code_.get_code());
-        EXPECT_EQ(context.message, "hello world");
+        EXPECT_EQ(context.get_message(), "hello world");
         EXPECT_TRUE(context.get_payload().empty());
     }
 
@@ -93,7 +93,7 @@ namespace error_system::core {
         error_context_t context(located_code_t{unregistered_code}, "boom");
 
         EXPECT_EQ(context.get_code().get_level(), error_level_t::fatal);
-        EXPECT_NE(context.message.find("[UNREGISTERED CODE]"), std::string::npos);
+        EXPECT_NE(context.get_message().find("[UNREGISTERED CODE]"), std::string::npos);
 
         EXPECT_EQ(find_payload_value(context, "illegal_raw_code"), std::to_string(unregistered_code.get_code()));
     }
@@ -133,7 +133,7 @@ namespace error_system::core {
     TEST_F(error_context_test_t, to_binary_includes_cause_chain) {
         error_context_t cause_context(located_code_t{registered_code_}, "root cause");
         error_context_t context(located_code_t{registered_code_}, "wrapper error");
-        auto wrapped = context.wrap(cause_context);
+        auto wrapped = context.wrap(std::move(cause_context));
 
         std::string binary_with_cause = error_context_serializer_t::to_binary(wrapped);
 
@@ -236,14 +236,14 @@ namespace error_system::core {
         error_context_t middle{located_code_t{registered_code_}, "middle error"};
         error_context_t top{located_code_t{registered_code_}, "top error"};
 
-        auto wrapped = top.wrap(middle.wrap(root));
+        auto wrapped = top.wrap(middle.wrap(std::move(root)));
 
-        EXPECT_EQ(wrapped.message, "top error");
-        ASSERT_NE(wrapped.cause, nullptr);
-        EXPECT_EQ(wrapped.cause->message, "middle error");
-        ASSERT_NE(wrapped.cause->cause, nullptr);
-        EXPECT_EQ(wrapped.cause->cause->message, "root cause");
-        EXPECT_EQ(wrapped.cause->cause->cause, nullptr);
+        EXPECT_EQ(wrapped.get_message(), "top error");
+        ASSERT_NE(wrapped.cause(), nullptr);
+        EXPECT_EQ(wrapped.cause()->get_message(), "middle error");
+        ASSERT_NE(wrapped.cause()->cause(), nullptr);
+        EXPECT_EQ(wrapped.cause()->cause()->get_message(), "root cause");
+        EXPECT_EQ(wrapped.cause()->cause()->cause(), nullptr);
     }
 
 
@@ -274,7 +274,7 @@ namespace error_system::core {
     TEST_F(error_context_test_t, from_exception_creates_context_with_what_message) {
         std::runtime_error exception("something went wrong");
         auto context = error_context_t::from_exception(registered_code_, exception);
-        EXPECT_EQ(context.message, "something went wrong");
+        EXPECT_EQ(context.get_message(), "something went wrong");
         EXPECT_EQ(context.get_code().get_code(), registered_code_.get_code());
     }
 
@@ -334,10 +334,10 @@ namespace error_system::core {
         /** 移动包装：cause 应被转移，源对象 cause 状态不再可靠 */
         error_context_t wrapped = wrapper.wrap(std::move(cause));
 
-        EXPECT_EQ(wrapped.message, "wrapper");
-        ASSERT_NE(wrapped.cause, nullptr);
-        EXPECT_EQ(wrapped.cause->message, "original cause");
-        EXPECT_EQ(wrapped.cause->cause, nullptr);
+        EXPECT_EQ(wrapped.get_message(), "wrapper");
+        ASSERT_NE(wrapped.cause(), nullptr);
+        EXPECT_EQ(wrapped.cause()->get_message(), "original cause");
+        EXPECT_EQ(wrapped.cause()->cause(), nullptr);
     }
 
 
@@ -346,7 +346,7 @@ namespace error_system::core {
         cause.with("reason", "timeout");
 
         error_context_t wrapper{located_code_t{registered_code_}, "wrapper error"};
-        auto wrapped = wrapper.wrap(cause);
+        auto wrapped = wrapper.wrap(std::move(cause));
 
         const std::string json = error_context_serializer_t::to_json(wrapped);
         EXPECT_NE(json.find("\"cause\""), std::string::npos);
@@ -356,7 +356,7 @@ namespace error_system::core {
     TEST_F(error_context_test_t, to_string_includes_caused_by_marker) {
         error_context_t cause{located_code_t{registered_code_}, "lower layer failed"};
         error_context_t wrapper{located_code_t{registered_code_}, "upper layer failed"};
-        auto wrapped = wrapper.wrap(cause);
+        auto wrapped = wrapper.wrap(std::move(cause));
 
         const std::string text = error_context_serializer_t::to_string(wrapped);
         /** 文本输出应包含因果链标记 "Caused by" */
@@ -373,7 +373,7 @@ namespace error_system::core {
         auto restored = error_context_serializer_t::from_binary(blob);
         ASSERT_TRUE(restored.has_value());
         EXPECT_EQ(restored->get_code().get_code(), original.get_code().get_code());
-        EXPECT_EQ(restored->message, "binary round trip");
+        EXPECT_EQ(restored->get_message(), "binary round trip");
     }
 
     TEST_F(error_context_test_t, from_binary_round_trip_preserves_payload) {
@@ -392,14 +392,14 @@ namespace error_system::core {
         error_context_t cause{located_code_t{registered_code_}, "root cause"};
         cause.with("reason", "timeout");
         error_context_t wrapper{located_code_t{registered_code_}, "wrapper"};
-        auto wrapped = wrapper.wrap(cause);
+        auto wrapped = wrapper.wrap(std::move(cause));
         const std::string blob = error_context_serializer_t::to_binary(wrapped);
 
         auto restored = error_context_serializer_t::from_binary(blob);
         ASSERT_TRUE(restored.has_value());
-        ASSERT_NE(restored->cause, nullptr);
-        EXPECT_EQ(restored->cause->message, "root cause");
-        EXPECT_EQ(restored->cause->get_payload_value("reason").value_or(""), "timeout");
+        ASSERT_NE(restored->cause(), nullptr);
+        EXPECT_EQ(restored->cause()->get_message(), "root cause");
+        EXPECT_EQ(restored->cause()->get_payload_value("reason").value_or(""), "timeout");
     }
 
     TEST_F(error_context_test_t, from_binary_invalid_magic_returns_nullopt) {
@@ -426,7 +426,7 @@ namespace error_system::core {
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
         EXPECT_EQ(restored->get_code().get_code(), original.get_code().get_code());
-        EXPECT_EQ(restored->message, "json round trip");
+        EXPECT_EQ(restored->get_message(), "json round trip");
     }
 
     TEST_F(error_context_test_t, from_json_round_trip_preserves_payload) {
@@ -444,13 +444,13 @@ namespace error_system::core {
     TEST_F(error_context_test_t, from_json_round_trip_preserves_cause_chain) {
         error_context_t cause{located_code_t{registered_code_}, "root"};
         error_context_t wrapper{located_code_t{registered_code_}, "outer"};
-        auto wrapped = wrapper.wrap(cause);
+        auto wrapped = wrapper.wrap(std::move(cause));
         const std::string json = error_context_serializer_t::to_json(wrapped);
 
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
-        ASSERT_NE(restored->cause, nullptr);
-        EXPECT_EQ(restored->cause->message, "root");
+        ASSERT_NE(restored->cause(), nullptr);
+        EXPECT_EQ(restored->cause()->get_message(), "root");
     }
 
     TEST_F(error_context_test_t, from_json_invalid_json_returns_nullopt) {
@@ -464,7 +464,7 @@ namespace error_system::core {
             R"({"code":"12345","message":"ok","future_field":{"nested":42}})";
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
-        EXPECT_EQ(restored->message, "ok");
+        EXPECT_EQ(restored->get_message(), "ok");
     }
 
     TEST_F(error_context_test_t, from_json_trailing_data_returns_nullopt) {
@@ -484,7 +484,7 @@ namespace error_system::core {
         const auto from_json_again = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(from_json_again.has_value());
         EXPECT_EQ(from_json_again->get_code().get_code(), original.get_code().get_code());
-        EXPECT_EQ(from_json_again->message, "cross format");
+        EXPECT_EQ(from_json_again->get_message(), "cross format");
     }
 
     TEST_F(error_context_test_t, to_string_uses_custom_formatter_when_set) {
@@ -508,14 +508,14 @@ namespace error_system::core {
             R"(","message":"loc","location":{"file":"bin_file.cpp","function":"bin_fn","line":42}})";
         auto with_loc = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(with_loc.has_value());
-        ASSERT_NE(with_loc->file_name, nullptr);
+        ASSERT_NE(with_loc->get_file_name(), nullptr);
         const std::string blob = error_context_serializer_t::to_binary(*with_loc);
 
         auto restored = error_context_serializer_t::from_binary(blob);
         ASSERT_TRUE(restored.has_value());
-        ASSERT_NE(restored->file_name, nullptr);
-        EXPECT_EQ(std::string(restored->file_name), "bin_file.cpp");
-        EXPECT_EQ(restored->source_location.line(), 42u);
+        ASSERT_NE(restored->get_file_name(), nullptr);
+        EXPECT_EQ(std::string(restored->get_file_name()), "bin_file.cpp");
+        EXPECT_EQ(restored->get_source_location().line(), 42u);
     }
 
     TEST_F(error_context_test_t, to_json_round_trip_with_location) {
@@ -524,9 +524,9 @@ namespace error_system::core {
             R"(","message":"loc","location":{"file":"src.cpp","function":"func","line":100}})";
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
-        ASSERT_NE(restored->file_name, nullptr);
-        EXPECT_EQ(std::string(restored->file_name), "src.cpp");
-        EXPECT_EQ(restored->source_location.line(), 100u);
+        ASSERT_NE(restored->get_file_name(), nullptr);
+        EXPECT_EQ(std::string(restored->get_file_name()), "src.cpp");
+        EXPECT_EQ(restored->get_source_location().line(), 100u);
     }
 
     TEST_F(error_context_test_t, from_json_location_field_with_unknown_member_skipped) {
@@ -535,9 +535,9 @@ namespace error_system::core {
             R"(","message":"loc","location":{"file":"f.cpp","function":"fn","line":7,"extra":42}})";
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
-        ASSERT_NE(restored->file_name, nullptr);
-        EXPECT_EQ(std::string(restored->file_name), "f.cpp");
-        EXPECT_EQ(restored->source_location.line(), 7u);
+        ASSERT_NE(restored->get_file_name(), nullptr);
+        EXPECT_EQ(std::string(restored->get_file_name()), "f.cpp");
+        EXPECT_EQ(restored->get_source_location().line(), 7u);
     }
 
     TEST_F(error_context_test_t, from_json_location_field_partial_not_applied) {
@@ -546,13 +546,13 @@ namespace error_system::core {
             R"(","message":"partial","location":{"file":"only_file.cpp"}})";
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
-        EXPECT_EQ(restored->file_name, nullptr);
+        EXPECT_EQ(restored->get_file_name(), nullptr);
     }
 
     TEST_F(error_context_test_t, from_json_empty_object_returns_default_context) {
         auto restored = error_context_serializer_t::from_json("{}");
         ASSERT_TRUE(restored.has_value());
-        EXPECT_EQ(restored->message, "");
+        EXPECT_EQ(restored->get_message(), "");
     }
 
     TEST_F(error_context_test_t, from_json_unknown_array_field_skipped) {
@@ -561,7 +561,7 @@ namespace error_system::core {
             R"(","message":"arr","unknown":[1,2,3,"nested",{"k":"v"}]})";
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
-        EXPECT_EQ(restored->message, "arr");
+        EXPECT_EQ(restored->get_message(), "arr");
     }
 
     TEST_F(error_context_test_t, from_json_unknown_string_field_skipped) {
@@ -570,7 +570,7 @@ namespace error_system::core {
             R"(","message":"str","future":"some_value"})";
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
-        EXPECT_EQ(restored->message, "str");
+        EXPECT_EQ(restored->get_message(), "str");
     }
 
     TEST_F(error_context_test_t, from_json_unknown_number_bool_null_skipped) {
@@ -579,7 +579,7 @@ namespace error_system::core {
             R"(","message":"mixed","n":123,"b":true,"f":false,"z":null})";
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
-        EXPECT_EQ(restored->message, "mixed");
+        EXPECT_EQ(restored->get_message(), "mixed");
     }
 
     TEST_F(error_context_test_t, from_json_message_with_escape_sequences) {
@@ -588,7 +588,7 @@ namespace error_system::core {
             R"(","message":"a\"b\\c\nd\te\u4e2df"})";
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
-        EXPECT_EQ(restored->message, "a\"b\\c\nd\te中f");
+        EXPECT_EQ(restored->get_message(), "a\"b\\c\nd\te中f");
     }
 
     TEST_F(error_context_test_t, from_json_invalid_escape_returns_nullopt) {
@@ -629,10 +629,10 @@ namespace error_system::core {
 
     TEST_F(error_context_test_t, deep_cause_chain_at_max_depth_32) {
         error_context_t leaf(located_code_t{registered_code_}, "leaf");
-        error_context_t chain = leaf;
+        error_context_t chain = std::move(leaf);
         for (int i = 0; i < 33; ++i) {
             error_context_t wrapper(located_code_t{registered_code_}, "layer");
-            chain = wrapper.wrap(chain);
+            chain = wrapper.wrap(std::move(chain));
         }
         const std::string json = error_context_serializer_t::to_json(chain);
         EXPECT_TRUE(error_context_serializer_t::from_json(json).has_value());
@@ -644,7 +644,7 @@ namespace error_system::core {
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         config::feature_flags_t::set_enable_stacktrace(true);
         error_context_t context(located_code_t{registered_code_}, "stack");
-        context.stack_frames = {"frame_a", "frame_b"};
+        context.with_stack_frames({"frame_a", "frame_b"});
         const std::string text = error_context_serializer_t::to_string(context);
         EXPECT_NE(text.find("[Stacktrace]"), std::string::npos);
         EXPECT_NE(text.find("frame_a"), std::string::npos);
@@ -657,7 +657,7 @@ namespace error_system::core {
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         config::feature_flags_t::set_enable_stacktrace(true);
         error_context_t context(located_code_t{registered_code_}, "json stack");
-        context.stack_frames = {"s1", "s2"};
+        context.with_stack_frames({"s1", "s2"});
         const std::string json = error_context_serializer_t::to_json(context);
         EXPECT_NE(json.find("\"stack_frames\""), std::string::npos);
         EXPECT_NE(json.find("s1"), std::string::npos);
@@ -670,13 +670,15 @@ namespace error_system::core {
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         config::feature_flags_t::set_enable_stacktrace(true);
         error_context_t context(located_code_t{registered_code_}, "rt stack");
-        context.stack_frames = {"alpha", "beta"};
+        context.with_stack_frames({"alpha", "beta"});
         const std::string json = error_context_serializer_t::to_json(context);
         auto restored = error_context_serializer_t::from_json(json);
         ASSERT_TRUE(restored.has_value());
-        ASSERT_EQ(restored->stack_frames.size(), 2u);
-        EXPECT_EQ(restored->stack_frames[0], "alpha");
-        EXPECT_EQ(restored->stack_frames[1], "beta");
+        auto frames = restored->get_stack_frames();
+        ASSERT_NE(frames, nullptr);
+        ASSERT_EQ(frames->size(), 2u);
+        EXPECT_EQ((*frames)[0], "alpha");
+        EXPECT_EQ((*frames)[1], "beta");
 #else
         GTEST_SKIP() << "stacktrace disabled at compile time";
 #endif
@@ -748,10 +750,12 @@ namespace error_system::core {
     }
 
     TEST_F(error_context_test_t, join_errors_single_returns_directly) {
+        std::vector<error_context_t> errors;
         error_context_t single(located_code_t{registered_code_}, "only one");
-        auto joined = join_errors({single});
+        errors.push_back(std::move(single));
+        auto joined = join_errors(std::move(errors));
         EXPECT_EQ(joined.get_code().get_code(), registered_code_.get_code());
-        EXPECT_EQ(joined.message, "only one");
+        EXPECT_EQ(joined.get_message(), "only one");
         EXPECT_TRUE(joined.is_payload_empty());
     }
 
@@ -768,7 +772,7 @@ namespace error_system::core {
 
         auto joined = join_errors(std::move(errors));
         EXPECT_EQ(joined.get_code().get_code(), registered_code_.get_code());
-        EXPECT_EQ(joined.message, "primary error");
+        EXPECT_EQ(joined.get_message(), "primary error");
         EXPECT_EQ(joined.payload_size(), 2u);
         EXPECT_EQ(find_payload_value(joined, "joined_error_1"), "second error");
         EXPECT_EQ(find_payload_value(joined, "joined_error_2"), "third error");

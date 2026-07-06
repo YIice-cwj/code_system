@@ -13,7 +13,7 @@
 
 #include "error_system.h"
 #include "error_system/config/error_config.h"
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 #include "error_system/i18n/i18n.h"
 #include "error_system/i18n/locale.h"
 #include "error_system/i18n/subsystem_module_catalog.h"

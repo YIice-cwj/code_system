@@ -56,7 +56,7 @@ void demo_construction_from_exception() {
         throw std::runtime_error("数据库连接超时");
     } catch (const std::exception& e) {
         auto ctx = error_context_t::from_exception(biz::trade_errors::ERR_ORDER_NOT_FOUND, e);
-        std::cout << "  " << ctx.message << std::endl;
+        std::cout << "  " << ctx.get_message() << std::endl;
     }
 }
 
@@ -310,7 +310,7 @@ void demo_cause_chain_wrap_lvalue() {
     section("6.1 wrap(底层错误) 构建因果链");
     error_context_t root{infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键不存在"};
     error_context_t wrapper{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单服务不可用"};
-    auto chained = wrapper.wrap(root);
+    auto chained = wrapper.wrap(std::move(root));
     std::cout << chained << std::endl;
 }
 
@@ -327,7 +327,7 @@ void demo_cause_chain_binary() {
     section("6.3 因果链二进制序列化");
     error_context_t root{infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键不存在"};
     error_context_t wrapper{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单服务不可用"};
-    auto chained = wrapper.wrap(root);
+    auto chained = wrapper.wrap(std::move(root));
     std::string binary_chain = chained.to_binary();
     std::cout << "  单层大小: " << wrapper.to_binary().size() << " bytes" << std::endl;
     std::cout << "  链大小: " << binary_chain.size() << " bytes" << std::endl;

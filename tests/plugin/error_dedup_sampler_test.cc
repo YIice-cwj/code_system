@@ -7,7 +7,7 @@
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_level.h"
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 #include "error_system/domain/system_domain.h"
 #include "error_system/i18n/subsystem_module_catalog.h"
 

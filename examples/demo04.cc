@@ -64,7 +64,7 @@ void demo_context() {
         process_order(404);
     } catch (const error_exception_t& e) {
         const error_context_t& ctx = e.context();
-        std::cout << "  message = " << ctx.message << std::endl;
+        std::cout << "  message = " << ctx.get_message() << std::endl;
         std::cout << "  is_fatal = " << ctx.is_fatal() << std::endl;
         std::cout << "  to_string = " << ctx.to_string() << std::endl;
     }
@@ -118,7 +118,7 @@ void demo_exception_to_result() {
             process_order(id);
             return result_t<int>{id * 100};
         } catch (const error_exception_t& e) {
-            return result_t<int>{e.context()};
+            return result_t<int>::make_error(e.context());
         }
     };
 
@@ -126,7 +126,7 @@ void demo_exception_to_result() {
     std::cout << "  成功: value = " << r1.value() << std::endl;
 
     auto r2 = safe_call(404);
-    std::cout << "  失败: " << r2.error().message << std::endl;
+    std::cout << "  失败: " << r2.error().get_message() << std::endl;
 }
 
 /** @brief 6.1 正常流程（无异常抛出） */

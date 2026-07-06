@@ -8,7 +8,7 @@
 | i18n | `i18n_t` `locale_t` `subsystem_module_catalog_t` |
 | Mapping | `status_mapper_t` `http_status_t` `grpc_status_t` |
 | Migration | `error_migration_registry_t` |
-| Core | `error_code_t` `error_context_t` `result_t<T>` `error_registry_t` `error_builder_t` `error_exception_t` `error_context_serializer_t` `error_context_initializer_t` |
+| Core | `error_code_t` `error_context_t` `error_builder_t` `error_exception_t` `error_context_initializer_t` `registry/error_registry_t` `serializer/error_context_serializer_t` `result/result_t<T>` |
 | Domain | 6 大系统域枚举 |
 | Plugin | `i_error_plugin_t` `plugin_registry_t` `error_router_plugin_t` `async_notification_channel_t` `error_dedup_sampler_t` `log_plugin_t` `metric_plugin_t` |
 | Utils | `async_queue_t` `string_utils_t` `string_format_t` `json_dict_t` `json_lexer_t` `file_utils_t` `stack_trace_utils_t` `source_location_t` |
@@ -25,7 +25,7 @@
 | i18n | 多语言消息目录与子系统/模块名称两级映射，locale 回退查询。 |
 | Mapping | 错误码到 HTTP/gRPC 状态码的 constexpr 纯函数映射。 |
 | Migration | 错误码废弃标记与迁移注册，单跳或递归迁移（环检测，最大深度 16）。 |
-| Core | 64 位错误码、错误上下文、序列化、注册表、Result 与异常封装。 |
+| Core | 64 位错误码、错误上下文、异常封装；`registry/` 注册表与去重策略、`serializer/` 序列化、`result/` Result 类型。 |
 | Domain | 6 大系统域枚举（none/system/middleware/database/application/third_party）。 |
 | Plugin | 插件接口、RCU 无锁注册表、路由分发、异步通知通道、去重采样、日志插件、指标插件。 |
 | Utils | 异步队列、字符串处理、JSON 解析、文件操作、堆栈跟踪、源位置封装。 |
@@ -70,6 +70,9 @@ void bump_epoch_() noexcept { epoch_counter_.fetch_add(1, std::memory_order_rele
 20. **错误码迁移与废弃**：`error_migration_registry_t` 分离废弃与迁移两正交维度，`migrate_recursive` 最大深度 16 防栈溢出，环检测后返回当前码。
 21. **constexpr 状态码映射**：`status_mapper_t` 纯函数，retryable/transient 优先映射 503/UNAVAILABLE，详见下表。
 
+22. **Move-Only error_context_t（v4.0.0）**：24 字节紧凑布局，`runtime_block_t` 堆块收拢动态字段（payload 溢出、堆栈、cause 链），禁用拷贝仅保留移动语义。
+23. **union + result_state_t（v4.0.0）**：`result_t<T>` 用 `union` + `result_state_t` 替代 `std::variant`，以支持 Move-Only 的 `error_context_t` 作为错误载荷。
+
 | 码特征 | HTTP | gRPC |
 |------|------|------|
 | success | 200 OK | OK |
@@ -102,7 +105,7 @@ void bump_epoch_() noexcept { epoch_counter_.fetch_add(1, std::memory_order_rele
 
 ## 测试架构
 
-框架为 GoogleTest v1.14.0（`FetchContent`）+ `gtest_discover_tests` 注册到 CTest；单元测试镜像 `include/` 结构，链接 `error_system::error_system` + `gtest_main`，仅应用警告选项不应用 LTO/PGO/Sanitizer；性能基准 `tests/perf/` 含 4 个基准文件（Google Benchmark v1.8.3）；代码生成由 Python3 从 `config/errors/*.json` 产出头文件、O(1) 字典与文档。
+框架为 GoogleTest v1.14.0（`FetchContent`）+ `gtest_discover_tests` 注册到 CTest；单元测试镜像 `include/` 结构，链接 `error_system::error_system` + `gtest_main`，仅应用警告选项不应用 LTO/PGO/Sanitizer；性能基准 `tests/migration/perf/` 含 5 个基准文件（Google Benchmark v1.8.3，新增 `plain_error_code_benchmark.cc`），基准对比详见 [基准对比](benchmark_comparison.md)；代码生成由 Python3 从 `config/errors/*.json` 产出头文件、O(1) 字典与文档。
 
 > **Debug vs Release 测试数量差异**：5 个 death test（`type_safety_test.cc` 中 2 个、`result_unchecked_test.cc` 中 3 个）使用 `EXPECT_DEATH` 断言，受 `#ifndef NDEBUG` 保护。Debug 构建（`NDEBUG` 未定义）编译 666 个用例，Release 构建（`NDEBUG` 定义）编译 661 个用例。两者都是正确的，文档以 Debug 全量值为准。
 

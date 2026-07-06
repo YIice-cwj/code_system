@@ -83,7 +83,7 @@ def generate_dict(json_dir, out_file):
     # 3. 生成静态注册宏
     lines = [
         "#pragma once",
-        "#include \"error_system/core/error_registry.h\"",
+        "#include \"error_system/core/registry/error_registry.h\"",
         "#include \"error_system/i18n/subsystem_module_catalog.h\"",
         "",
         "// 自动生成的子系统/模块名称注册宏，请勿手动修改",

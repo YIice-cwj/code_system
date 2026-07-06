@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 
 namespace error_system::core {
 
@@ -18,10 +18,10 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_42", "Test error 42");
 
         error_context_t context(located_code_t{code}, "test message");
-        error_exception_t ex(context);
+        error_exception_t ex(std::move(context));
 
         EXPECT_EQ(ex.code().get_code(), code.get_code());
-        EXPECT_EQ(ex.context().message, "test message");
+        EXPECT_EQ(ex.context().get_message(), "test message");
     }
 
     TEST_F(error_exception_test_t, exception_inherits_from_std_exception) {
@@ -29,7 +29,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t context(located_code_t{code}, "error");
-        error_exception_t ex(context);
+        error_exception_t ex(std::move(context));
 
         const std::exception& base = ex;
         EXPECT_STREQ(base.what(), ex.what());
@@ -40,7 +40,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ERR_100", "Error 100");
 
         error_context_t context(located_code_t{code}, "original");
-        error_exception_t ex(context);
+        error_exception_t ex(std::move(context));
 
         const auto& retrieved = ex.context();
         EXPECT_EQ(retrieved.get_code().get_code(), code.get_code());
@@ -63,7 +63,7 @@ namespace error_system::core {
         error_context_t context(located_code_t{code}, "noexcept test");
         error_exception_t ex(std::move(context));
         EXPECT_NE(ex.what(), nullptr);
-        EXPECT_EQ(ex.context().message, "noexcept test");
+        EXPECT_EQ(ex.context().get_message(), "noexcept test");
     }
 
 }  // namespace error_system::core

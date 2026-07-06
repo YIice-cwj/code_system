@@ -9,7 +9,7 @@
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_level.h"
-#include "error_system/core/result.h"
+#include "error_system/core/result/result.h"
 #include "error_system/domain/system_domain.h"
 
 using error_system::async::async_result_t;
@@ -38,7 +38,7 @@ namespace {
 
     result_t<int> make_sync_error(uint16_t number) {
         error_context_t context = error_context_t::make_minimal(make_test_error_code(number));
-        return result_t<int>::make_error(context);
+        return result_t<int>::make_error(std::move(context));
     }
 }
 
@@ -118,7 +118,7 @@ TEST(AsyncResultTest, then_changes_value_type) {
 
 TEST(AsyncResultTest, recover_recovers_from_error) {
     auto result = make_async([] { return make_sync_error(42); })
-                      .recover([](error_context_t) { return result_t<int>::make_success(0); })
+                      .recover([](const error_context_t&) { return result_t<int>::make_success(0); })
                       .get();
     ASSERT_TRUE(result.is_success());
     EXPECT_EQ(result.value(), 0);
@@ -126,7 +126,7 @@ TEST(AsyncResultTest, recover_recovers_from_error) {
 
 TEST(AsyncResultTest, recover_passes_success_unchanged) {
     auto result = make_async([] { return make_sync_success(77); })
-                      .recover([](error_context_t) { return result_t<int>::make_success(0); })
+                      .recover([](const error_context_t&) { return result_t<int>::make_success(0); })
                       .get();
     ASSERT_TRUE(result.is_success());
     EXPECT_EQ(result.value(), 77);
@@ -135,7 +135,7 @@ TEST(AsyncResultTest, recover_passes_success_unchanged) {
 TEST(AsyncResultTest, then_recover_chain) {
     auto result = make_async([] { return make_sync_error(1); })
                       .then([](result_t<int> res) { return res; })
-                      .recover([](error_context_t) { return result_t<int>::make_success(999); })
+                      .recover([](const error_context_t&) { return result_t<int>::make_success(999); })
                       .get();
     ASSERT_TRUE(result.is_success());
     EXPECT_EQ(result.value(), 999);
@@ -151,7 +151,7 @@ TEST(AsyncResultTest, then_catches_callback_exception) {
 
 TEST(AsyncResultTest, recover_catches_callback_exception) {
     auto result = make_async([] { return make_sync_error(1); })
-                      .recover([](error_context_t) -> result_t<int> { throw std::runtime_error("recover failed"); })
+                      .recover([](const error_context_t&) -> result_t<int> { throw std::runtime_error("recover failed"); })
                       .get();
     ASSERT_TRUE(result.is_error());
     EXPECT_EQ(result.error_code().get_level(), error_level_t::fatal);
@@ -194,7 +194,7 @@ TEST(AsyncResultTest, lean_mode_then_propagates_error_code) {
 
 TEST(AsyncResultTest, lean_mode_recover_restores_success) {
     auto result = make_async([] { return result_t<int, true>::make_error(make_test_error_code(1), "err"); })
-                      .recover([](error_context_t) { return result_t<int, true>::make_success(42); })
+                      .recover([](const error_context_t&) { return result_t<int, true>::make_success(42); })
                       .get();
     ASSERT_TRUE(result.is_success());
     EXPECT_EQ(result.value(), 42);

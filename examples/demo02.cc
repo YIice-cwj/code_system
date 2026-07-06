@@ -57,8 +57,8 @@ void demo_construct_value() {
 void demo_construct_error_context() {
     section("1.2 构造：result_t(error_context) 错误上下文");
     error_context_t ctx{biz::trade_errors::ERR_ORDER_NOT_FOUND, "构造错误"};
-    result_t<int> r2{ctx};
-    std::cout << "  is_error=" << r2.is_error() << " message=" << r2.error().message << std::endl;
+    result_t<int> r2{std::move(ctx)};
+    std::cout << "  is_error=" << r2.is_error() << " message=" << r2.error().get_message() << std::endl;
 }
 
 /** @brief 1.3 工厂：make_success(value) 显式成功 */
@@ -72,15 +72,15 @@ void demo_make_success() {
 void demo_make_error() {
     section("1.4 工厂：make_error(code, message) 显式错误");
     auto r4 = result_t<int>::make_error(biz::trade_errors::ERR_ORDER_NOT_FOUND, "工厂构造错误");
-    std::cout << "  is_error=" << r4.is_error() << " message=" << r4.error().message << std::endl;
+    std::cout << "  is_error=" << r4.is_error() << " message=" << r4.error().get_message() << std::endl;
 }
 
 /** @brief 1.5 工厂：make_error(error_context_t) 从上下文构造 */
 void demo_make_error_from_context() {
     section("1.5 工厂：make_error(error_context_t) 从上下文构造");
     error_context_t ctx{biz::trade_errors::ERR_ORDER_NOT_FOUND, "上下文工厂"};
-    auto r = result_t<int>::make_error(ctx);
-    std::cout << "  is_error=" << r.is_error() << " message=" << r.error().message << std::endl;
+    auto r = result_t<int>::make_error(std::move(ctx));
+    std::cout << "  is_error=" << r.is_error() << " message=" << r.error().get_message() << std::endl;
 }
 
 /** @brief 2.1 is_success / is_error */
@@ -150,7 +150,7 @@ void demo_arrow_access() {
 void demo_error_access() {
     section("4.1 error() 获取错误上下文");
     auto r4 = result_t<int>::make_error(biz::trade_errors::ERR_ORDER_NOT_FOUND, "工厂构造错误");
-    std::cout << "  r4.error().message = " << r4.error().message << std::endl;
+    std::cout << "  r4.error().message = " << r4.error().get_message() << std::endl;
 }
 
 /** @brief 4.2 error() 可变引用（可修改错误） */
@@ -184,7 +184,7 @@ void demo_map_error_passthrough() {
     auto m2 = query_order(404).map([](int amount) -> std::string {
         return "金额: " + std::to_string(amount);
     });
-    std::cout << "  is_error=" << m2.is_error() << " message=" << m2.error().message << std::endl;
+    std::cout << "  is_error=" << m2.is_error() << " message=" << m2.error().get_message() << std::endl;
 }
 
 /** @brief 6.1 map_error 错误时转换错误上下文 */
@@ -192,10 +192,10 @@ void demo_map_error_transform() {
     section("6.1 map_error 错误时转换错误上下文");
     auto me1 = query_order(404).map_error([](const error_context_t& e) -> error_context_t {
         error_context_t wrapped{biz::trade_errors::ERR_CART_IS_EMPTY, "下游订单服务故障"};
-        wrapped.with("cause", e.message);
+        wrapped.with("cause", e.get_message());
         return wrapped;
     });
-    std::cout << "  转换后: " << me1.error().message << std::endl;
+    std::cout << "  转换后: " << me1.error().get_message() << std::endl;
 }
 
 /** @brief 6.2 map_error 成功时保持原值 */
@@ -241,7 +241,7 @@ void demo_and_then_multi_layer() {
 void demo_or_else_recover() {
     section("8.1 or_else 错误时恢复");
     auto rec1 = query_order(404).or_else([](const error_context_t& e) -> result_t<int> {
-        std::cout << "  捕获错误: " << e.message << ", 返回默认值 0" << std::endl;
+        std::cout << "  捕获错误: " << e.get_message() << ", 返回默认值 0" << std::endl;
         return result_t<int>{0};
     });
     std::cout << "  恢复后 value=" << rec1.value() << std::endl;
@@ -266,12 +266,12 @@ void demo_match() {
 
     auto msg_ok = login(true).match(
         [](const std::string& token) { return "成功: token=" + token; },
-        [](const error_context_t& e) { return "失败: " + std::string(e.message); });
+        [](const error_context_t& e) { return "失败: " + std::string(e.get_message()); });
     std::cout << "  " << msg_ok << std::endl;
 
     auto msg_err = login(false).match(
         [](const std::string& token) { return "成功: token=" + token; },
-        [](const error_context_t& e) { return "失败: " + std::string(e.message); });
+        [](const error_context_t& e) { return "失败: " + std::string(e.get_message()); });
     std::cout << "  " << msg_err << std::endl;
 }
 
@@ -308,7 +308,7 @@ void demo_try_macro() {
         return result_t<int>{amount.value() * 2};
     };
     std::cout << "  成功: " << try_demo(123).value() << std::endl;
-    std::cout << "  失败: " << try_demo(404).error().message << std::endl;
+    std::cout << "  失败: " << try_demo(404).error().get_message() << std::endl;
 }
 
 /** @brief 11.2 ERROR_SYSTEM_TRY_DISCARD 丢弃成功值（仅传播错误） */
@@ -319,7 +319,7 @@ void demo_try_discard_macro() {
         return result_t<int>{0};
     };
     std::cout << "  成功: " << try_discard(123).value() << " (丢弃查询值)" << std::endl;
-    std::cout << "  失败: " << try_discard(404).error().message << std::endl;
+    std::cout << "  失败: " << try_discard(404).error().get_message() << std::endl;
 }
 
 /** @brief 12.1 result_t<void> 默认构造（成功） */
@@ -334,7 +334,7 @@ void demo_void_make_error() {
     section("12.2 result_t<void> make_error");
     auto void_err = result_t<void>::make_error(biz::trade_errors::ERR_CART_IS_EMPTY, "购物车为空");
     std::cout << "  is_error=" << void_err.is_error()
-              << " message=" << void_err.error().message << std::endl;
+              << " message=" << void_err.error().get_message() << std::endl;
 }
 
 /** @brief 12.3 result_t<void> make_success */

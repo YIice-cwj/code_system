@@ -20,8 +20,8 @@
 
 #include "error_system.h"
 #include "error_system/config/error_config.h"
-#include "error_system/core/error_context_serializer.h"
-#include "error_system/core/error_registry.h"
+#include "error_system/core/serializer/error_context_serializer.h"
+#include "error_system/core/registry/error_registry.h"
 #include "error_system/i18n/i_subsystem_module_resolver.h"
 #include "error_system/plugin/plugin_registry.h"
 // IWYU pragma: begin_exports
@@ -162,10 +162,10 @@ void demo_from_json_valid() {
     auto restored = error_context_serializer_t::from_json(json_str);
     if (restored.has_value()) {
         const bool same = restored->get_code().get_code() == ctx.get_code().get_code()
-                          && restored->message == ctx.message
+                          && restored->get_message() == ctx.get_message()
                           && restored->payload_size() == ctx.payload_size();
         std::cout << "  code 还原    = " << restored->get_code().get_code() << std::endl;
-        std::cout << "  message 还原 = " << restored->message << std::endl;
+        std::cout << "  message 还原 = " << restored->get_message() << std::endl;
         std::cout << "  payload 项数 = " << restored->payload_size() << std::endl;
         std::cout << "  往返一致性   = " << (same ? "通过" : "失败") << std::endl;
     } else {
@@ -189,9 +189,9 @@ void demo_from_binary_valid() {
     auto restored = error_context_serializer_t::from_binary(blob);
     if (restored.has_value()) {
         const bool same = restored->get_code().get_code() == ctx.get_code().get_code()
-                          && restored->message == ctx.message;
+                          && restored->get_message() == ctx.get_message();
         std::cout << "  code 还原    = " << restored->get_code().get_code() << std::endl;
-        std::cout << "  message 还原 = " << restored->message << std::endl;
+        std::cout << "  message 还原 = " << restored->get_message() << std::endl;
         std::cout << "  往返一致性   = " << (same ? "通过" : "失败") << std::endl;
     } else {
         std::cout << "  反序列化失败" << std::endl;
@@ -212,10 +212,10 @@ void demo_wrap_lvalue() {
     root.with("redis_key", "session:user:8848");
     error_context_t top{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单创建失败"};
     const error_context_t& root_ref = root;
-    error_context_t wrapped = top.wrap(root_ref);
-    std::cout << "  顶层 message = " << wrapped.message << std::endl;
-    if (wrapped.cause) {
-        std::cout << "  cause message = " << wrapped.cause->message << std::endl;
+    error_context_t wrapped = top.wrap(root_ref.clone());
+    std::cout << "  顶层 message = " << wrapped.get_message() << std::endl;
+    if (wrapped.cause()) {
+        std::cout << "  cause message = " << wrapped.cause()->get_message() << std::endl;
     }
 }
 
@@ -224,9 +224,9 @@ void demo_wrap_rvalue() {
     section("4.2 wrap(error_context_t&&) 包装底层错误（右值版本）");
     error_context_t top{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单创建失败"};
     error_context_t wrapped = top.wrap(error_context_t{infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键不存在"});
-    std::cout << "  顶层 message = " << wrapped.message << std::endl;
-    if (wrapped.cause) {
-        std::cout << "  cause message = " << wrapped.cause->message << std::endl;
+    std::cout << "  顶层 message = " << wrapped.get_message() << std::endl;
+    if (wrapped.cause()) {
+        std::cout << "  cause message = " << wrapped.cause()->get_message() << std::endl;
     }
 }
 
@@ -236,7 +236,7 @@ void demo_chain_to_json() {
     error_context_t root{infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键不存在"};
     error_context_t mid{biz::payment_errors::ERR_ACCOUNT_FROZEN, "支付服务调用失败"};
     error_context_t top{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单创建失败"};
-    error_context_t chain = top.wrap(mid.wrap(root));
+    error_context_t chain = top.wrap(mid.wrap(std::move(root)));
     std::cout << "  " << chain.to_json() << std::endl;
 }
 
@@ -246,7 +246,7 @@ void demo_chain_to_binary_size() {
     error_context_t root{infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键不存在"};
     error_context_t mid{biz::payment_errors::ERR_ACCOUNT_FROZEN, "支付服务调用失败"};
     error_context_t top{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单创建失败"};
-    error_context_t chain = top.wrap(mid.wrap(root));
+    error_context_t chain = top.wrap(mid.wrap(std::move(root)));
     std::cout << "  单层大小 = " << top.to_binary().size() << " bytes" << std::endl;
     std::cout << "  三层大小 = " << chain.to_binary().size() << " bytes" << std::endl;
 }
@@ -257,13 +257,13 @@ void demo_chain_from_binary() {
     error_context_t root{infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键不存在"};
     error_context_t mid{biz::payment_errors::ERR_ACCOUNT_FROZEN, "支付服务调用失败"};
     error_context_t top{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单创建失败"};
-    error_context_t chain = top.wrap(mid.wrap(root));
+    error_context_t chain = top.wrap(mid.wrap(std::move(root)));
     auto restored = error_context_serializer_t::from_binary(chain.to_binary());
-    if (restored.has_value() && restored->cause) {
-        std::cout << "  顶层 message = " << restored->message << std::endl;
-        std::cout << "  中层 message = " << restored->cause->message << std::endl;
-        if (restored->cause->cause) {
-            std::cout << "  底层 message = " << restored->cause->cause->message << std::endl;
+    if (restored.has_value() && restored->cause()) {
+        std::cout << "  顶层 message = " << restored->get_message() << std::endl;
+        std::cout << "  中层 message = " << restored->cause()->get_message() << std::endl;
+        if (restored->cause()->cause()) {
+            std::cout << "  底层 message = " << restored->cause()->cause()->get_message() << std::endl;
         }
     } else {
         std::cout << "  反序列化失败" << std::endl;
@@ -275,11 +275,11 @@ void demo_equals_strict() {
     section("4.6 equals_strict 严格比较因果链（含 cause 链深比较）");
     error_context_t root_a{infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键不存在"};
     error_context_t top_a{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单创建失败"};
-    error_context_t chain_a = top_a.wrap(root_a);
+    error_context_t chain_a = top_a.wrap(std::move(root_a));
 
     error_context_t root_b{infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键不存在"};
     error_context_t top_b{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单创建失败"};
-    error_context_t chain_b = top_b.wrap(root_b);
+    error_context_t chain_b = top_b.wrap(std::move(root_b));
 
     std::cout << "  equals_strict (同结构) = " << chain_a.equals_strict(chain_b) << std::endl;
     std::cout << "  equals_by_code         = " << chain_a.equals_by_code(chain_b) << std::endl;
@@ -294,7 +294,7 @@ void demo_set_custom_formatter() {
             std::string out = "level=";
             out += to_string(ctx.get_code().get_level());
             out += " msg=\"";
-            out += ctx.message;
+            out += ctx.get_message();
             out += "\" code=";
             out += std::to_string(ctx.get_code().get_identity_code());
             ctx.for_each_payload([&out](const std::string& k, const std::string& v) {
@@ -356,11 +356,10 @@ void demo_join_errors_empty() {
 /** @brief 7.2 join_errors 单元素（直接返回，零开销） */
 void demo_join_errors_single() {
     section("7.2 join_errors 单元素（直接返回，零开销）");
-    std::vector<error_context_t> single_errs = {
-        error_context_t{biz::trade_errors::ERR_ORDER_NOT_FOUND, "单条错误"},
-    };
+    std::vector<error_context_t> single_errs;
+    single_errs.emplace_back(biz::trade_errors::ERR_ORDER_NOT_FOUND, "单条错误");
     auto joined = join_errors(std::move(single_errs));
-    std::cout << "  message      = " << joined.message << std::endl;
+    std::cout << "  message      = " << joined.get_message() << std::endl;
     std::cout << "  payload 项数 = " << joined.payload_size() << " (单元素不附加 payload)" << std::endl;
 }
 
@@ -374,7 +373,7 @@ void demo_join_errors_multi() {
     }
     auto joined = join_errors(std::move(multi_errs));
     std::cout << "  预期 payload 项数 = 9 (joined_error_1..9)" << std::endl;
-    std::cout << "  主错误 message    = " << joined.message << std::endl;
+    std::cout << "  主错误 message    = " << joined.get_message() << std::endl;
     std::cout << "  实际 payload 项数 = " << joined.payload_size() << std::endl;
     joined.for_each_payload([](const std::string& k, const std::string& v) {
         std::cout << "    " << k << " = " << v << std::endl;
@@ -389,7 +388,7 @@ void demo_try_macro() {
         return result_t<int>{amount.value() * 2};
     };
     std::cout << "  成功: " << try_demo(123).value() << std::endl;
-    std::cout << "  失败: " << try_demo(404).error().message << std::endl;
+    std::cout << "  失败: " << try_demo(404).error().get_message() << std::endl;
 }
 
 /** @brief 8.2 ERROR_SYSTEM_TRY_DISCARD 丢弃成功值（仅传播错误） */
@@ -400,7 +399,7 @@ void demo_try_discard_macro() {
         return result_t<int>{0};
     };
     std::cout << "  成功: " << try_discard(123).value() << " (丢弃查询值)" << std::endl;
-    std::cout << "  失败: " << try_discard(404).error().message << std::endl;
+    std::cout << "  失败: " << try_discard(404).error().get_message() << std::endl;
 }
 
 /** @brief 8.3 and_then 链式（跨类型：查订单 → 校验金额 → 支付） */
@@ -421,7 +420,7 @@ void demo_and_then_pipeline() {
             .and_then(pay);
     };
     std::cout << "  成功: " << pipeline(123).value() << std::endl;
-    std::cout << "  失败: " << pipeline(404).error().message << std::endl;
+    std::cout << "  失败: " << pipeline(404).error().get_message() << std::endl;
 }
 
 /** @brief 9.1 register_plugin_ref 注册统计插件（min_level 过滤） */
@@ -453,7 +452,7 @@ result_t<void> run_order_pipeline(int user_id, int quantity, int amount) {
         if (amt <= 0) {
             error_context_t root_cause{infra::redis_errors::ERR_KEY_NOT_FOUND, "支付通道签名缓存丢失"};
             error_context_t wrapper{biz::payment_errors::ERR_ACCOUNT_FROZEN, "支付处理失败"};
-            return result_t<void>::make_error(wrapper.wrap(root_cause));
+            return result_t<void>::make_error(wrapper.wrap(std::move(root_cause)));
         }
         return result_t<void>::make_success();
     };
@@ -479,8 +478,8 @@ void demo_scenario_payment_failed() {
     if (result_b.is_error()) {
         std::cout << result_b.error().to_string() << std::endl;
         std::cout << "  payload 项数 = " << result_b.error().payload_size() << std::endl;
-        if (result_b.error().cause) {
-            std::cout << "  cause message = " << result_b.error().cause->message << std::endl;
+        if (result_b.error().cause()) {
+            std::cout << "  cause message = " << result_b.error().cause()->get_message() << std::endl;
         }
     }
 }
@@ -490,7 +489,7 @@ void demo_scenario_user_invalid() {
     section("9.5 场景C：用户校验失败");
     auto result_c = run_order_pipeline(-1, 2, 199);
     if (result_c.is_error()) {
-        std::cout << "  " << result_c.error().message << std::endl;
+        std::cout << "  " << result_c.error().get_message() << std::endl;
     }
 }
 

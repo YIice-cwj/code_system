@@ -6,7 +6,7 @@
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_level.h"
-#include "error_system/core/result.h"
+#include "error_system/core/result/result.h"
 #include "error_system/domain/system_domain.h"
 
 using error_system::core::all_unique;
