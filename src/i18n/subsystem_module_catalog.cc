@@ -125,8 +125,4 @@ namespace error_system::i18n {
         return cleared_count;
     }
 
-    i_subsystem_module_resolver_t* get_default_subsystem_module_resolver() noexcept {
-        return &subsystem_module_catalog_t::instance();
-    }
-
 }  // namespace error_system::i18n

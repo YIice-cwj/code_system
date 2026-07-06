@@ -42,14 +42,6 @@ namespace error_system::utils {
          * @param key JSON键，格式为 "key1.key2"
          * @return std::optional<std::string> 字符串值，若键不存在则返回空可选
          */
-        [[nodiscard]] std::optional<std::string> operator[](const std::string& key) const noexcept;
-
-        /**
-         * @brief 获取JSON字典中的字符串值
-         * @details 根据键获取JSON字典中的字符串值
-         * @param key JSON键，格式为 "key1.key2"
-         * @return std::optional<std::string> 字符串值，若键不存在则返回空可选
-         */
         [[nodiscard]] std::optional<std::string> get_value(const std::string& key) const noexcept;
 
         /**
@@ -63,26 +55,45 @@ namespace error_system::utils {
                                                 const std::string& default_value) const noexcept;
 
         /**
+         * @brief 获取JSON字典中的字符串值
+         * @details 根据键获取JSON字典中的字符串值
+         * @param key JSON键，格式为 "key1.key2"
+         * @return std::optional<std::string> 字符串值，若键不存在则返回空可选
+         */
+        [[nodiscard]] inline std::optional<std::string> operator[](const std::string& key) const noexcept {
+            return get_value(key);
+        }
+
+        /**
          * @brief 检查JSON字典是否包含指定键
          * @details 检查JSON字典是否包含指定键，若包含则返回true，否则返回false
          * @param key JSON键，格式为 "key1.key2"
          * @return bool 是否包含指定键
          */
-        [[nodiscard]] bool contains(const std::string& key) const noexcept;
+        [[nodiscard]] inline bool contains(const std::string& key) const noexcept {
+            if (empty()) {
+                return false;
+            }
+            return get_value(key).has_value();
+        }
 
         /**
          * @brief 检查JSON字典是否为空
          * @details 检查JSON字典是否为空，若为空则返回true，否则返回false
          * @return bool 是否为空
          */
-        [[nodiscard]] bool empty() const noexcept;
+        [[nodiscard]] inline bool empty() const noexcept {
+            return dict_.empty();
+        }
 
         /**
          * @brief 获取JSON字典的大小
          * @details 获取JSON字典的大小，即键值对的数量
          * @return size_t JSON字典的大小
          */
-        [[nodiscard]] size_t size() const noexcept;
+        [[nodiscard]] inline size_t size() const noexcept {
+            return dict_.size();
+        }
 
     public:
         /**

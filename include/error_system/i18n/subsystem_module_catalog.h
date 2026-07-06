@@ -65,7 +65,7 @@ namespace error_system::i18n {
         mutable std::shared_mutex mutex_;
 
         /**
-         * @brief 单例初始化一次性标志（规范 22）
+         * @brief 单例初始化一次性标志
          */
         static std::once_flag once_flag_;
 
@@ -83,13 +83,6 @@ namespace error_system::i18n {
 
     public:
         /**
-         * @brief 获取单例实例
-         * @details 使用 std::call_once + 函数局部静态保证线程安全的单例初始化
-         * @return subsystem_module_catalog_t& 单例引用
-         */
-        static subsystem_module_catalog_t& instance() noexcept;
-
-        /**
          * @brief 注册指定 locale 的子系统/模块名称
          * @param locale 语言区域
          * @param subsystem_id 子系统 ID
@@ -103,21 +96,6 @@ namespace error_system::i18n {
                                        uint16_t module_id,
                                        std::string_view subsystem_name,
                                        std::string_view module_name) noexcept;
-
-        /**
-         * @brief 注册子系统/模块名称（便捷重载，默认 locale 为 zh_CN）
-         * @param subsystem_id 子系统 ID
-         * @param module_id 模块 ID
-         * @param subsystem_name 子系统名称
-         * @param module_name 模块名称
-         * @note 等价于 register_subsystem_module(locale_t::zh_CN, ...)
-         */
-        void register_subsystem_module(uint16_t subsystem_id,
-                                       uint16_t module_id,
-                                       std::string_view subsystem_name,
-                                       std::string_view module_name) noexcept {
-            register_subsystem_module(locale_t::zh_CN, subsystem_id, module_id, subsystem_name, module_name);
-        }
 
         /**
          * @brief 查询指定 locale 的子系统/模块名称（带回退）
@@ -134,15 +112,42 @@ namespace error_system::i18n {
                                                                          uint16_t module_id) const noexcept;
 
         /**
+         * @brief 清空所有子系统/模块名称映射
+         */
+        void clear() noexcept;
+
+        /**
+         * @brief 清空指定 locale 的所有子系统/模块名称映射
+         * @param locale 语言区域
+         * @return size_t 被清除的条目数量
+         */
+        size_t clear_locale(locale_t locale) noexcept;
+
+        /**
+         * @brief 注册子系统/模块名称（便捷重载，默认 locale 为 zh_CN）
+         * @param subsystem_id 子系统 ID
+         * @param module_id 模块 ID
+         * @param subsystem_name 子系统名称
+         * @param module_name 模块名称
+         * @note 等价于 register_subsystem_module(locale_t::zh_CN, ...)
+         */
+        inline void register_subsystem_module(uint16_t subsystem_id,
+                                              uint16_t module_id,
+                                              std::string_view subsystem_name,
+                                              std::string_view module_name) noexcept {
+            register_subsystem_module(locale_t::zh_CN, subsystem_id, module_id, subsystem_name, module_name);
+        }
+
+        /**
          * @brief 查询指定 locale 的子系统/模块名称（回退到 zh_CN）
          * @param locale 首选语言区域
          * @param subsystem_id 子系统 ID
          * @param module_id 模块 ID
          * @return subsystem_module_info_t 子系统/模块名称信息副本（未注册时返回默认值）
          */
-        [[nodiscard]] subsystem_module_info_t get_subsystem_module_info(locale_t locale,
-                                                                         uint16_t subsystem_id,
-                                                                         uint16_t module_id) const noexcept {
+        [[nodiscard]] inline subsystem_module_info_t get_subsystem_module_info(locale_t locale,
+                                                                                uint16_t subsystem_id,
+                                                                                uint16_t module_id) const noexcept {
             return get_subsystem_module_info(locale, locale_t::zh_CN, subsystem_id, module_id);
         }
 
@@ -153,8 +158,8 @@ namespace error_system::i18n {
          * @return subsystem_module_info_t 子系统/模块名称信息副本（未注册时返回默认值）
          * @note 等价于 get_subsystem_module_info(locale_t::zh_CN, subsystem_id, module_id)
          */
-        [[nodiscard]] subsystem_module_info_t get_subsystem_module_info(uint16_t subsystem_id,
-                                                                         uint16_t module_id) const noexcept {
+        [[nodiscard]] inline subsystem_module_info_t get_subsystem_module_info(uint16_t subsystem_id,
+                                                                                uint16_t module_id) const noexcept {
             return get_subsystem_module_info(locale_t::zh_CN, subsystem_id, module_id);
         }
 
@@ -167,7 +172,7 @@ namespace error_system::i18n {
          * @param module_id 模块 ID
          * @return subsystem_module_info_t 子系统/模块名称信息副本
          */
-        [[nodiscard]] subsystem_module_info_t resolve_subsystem_module(
+        [[nodiscard]] inline subsystem_module_info_t resolve_subsystem_module(
             locale_t output_locale,
             locale_t fallback_locale,
             uint16_t subsystem_id,
@@ -176,16 +181,11 @@ namespace error_system::i18n {
         }
 
         /**
-         * @brief 清空所有子系统/模块名称映射
+         * @brief 获取单例实例
+         * @details 使用 std::call_once + 函数局部静态保证线程安全的单例初始化
+         * @return subsystem_module_catalog_t& 单例引用
          */
-        void clear() noexcept;
-
-        /**
-         * @brief 清空指定 locale 的所有子系统/模块名称映射
-         * @param locale 语言区域
-         * @return size_t 被清除的条目数量
-         */
-        size_t clear_locale(locale_t locale) noexcept;
+        static subsystem_module_catalog_t& instance() noexcept;
     };
 
     /**
@@ -194,6 +194,8 @@ namespace error_system::i18n {
      *          在静态初始化后延迟绑定，避免 core 直接包含 catalog 头文件。
      * @return i_subsystem_module_resolver_t* 默认解析器指针（永不返回 nullptr）
      */
-    [[nodiscard]] i_subsystem_module_resolver_t* get_default_subsystem_module_resolver() noexcept;
+    [[nodiscard]] inline i_subsystem_module_resolver_t* get_default_subsystem_module_resolver() noexcept {
+        return &subsystem_module_catalog_t::instance();
+    }
 
 }  // namespace error_system::i18n

@@ -119,62 +119,6 @@ namespace error_system::i18n {
     }
 
     /**
-     * @brief 使用当前输出 locale 查询
-     * @details 从 config::i18n_config_t 解析最终输出 locale，委托两参版本完成
-     *          指定 locale → parent 链 → en_US → 空字符串 的回退查询。
-     * @param code 错误码
-     * @return std::string 本地化描述，未命中返回空 string
-     */
-    std::string i18n_t::get_message(error_code_t code) const noexcept {
-        const auto output_locale = config::i18n_config_t::resolve_output_locale();
-        return get_message(output_locale, code);
-    }
-
-    /**
-     * @brief 设置默认 locale（回退查询使用）
-     * @details 委托给 config::i18n_config_t::set_default_locale。
-     * @param locale 语言区域
-     */
-    void i18n_t::set_default_locale(locale_t locale) noexcept {
-        config::i18n_config_t::set_default_locale(locale);
-    }
-
-    /**
-     * @brief 获取默认 locale
-     * @details 委托给 config::i18n_config_t::get_default_locale。
-     * @return locale_t 默认 locale
-     */
-    locale_t i18n_t::get_default_locale() const noexcept {
-        return config::i18n_config_t::get_default_locale();
-    }
-
-    /**
-     * @brief 设置当前输出 locale（运行时切换语言）
-     * @details 委托给 config::i18n_config_t::set_output_locale。
-     * @param locale 语言区域
-     */
-    void i18n_t::set_active_locale(locale_t locale) noexcept {
-        config::i18n_config_t::set_output_locale(locale);
-    }
-
-    /**
-     * @brief 清除当前输出 locale，回退到默认 locale
-     * @details 委托给 config::i18n_config_t::clear_output_locale。
-     */
-    void i18n_t::clear_active_locale() noexcept {
-        config::i18n_config_t::clear_output_locale();
-    }
-
-    /**
-     * @brief 获取当前输出 locale
-     * @details 委托给 config::i18n_config_t::get_output_locale。
-     * @return std::optional<locale_t> 输出 locale，未设置返回 nullopt
-     */
-    std::optional<locale_t> i18n_t::get_active_locale() const noexcept {
-        return config::i18n_config_t::get_output_locale();
-    }
-
-    /**
      * @brief 清除指定 locale 的所有消息
      * @param locale 语言区域
      * @return size_t 被清除的消息数量

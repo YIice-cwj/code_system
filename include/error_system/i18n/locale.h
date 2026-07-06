@@ -101,7 +101,30 @@ namespace error_system::i18n {
      * @param locale 语言区域
      * @return locale_t parent locale；en_US 返回自身（链终点）；非法值返回 en_US
      */
-    [[nodiscard]] inline constexpr locale_t parent_locale(locale_t locale) noexcept {
+    [[nodiscard]] inline constexpr locale_t parent_locale(locale_t locale) noexcept;
+
+    /**
+     * @brief 将 locale_t 转换为字符串标识（如 "zh_CN"）
+     * @param locale 语言区域枚举值
+     * @return std::string_view 字符串标识；非法值返回 "en_US"
+     */
+    [[nodiscard]] inline constexpr std::string_view to_string(locale_t locale) noexcept;
+
+    /**
+     * @brief 从字符串标识解析 locale_t
+     * @param text 字符串标识（如 "zh_CN"）
+     * @return locale_t 枚举值（未识别返回 en_US）
+     */
+    [[nodiscard]] inline constexpr locale_t from_string(std::string_view text) noexcept;
+
+    /**
+     * @brief 检查字符串是否为已知 locale 标识
+     * @param text 字符串标识
+     * @return bool 已知返回 true
+     */
+    [[nodiscard]] inline constexpr bool is_valid(std::string_view text) noexcept;
+
+    inline constexpr locale_t parent_locale(locale_t locale) noexcept {
         const auto index = static_cast<size_t>(locale);
         if (index < LOCALE_COUNT) {
             return LOCALE_PARENT_TABLE[index];
@@ -109,12 +132,7 @@ namespace error_system::i18n {
         return locale_t::en_US;
     }
 
-    /**
-     * @brief 将 locale_t 转换为字符串标识（如 "zh_CN"）
-     * @param locale 语言区域枚举值
-     * @return std::string_view 字符串标识；非法值返回 "en_US"
-     */
-    [[nodiscard]] inline constexpr std::string_view to_string(locale_t locale) noexcept {
+    inline constexpr std::string_view to_string(locale_t locale) noexcept {
         const auto index = static_cast<size_t>(locale);
         if (index < LOCALE_COUNT) {
             return LOCALE_TABLE[index].second;
@@ -122,12 +140,7 @@ namespace error_system::i18n {
         return "en_US";
     }
 
-    /**
-     * @brief 从字符串标识解析 locale_t
-     * @param text 字符串标识（如 "zh_CN"）
-     * @return locale_t 枚举值（未识别返回 en_US）
-     */
-    [[nodiscard]] inline constexpr locale_t from_string(std::string_view text) noexcept {
+    inline constexpr locale_t from_string(std::string_view text) noexcept {
         for (const auto& [value, name] : LOCALE_TABLE) {
             if (name == text) {
                 return value;
@@ -136,12 +149,7 @@ namespace error_system::i18n {
         return locale_t::en_US;
     }
 
-    /**
-     * @brief 检查字符串是否为已知 locale 标识
-     * @param text 字符串标识
-     * @return bool 已知返回 true
-     */
-    [[nodiscard]] inline constexpr bool is_valid(std::string_view text) noexcept {
+    inline constexpr bool is_valid(std::string_view text) noexcept {
         for (const auto& [_, name] : LOCALE_TABLE) {
             if (name == text) {
                 return true;

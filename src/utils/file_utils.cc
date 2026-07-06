@@ -111,48 +111,4 @@ namespace error_system::utils {
         return file.is_open();
     }
 
-    /**
-     * @brief 删除文件
-     * @details 删除指定文件路径的文件
-     * @param path 文件路径
-     * @return bool 删除成功则返回 true，否则返回 false
-     */
-    bool file_utils_t::delete_file(const std::filesystem::path& path) noexcept {
-        std::error_code error{};
-        return std::filesystem::remove(path, error) || !std::filesystem::exists(path, error);
-    }
-
-    /**
-     * @brief 强制删除文件
-     * @details 强制删除指定文件路径的文件，文件不存在时返回 true（幂等语义）
-     * @param path 文件路径
-     * @return bool 删除成功或文件不存在则返回 true，否则返回 false
-     */
-    bool file_utils_t::force_delete_file(const std::filesystem::path& path) noexcept {
-        std::error_code error{};
-        return std::filesystem::remove_all(path, error) || !std::filesystem::exists(path, error);
-    }
-
-    /**
-     * @brief 检查文件是否存在
-     * @details 检查指定文件路径的文件是否存在
-     * @param path 文件路径
-     * @return bool 文件存在则返回 true，否则返回 false
-     */
-    bool file_utils_t::file_exists(const std::filesystem::path& path) noexcept {
-        std::error_code error{};
-        return std::filesystem::exists(path, error) && std::filesystem::is_regular_file(path, error);
-    }
-
-    /**
-     * @brief 检查目录路径是否存在
-     * @details 检查指定路径是否存在且为目录
-     * @param path 目录路径
-     * @return bool 目录路径存在则返回 true，否则返回 false
-     */
-    bool file_utils_t::dir_exists(const std::filesystem::path& path) noexcept {
-        std::error_code error{};
-        return std::filesystem::exists(path, error) && std::filesystem::is_directory(path, error);
-    }
-
 }  // namespace error_system::utils

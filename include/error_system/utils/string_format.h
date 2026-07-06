@@ -98,31 +98,7 @@ namespace error_system::utils {
              * @details 遍历格式字符串，将非占位符部分追加到结果中
              *          支持 {{ 和 }} 转义
              */
-            void append_literal_braces() noexcept {
-                try {
-                    while (cursor < format.size()) {
-                        if (format[cursor] == '{') {
-                            if (cursor + 1 < format.size() && format[cursor + 1] == '{') {
-                                result.push_back('{');
-                                cursor += 2;
-                                continue;
-                            }
-                            break;
-                        }
-                        if (format[cursor] == '}') {
-                            if (cursor + 1 < format.size() && format[cursor + 1] == '}') {
-                                result.push_back('}');
-                                cursor += 2;
-                                continue;
-                            }
-                        }
-                        result.push_back(format[cursor]);
-                        ++cursor;
-                    }
-                } catch (const std::bad_alloc&) {
-                    std::fprintf(stderr, "[string_format] append_literal_braces: bad_alloc\n");
-                }
-            }
+            void append_literal_braces() noexcept;
 
             /**
              * @brief 追加参数值
@@ -143,16 +119,7 @@ namespace error_system::utils {
              * @brief 完成格式化
              * @details 追加剩余的字面量部分
              */
-            void finish() noexcept {
-                append_literal_braces();
-                if (cursor < format.size()) {
-                    try {
-                        result.append(format.data() + cursor, format.size() - cursor);
-                    } catch (const std::bad_alloc&) {
-                        std::fprintf(stderr, "[string_format] finish: bad_alloc\n");
-                    }
-                }
-            }
+            void finish() noexcept;
         };
 
         string_format_t() = delete;
@@ -184,6 +151,21 @@ namespace error_system::utils {
         template <typename... Args>
         [[nodiscard]] static std::string format(std::string_view format_str, Args&&... args) noexcept;
     };
+
+    /**
+     * @brief 完成格式化
+     * @details 追加剩余的字面量部分
+     */
+    inline void string_format_t::format_appender_t::finish() noexcept {
+        append_literal_braces();
+        if (cursor < format.size()) {
+            try {
+                result.append(format.data() + cursor, format.size() - cursor);
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[string_format] finish: bad_alloc\n");
+            }
+        }
+    }
 
 }  // namespace error_system::utils
 

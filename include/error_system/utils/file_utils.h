@@ -24,9 +24,9 @@ namespace error_system::utils {
     public:
         /**
          * @brief 读取文件的最大字节数阈值
-         * @details 超过此大小的文件将被拒绝读取，避免内存耗尽攻击
+         * @details 超过此大小的文件将被拒绝读取，避免内存耗尽攻击。当前值为 64MB
          */
-        static constexpr size_t MAX_READ_FILE_SIZE = 64 * 1024 * 1024;  // 64 MB
+        static constexpr size_t MAX_READ_FILE_SIZE = 64 * 1024 * 1024;
 
         file_utils_t() = delete;
         ~file_utils_t() noexcept = delete;
@@ -34,6 +34,7 @@ namespace error_system::utils {
         file_utils_t& operator=(const file_utils_t&) = delete;
         file_utils_t(file_utils_t&&) = delete;
         file_utils_t& operator=(file_utils_t&&) = delete;
+
         /**
          * @brief 读取文件内容
          * @details 从指定文件路径读取文件内容，返回文件内容的字符串表示。
@@ -66,7 +67,10 @@ namespace error_system::utils {
          * @param path 文件路径
          * @return bool 删除成功则返回 true，否则返回 false
          */
-        [[nodiscard]] static bool delete_file(const std::filesystem::path& path) noexcept;
+        [[nodiscard]] static inline bool delete_file(const std::filesystem::path& path) noexcept {
+            std::error_code error{};
+            return std::filesystem::remove(path, error) || !std::filesystem::exists(path, error);
+        }
 
         /**
          * @brief 强制删除文件
@@ -74,7 +78,10 @@ namespace error_system::utils {
          * @param path 文件路径
          * @return bool 删除成功或文件不存在则返回 true，否则返回 false
          */
-        [[nodiscard]] static bool force_delete_file(const std::filesystem::path& path) noexcept;
+        [[nodiscard]] static inline bool force_delete_file(const std::filesystem::path& path) noexcept {
+            std::error_code error{};
+            return std::filesystem::remove_all(path, error) || !std::filesystem::exists(path, error);
+        }
 
         /**
          * @brief 检查文件是否存在
@@ -82,7 +89,10 @@ namespace error_system::utils {
          * @param path 文件路径
          * @return bool 文件存在则返回 true，否则返回 false
          */
-        [[nodiscard]] static bool file_exists(const std::filesystem::path& path) noexcept;
+        [[nodiscard]] static inline bool file_exists(const std::filesystem::path& path) noexcept {
+            std::error_code error{};
+            return std::filesystem::exists(path, error) && std::filesystem::is_regular_file(path, error);
+        }
 
         /**
          * @brief 检查目录路径是否存在
@@ -90,7 +100,10 @@ namespace error_system::utils {
          * @param path 目录路径
          * @return bool 目录路径存在则返回 true，否则返回 false
          */
-        [[nodiscard]] static bool dir_exists(const std::filesystem::path& path) noexcept;
+        [[nodiscard]] static inline bool dir_exists(const std::filesystem::path& path) noexcept {
+            std::error_code error{};
+            return std::filesystem::exists(path, error) && std::filesystem::is_directory(path, error);
+        }
     };
 
 }  // namespace error_system::utils

@@ -46,18 +46,7 @@ namespace error_system::utils {
          * @param string 输入字符串
          * @return uint64_t 字符串的哈希值
          */
-        [[nodiscard]] static constexpr uint64_t hash(std::string_view string) noexcept {
-            constexpr uint64_t FNV_PRIME = 1099511628211ULL;
-            constexpr uint64_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
-            uint64_t hash_value = FNV_OFFSET_BASIS;
-
-            for (char ch : string) {
-                hash_value ^= static_cast<uint64_t>(ch);
-                hash_value *= FNV_PRIME;
-            }
-
-            return hash_value;
-        }
+        [[nodiscard]] static constexpr uint64_t hash(std::string_view string) noexcept;
 
         /**
          * @brief 计算字符串的哈希值，限制哈希长度
@@ -66,12 +55,7 @@ namespace error_system::utils {
          * @param max_length 最大哈希长度
          * @return uint64_t 字符串的哈希值
          */
-        [[nodiscard]] static constexpr uint64_t hash_limit(std::string_view string, size_t max_length = 128) noexcept {
-            if (string.size() > max_length) {
-                return hash(string.substr(0, max_length));
-            }
-            return hash(string);
-        }
+        [[nodiscard]] static constexpr uint64_t hash_limit(std::string_view string, size_t max_length = 128) noexcept;
 
         /**
          * @brief 检查字符串是否以指定前缀开头
@@ -79,9 +63,7 @@ namespace error_system::utils {
          * @param prefix 前缀
          * @return bool 是否以指定前缀开头
          */
-        [[nodiscard]] static constexpr bool starts_with(std::string_view string, std::string_view prefix) noexcept {
-            return string.size() >= prefix.size() && string.compare(0, prefix.size(), prefix) == 0;
-        }
+        [[nodiscard]] static constexpr bool starts_with(std::string_view string, std::string_view prefix) noexcept;
 
         /**
          * @brief 检查字符串是否以指定后缀结尾
@@ -89,10 +71,7 @@ namespace error_system::utils {
          * @param suffix 后缀
          * @return bool 是否以指定后缀结尾
          */
-        [[nodiscard]] static constexpr bool ends_with(std::string_view string, std::string_view suffix) noexcept {
-            return string.size() >= suffix.size() &&
-                   string.compare(string.size() - suffix.size(), suffix.size(), suffix) == 0;
-        }
+        [[nodiscard]] static constexpr bool ends_with(std::string_view string, std::string_view suffix) noexcept;
 
         /**
          * @brief 将字符串解析为数字
@@ -150,6 +129,35 @@ namespace error_system::utils {
          */
         [[nodiscard]] static std::string to_upper(std::string_view string) noexcept;
     };
+
+    inline constexpr uint64_t string_utils_t::hash(std::string_view string) noexcept {
+        constexpr uint64_t FNV_PRIME = 1099511628211ULL;
+        constexpr uint64_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
+        uint64_t hash_value = FNV_OFFSET_BASIS;
+
+        for (char ch : string) {
+            hash_value ^= static_cast<uint64_t>(ch);
+            hash_value *= FNV_PRIME;
+        }
+
+        return hash_value;
+    }
+
+    inline constexpr uint64_t string_utils_t::hash_limit(std::string_view string, size_t max_length) noexcept {
+        if (string.size() > max_length) {
+            return hash(string.substr(0, max_length));
+        }
+        return hash(string);
+    }
+
+    inline constexpr bool string_utils_t::starts_with(std::string_view string, std::string_view prefix) noexcept {
+        return string.size() >= prefix.size() && string.compare(0, prefix.size(), prefix) == 0;
+    }
+
+    inline constexpr bool string_utils_t::ends_with(std::string_view string, std::string_view suffix) noexcept {
+        return string.size() >= suffix.size() &&
+               string.compare(string.size() - suffix.size(), suffix.size(), suffix) == 0;
+    }
 
 }  // namespace error_system::utils
 

@@ -28,28 +28,28 @@ namespace error_system::utils::detail {
      * 冒号、逗号、左右大括号、左右中括号、文件结束标识和无效字符或错误。
      */
     enum class token_type_t {
-        string,        // 字符串 (键或值)
-        number,        // 数字字面量
-        true_literal,  // true
-        false_literal, // false
-        null_literal,  // null
-        colon,         // 冒号 :
-        comma,         // 逗号 ,
-        left_brace,    // 左大括号 {
-        right_brace,   // 右大括号 }
-        left_bracket,  // 左中括号 [
-        right_bracket, // 右中括号 ]
-        eof,           // 文件结束标识
-        invalid        // 无效字符或错误
+        string,
+        number,
+        true_literal,
+        false_literal,
+        null_literal,
+        colon,
+        comma,
+        left_brace,
+        right_brace,
+        left_bracket,
+        right_bracket,
+        eof,
+        invalid
     };
 
         /**
          * @brief JSON词法分析器的token结构体
-         * @details 定义JSON词法分析器的token结构体，包含token类型和token值
+         * @details 定义JSON词法分析器的token结构体，包含 token 类型与解析后的字符串内容
          */
         struct token_t {
-            token_type_t type{token_type_t::eof};   ///< token 类型
-            std::string value;                      ///< 保存解析后的字符串内容
+            token_type_t type{token_type_t::eof};
+            std::string value;
         };
 
     private:

@@ -172,16 +172,6 @@ namespace error_system::utils {
      * @param key JSON键，格式为 "key1.key2"
      * @return std::optional<std::string> 字符串值，若键不存在则返回空可选
      */
-    std::optional<std::string> json_dict_t::operator[](const std::string& key) const noexcept {
-        return get_value(key);
-    }
-
-    /**
-     * @brief 获取JSON字典中的字符串值
-     * @details 根据键获取JSON字典中的字符串值
-     * @param key JSON键，格式为 "key1.key2"
-     * @return std::optional<std::string> 字符串值，若键不存在则返回空可选
-     */
     std::optional<std::string> json_dict_t::get_value(const std::string& key) const noexcept {
         auto it = dict_.find(key);
         if (it != dict_.end()) {
@@ -214,37 +204,6 @@ namespace error_system::utils {
             std::fprintf(stderr, "[json_utils] get_value_or: copy default failed (bad_alloc)\n");
             return {};
         }
-    }
-
-    /**
-     * @brief 检查JSON字典是否包含指定键
-     * @details 检查JSON字典是否包含指定键
-     * @param key JSON键，格式为 "key1.key2"
-     * @return bool 若包含则返回true，否则返回false
-     */
-    bool json_dict_t::contains(const std::string& key) const noexcept {
-        if (empty()) {
-            return false;
-        }
-        return get_value(key).has_value();
-    }
-
-    /**
-     * @brief 检查JSON字典是否为空
-     * @details 检查JSON字典是否为空
-     * @return bool 若为空则返回true，否则返回false
-     */
-    bool json_dict_t::empty() const noexcept {
-        return dict_.empty();
-    }
-
-    /**
-     * @brief 获取JSON字典的大小
-     * @details 获取JSON字典的大小，即键值对的数量
-     * @return size_t JSON字典的大小
-     */
-    size_t json_dict_t::size() const noexcept {
-        return dict_.size();
     }
 
     /**

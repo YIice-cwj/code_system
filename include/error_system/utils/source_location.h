@@ -42,7 +42,7 @@ namespace error_system::utils {
         uint32_t line_{0};
 
     public:
-        constexpr source_location_t() noexcept = default;
+        constexpr source_location_t() noexcept;
 
         /**
          * @brief 从已有字符串构造源位置（用于反序列化）
@@ -53,14 +53,31 @@ namespace error_system::utils {
          * @param func 函数名字符串
          * @param line 行号
          */
-        constexpr source_location_t(const char* file, const char* func, uint32_t line) noexcept
-            : file_name_(file), function_name_(func), line_(line) {}
+        constexpr source_location_t(const char* file, const char* func, uint32_t line) noexcept;
 
         ~source_location_t() noexcept = default;
         source_location_t(const source_location_t&) = default;
         source_location_t& operator=(const source_location_t&) = default;
         source_location_t(source_location_t&&) noexcept = default;
         source_location_t& operator=(source_location_t&&) noexcept = default;
+
+        /**
+         * @brief 获取源文件路径
+         * @return const char* 源文件路径
+         */
+        [[nodiscard]] constexpr const char* file_name() const noexcept;
+
+        /**
+         * @brief 获取函数名
+         * @return const char* 函数名
+         */
+        [[nodiscard]] constexpr const char* function_name() const noexcept;
+
+        /**
+         * @brief 获取行号
+         * @return uint32_t 行号
+         */
+        [[nodiscard]] constexpr uint32_t line() const noexcept;
 
         /**
          * @brief 获取源文件位置
@@ -81,31 +98,36 @@ namespace error_system::utils {
 #else
             const char* file = "unknown", const char* func = "unknown", uint32_t line = 0
 #endif
-                ) noexcept {
-            source_location_t source_location;
-            source_location.file_name_ = file;
-            source_location.function_name_ = func;
-            source_location.line_ = line;
-            return source_location;
-        }
-
-        /**
-         * @brief 获取源文件路径
-         * @return const char* 源文件路径
-         */
-        [[nodiscard]] constexpr const char* file_name() const noexcept { return file_name_; }
-
-        /**
-         * @brief 获取函数名
-         * @return const char* 函数名
-         */
-        [[nodiscard]] constexpr const char* function_name() const noexcept { return function_name_; }
-
-        /**
-         * @brief 获取行号
-         * @return uint32_t 行号
-         */
-        [[nodiscard]] constexpr uint32_t line() const noexcept { return line_; }
+                ) noexcept;
     };
+
+    inline constexpr source_location_t::source_location_t() noexcept = default;
+
+    inline constexpr source_location_t::source_location_t(const char* file, const char* func, uint32_t line) noexcept
+        : file_name_(file), function_name_(func), line_(line) {}
+
+    inline constexpr const char* source_location_t::file_name() const noexcept {
+        return file_name_;
+    }
+
+    inline constexpr const char* source_location_t::function_name() const noexcept {
+        return function_name_;
+    }
+
+    inline constexpr uint32_t source_location_t::line() const noexcept {
+        return line_;
+    }
+
+    inline constexpr source_location_t source_location_t::current(
+        const char* file,
+        const char* func,
+        uint32_t line
+    ) noexcept {
+        source_location_t source_location;
+        source_location.file_name_ = file;
+        source_location.function_name_ = func;
+        source_location.line_ = line;
+        return source_location;
+    }
 
 }  // namespace error_system::utils

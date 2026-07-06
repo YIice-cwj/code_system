@@ -23,8 +23,8 @@ namespace error_system::i18n {
      * @details 通过 (subsystem_id << 16 | module_id) 作为 key 存储名称，避免每个错误码重复存储
      */
     struct subsystem_module_info_t {
-        std::string subsystem_name{"未知子系统"};  ///< 子系统本地化名称
-        std::string module_name{"未知模块"};       ///< 模块本地化名称
+        std::string subsystem_name{"未知子系统"};  /**< 子系统本地化名称 */
+        std::string module_name{"未知模块"};       /**< 模块本地化名称 */
     };
 
     /**
@@ -37,7 +37,7 @@ namespace error_system::i18n {
     public:
         /**
          * @brief 虚析构函数
-         * @details 确保通过基类指针正确释放派生类对象（规范 6）
+         * @details 确保通过基类指针正确释放派生类对象
          */
         virtual ~i_subsystem_module_resolver_t() noexcept = default;
 

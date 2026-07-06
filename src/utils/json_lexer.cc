@@ -88,15 +88,6 @@ namespace error_system::utils::detail {
         }
     }
 
-    /**
-     * @brief 解析JSON字符串中的字符串token
-     * @details 解析JSON字符串中的字符串token，直到遇到非字符串字符。
-     *          支持 \uXXXX 转义，并正确处理 UTF-16 代理对（RFC 8259 §7）：
-     *          高代理（0xD800~0xDBFF）后必须紧跟 \uXXXX 低代理（0xDC00~0xDFFF），
-     *          二者组合为 0x10000~0x10FFFF 范围内的码点，再编码为 UTF-8。
-     *          孤立的代理码点按非法码点处理（不输出）。
-     */
-
     namespace {
 
         /**
