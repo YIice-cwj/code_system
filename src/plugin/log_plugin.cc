@@ -26,14 +26,6 @@ namespace error_system::plugin {
           format_(format),
           stream_(stream != nullptr ? stream : &std::cerr) {}
 
-    std::string_view log_plugin_t::name() const noexcept {
-        return name_;
-    }
-
-    core::error_level_t log_plugin_t::min_level() const noexcept {
-        return min_level_;
-    }
-
     void log_plugin_t::on_error(const core::error_context_t& context) noexcept {
         try {
             std::string formatted = (format_ == format_t::json)

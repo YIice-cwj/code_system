@@ -16,17 +16,6 @@
 
 namespace error_system::plugin {
 
-    metric_plugin_t::metric_plugin_t(std::string name, core::error_level_t min_level) noexcept
-        : name_(std::move(name)), min_level_(min_level) {}
-
-    std::string_view metric_plugin_t::name() const noexcept {
-        return name_;
-    }
-
-    core::error_level_t metric_plugin_t::min_level() const noexcept {
-        return min_level_;
-    }
-
     void metric_plugin_t::on_error(const core::error_context_t& context) noexcept {
         const uint64_t code = context.get_code().get_code();
         const uint8_t level_index = core::to_int(context.get_code().get_level());

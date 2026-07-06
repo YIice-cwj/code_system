@@ -80,7 +80,7 @@ else()
     file(MAKE_DIRECTORY ${ERROR_GENERATED_DIR})
     file(WRITE "${ERROR_GENERATED_DIR}/error_dict.h"
         "#pragma once\n"
-        "#include \"error_system/core/error_registry.h\"\n"
+        "#include \"error_system/core/registry/error_registry.h\"\n"
         "#include \"error_system/i18n/subsystem_module_catalog.h\"\n"
         "\n"
         "namespace error_system::core {\n"
@@ -94,18 +94,23 @@ endif()
 
 set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bridge/c_abi_export.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/duplicate_policy.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/config/formatter_config.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/config/i18n_config.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/registry/duplicate_policy.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_initializer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_serializer_text.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_serializer_json.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_serializer_binary.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_registry.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_exception.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/runtime_block.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/serializer/error_context_serializer_text.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/serializer/error_context_serializer_json.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/serializer/error_context_serializer_binary.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/registry/error_registry.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/i18n/i18n.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/i18n/subsystem_module_catalog.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mapping/grpc_status.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mapping/http_status.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/migration/error_migration.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/async_notification_channel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/error_dedup_sampler.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/error_router_plugin.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/log_plugin.cc
@@ -115,6 +120,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/json_lexer.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/json_utils.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/stack_trace_utils.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/string_format.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/string_utils.cc
 )
 

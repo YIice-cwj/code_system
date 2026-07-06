@@ -21,7 +21,7 @@
 namespace error_system::migration {
 
     namespace {
-        constexpr size_t MAX_MIGRATION_RECURSION_DEPTH = 16;  ///< 迁移递归查找的最大深度
+        constexpr size_t MAX_MIGRATION_RECURSION_DEPTH = 16;  /**< 迁移递归查找的最大深度 */
     }  // namespace
 
     using error_system::core::code_t;

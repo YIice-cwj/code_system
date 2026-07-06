@@ -3,8 +3,7 @@
 /**
  * @file grpc_status.cc
  * @brief gRPC 状态码 c_str 实现分离
- * @details 将 grpc_status_t::c_str() 的非 constexpr switch 实现从头文件分离，
- *          遵循规范第 5 条（头文件声明，源文件实现）。
+ * @details 将 grpc_status_t::c_str() 的非 constexpr switch 实现从头文件分离至源文件。
  *          constexpr 方法（from_int / is_valid / to_int / value / 比较运算符）
  *          仍保留在头文件中以支持编译期求值。
  * @author yiice

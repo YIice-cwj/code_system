@@ -19,15 +19,6 @@ namespace error_system::plugin {
     std::once_flag error_router_plugin_t::once_flag_;
 
     /**
-     * @brief 获取插件名称
-     * @details 用于标识插件，注册时若名称重复则替换旧插件
-     * @return std::string_view 插件名称
-     */
-    std::string_view error_router_plugin_t::name() const noexcept {
-        return name_;
-    }
-
-    /**
      * @brief 错误事件回调
      * @details 当一个 error_context_t 被创建时触发，实现此方法进行日志/统计等处理
      * @param context 错误上下文（只读）
