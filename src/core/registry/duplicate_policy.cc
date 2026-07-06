@@ -1,26 +1,8 @@
-#include "error_system/core/duplicate_policy.h"
+#include "error_system/core/registry/duplicate_policy.h"
 
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 
 namespace error_system::core {
-
-    /**
-     * @brief 处理 skip 策略
-     * @param raw_code 错误码原始值
-     * @return bool 是否继续注册流程（skip 返回 false）
-     */
-    bool duplicate_policy_handler_t::handle_duplicate_skip_([[maybe_unused]] code_t raw_code) const noexcept {
-        return false;
-    }
-
-    /**
-     * @brief 处理 overwrite 策略
-     * @param raw_code 错误码原始值
-     * @return bool 是否继续注册流程（overwrite 返回 true，调用方负责擦除旧条目）
-     */
-    bool duplicate_policy_handler_t::handle_duplicate_overwrite_([[maybe_unused]] code_t raw_code) const noexcept {
-        return true;
-    }
 
     /**
      * @brief 处理 warn 策略

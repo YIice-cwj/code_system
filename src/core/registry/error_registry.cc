@@ -1,4 +1,4 @@
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 
 /**
  * @file error_registry.cc
@@ -22,7 +22,10 @@ namespace error_system::core {
     std::atomic<uint64_t> error_registry_t::epoch_counter_{0};
 
     namespace {
-        constexpr size_t MODULE_BUCKET_ESTIMATE_DIVISOR = 8;    ///< 模块组桶数量估算除数
+        /**
+         * @brief 模块组桶数量估算除数
+         */
+        constexpr size_t MODULE_BUCKET_ESTIMATE_DIVISOR = 8;
 
         /**
          * @brief 线程本地元数据缓存（环形缓冲）
@@ -113,30 +116,6 @@ namespace error_system::core {
         thread_local metadata_cache_t tls_metadata_cache_;
     }  // namespace
 
-    std::optional<error_metadata_t> error_registry_t::get_info_cached(const error_code_t code) const noexcept {
-        const uint64_t current_epoch = epoch_counter_.load(std::memory_order_acquire);
-        if (!tls_metadata_cache_.matches_epoch(current_epoch)) {
-            tls_metadata_cache_.reset(current_epoch);
-        }
-
-        const code_t identity_code = code.get_identity_code();
-        const auto cached = tls_metadata_cache_.find(identity_code);
-        if (cached.found) {
-            if (cached.has_metadata) {
-                return cached.metadata;
-            }
-            return std::nullopt;
-        }
-
-        auto meta = get_info(code);
-        tls_metadata_cache_.insert(identity_code, meta);
-        return meta;
-    }
-
-    void error_registry_t::invalidate_metadata_cache() const noexcept {
-        tls_metadata_cache_.reset(epoch_counter_.load(std::memory_order_acquire));
-    }
-
     void error_registry_t::reserve_for_registration_(size_t additional_entries) noexcept {
         if (additional_entries == 0) {
             return;
@@ -151,56 +130,6 @@ namespace error_system::core {
         }
     }
 
-    void error_registry_t::erase_from_module_index_(module_group_id_t module_group_id, code_t identity_code) noexcept {
-        auto mod_it = module_index_.find(module_group_id);
-        if (mod_it == module_index_.end()) {
-            return;
-        }
-
-        auto& error_list = mod_it->second;
-        error_list.erase(std::remove(error_list.begin(), error_list.end(), identity_code), error_list.end());
-        if (error_list.empty()) {
-            module_index_.erase(mod_it);
-        }
-    }
-
-    void error_registry_t::erase_from_subsystem_index_(uint16_t subsystem_id,
-                                                        module_group_id_t module_group_id) noexcept {
-        auto it = subsystem_index_.find(subsystem_id);
-        if (it == subsystem_index_.end()) {
-            return;
-        }
-        it->second.erase(module_group_id);
-        if (it->second.empty()) {
-            subsystem_index_.erase(it);
-        }
-    }
-
-    /**
-     * @brief 注册错误码
-     * @details 单条注册入口，委托 register_single_entry_ 完成实际注册逻辑，
-     *          避免与批量路径重复。bump_epoch_ 由本入口触发，
-     *          register_errors 批量路径在循环外统一触发一次。
-     * @param code 错误码
-     * @param name 错误码宏名称
-     * @param description 错误码中文描述
-     */
-    void error_registry_t::register_error(const error_code_t code,
-                                          const std::string_view name,
-                                          const std::string_view description) noexcept {
-        std::unique_lock<std::shared_mutex> lock(index_mutex_);
-        reserve_for_registration_(1);
-        register_single_entry_(lock, code, name, description);
-        bump_epoch_();
-    }
-
-    /**
-     * @brief 批量注册错误码
-     * @param codes 错误码数组
-     * @param names 错误码宏名称数组
-     * @param descriptions 错误码中文描述数组
-     * @return size_t 实际注册成功的错误码数量
-     */
     void error_registry_t::preallocate_module_buckets_(const std::vector<error_code_t>& codes) noexcept {
         std::unordered_map<module_group_id_t, size_t> module_group_counts;
         try {
@@ -228,11 +157,6 @@ namespace error_system::core {
         code_t identity_code = code.get_identity_code();
         auto it = primary_index_.find(identity_code);
         if (it != primary_index_.end()) {
-            /**
-             * warn 策略下需调用用户回调，回调可能读注册表（再获取 index_mutex_ 共享锁），
-             * 持有写锁时调用会自死锁。先快照元数据，临时释放 lock 调用 apply_duplicate_policy，
-             * 再重新加锁。skip/overwrite 不触发回调，无需释放锁。
-             */
             const auto policy = duplicate_handler_.get_policy();
             if (policy == duplicate_policy_t::warn) {
                 error_metadata_t snapshot = it->second;
@@ -277,6 +201,71 @@ namespace error_system::core {
         return true;
     }
 
+    void error_registry_t::erase_from_module_index_(module_group_id_t module_group_id, code_t identity_code) noexcept {
+        auto mod_it = module_index_.find(module_group_id);
+        if (mod_it == module_index_.end()) {
+            return;
+        }
+
+        auto& error_list = mod_it->second;
+        error_list.erase(std::remove(error_list.begin(), error_list.end(), identity_code), error_list.end());
+        if (error_list.empty()) {
+            module_index_.erase(mod_it);
+        }
+    }
+
+    void error_registry_t::erase_from_subsystem_index_(uint16_t subsystem_id,
+                                                        module_group_id_t module_group_id) noexcept {
+        auto it = subsystem_index_.find(subsystem_id);
+        if (it == subsystem_index_.end()) {
+            return;
+        }
+        it->second.erase(module_group_id);
+        if (it->second.empty()) {
+            subsystem_index_.erase(it);
+        }
+    }
+
+    /**
+     * @brief 获取单例实例
+     * @details 使用 std::call_once + 函数局部静态保证线程安全的单例初始化
+     * @return 单例引用
+     */
+    error_registry_t& error_registry_t::instance() noexcept {
+        static error_registry_t* instance_ptr = nullptr;
+        std::call_once(once_flag_, [] {
+            static error_registry_t instance;
+            instance_ptr = &instance;
+        });
+        assert(instance_ptr != nullptr && "error_registry_t::instance() called before initialization");
+        return *instance_ptr;
+    }
+
+    /**
+     * @brief 注册错误码
+     * @details 单条注册入口，委托 register_single_entry_ 完成实际注册逻辑，
+     *          避免与批量路径重复。bump_epoch_ 由本入口触发，
+     *          register_errors 批量路径在循环外统一触发一次。
+     * @param code 错误码
+     * @param name 错误码宏名称
+     * @param description 错误码中文描述
+     */
+    void error_registry_t::register_error(const error_code_t code,
+                                          const std::string_view name,
+                                          const std::string_view description) noexcept {
+        std::unique_lock<std::shared_mutex> lock(index_mutex_);
+        reserve_for_registration_(1);
+        register_single_entry_(lock, code, name, description);
+        bump_epoch_();
+    }
+
+    /**
+     * @brief 批量注册错误码
+     * @param codes 错误码数组
+     * @param names 错误码宏名称数组
+     * @param descriptions 错误码中文描述数组
+     * @return size_t 实际注册成功的错误码数量
+     */
     size_t error_registry_t::register_errors(const std::vector<error_code_t>& codes,
                                              const std::vector<std::string_view>& names,
                                              const std::vector<std::string_view>& descriptions) noexcept {
@@ -454,13 +443,6 @@ namespace error_system::core {
         return errors;
     }
 
-    /**
-     * @brief 通过子系统 ID 获取该子系统下所有错误码（值副本，线程安全）
-     * @details 在锁内完成拷贝，避免悬垂引用
-     * @param subsystem_id 子系统 ID
-     * @return std::vector<error_metadata_t> 子系统下所有错误码的元数据副本
-     */
-
     namespace {
 
         /**
@@ -481,6 +463,12 @@ namespace error_system::core {
 
     }  // namespace
 
+    /**
+     * @brief 通过子系统 ID 获取该子系统下所有错误码（值副本，线程安全）
+     * @details 在锁内完成拷贝，避免悬垂引用
+     * @param subsystem_id 子系统 ID
+     * @return std::vector<error_metadata_t> 子系统下所有错误码的元数据副本
+     */
     std::vector<error_metadata_t>
     error_registry_t::get_errors_by_subsystem(uint16_t subsystem_id) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
@@ -527,19 +515,28 @@ namespace error_system::core {
         return std::nullopt;
     }
 
-    /**
-     * @brief 获取单例实例
-     * @details 使用 std::call_once + 函数局部静态保证线程安全的单例初始化
-     * @return 单例引用
-     */
-    error_registry_t& error_registry_t::instance() noexcept {
-        static error_registry_t* instance_ptr = nullptr;
-        std::call_once(once_flag_, [] {
-            static error_registry_t instance;
-            instance_ptr = &instance;
-        });
-        assert(instance_ptr != nullptr && "error_registry_t::instance() called before initialization");
-        return *instance_ptr;
+    std::optional<error_metadata_t> error_registry_t::get_info_cached(const error_code_t code) const noexcept {
+        const uint64_t current_epoch = epoch_counter_.load(std::memory_order_acquire);
+        if (!tls_metadata_cache_.matches_epoch(current_epoch)) {
+            tls_metadata_cache_.reset(current_epoch);
+        }
+
+        const code_t identity_code = code.get_identity_code();
+        const auto cached = tls_metadata_cache_.find(identity_code);
+        if (cached.found) {
+            if (cached.has_metadata) {
+                return cached.metadata;
+            }
+            return std::nullopt;
+        }
+
+        auto meta = get_info(code);
+        tls_metadata_cache_.insert(identity_code, meta);
+        return meta;
+    }
+
+    void error_registry_t::invalidate_metadata_cache() const noexcept {
+        tls_metadata_cache_.reset(epoch_counter_.load(std::memory_order_acquire));
     }
 
 }  // namespace error_system::core

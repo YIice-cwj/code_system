@@ -85,7 +85,7 @@ namespace error_system::plugin {
         async_notification_channel_t notification_channel_;
 
         /**
-         * @brief 单例初始化一次性标志（规范 22）
+         * @brief 单例初始化一次性标志
          */
         static std::once_flag once_flag_;
 
@@ -157,16 +157,6 @@ namespace error_system::plugin {
         void notify_error(const core::error_context_t& context) noexcept override;
 
         /**
-         * @brief 异步入队错误通知
-         * @details 将错误上下文副本推入后台队列，由工作线程异步处理。
-         *          在 async_queue 模式下由 error_context_t 构造时调用。
-         *          首次调用时自动启动后台工作线程。
-         *          实现 core::i_error_notifier_t 接口。
-         * @param context 错误上下文
-         */
-        void enqueue_notification(const core::error_context_t& context) noexcept override;
-
-        /**
          * @brief 累积延迟通知到线程本地缓冲（sync_deferred 模式）
          * @details 通知不会立即触发，而是累积到当前线程的本地缓冲中，
          *          直至调用 flush_deferred_notifications() 时统一批量通知。
@@ -222,40 +212,64 @@ namespace error_system::plugin {
         [[nodiscard]] bool deferred_buffer_overflowed() const noexcept;
 
         /**
-         * @brief 获取已注册插件数量
-         * @return size_t 插件数量
-         */
-        [[nodiscard]] size_t size() const noexcept;
-
-        /**
-         * @brief 判断是否有已注册的插件
-         * @return bool 是否为空
-         */
-        [[nodiscard]] bool empty() const noexcept;
-
-        /**
          * @brief 清空所有已注册插件
          */
         void clear() noexcept;
 
         /**
+         * @brief 获取已注册插件数量
+         * @return size_t 插件数量
+         */
+        [[nodiscard]] size_t size() const noexcept {
+            auto snapshot = std::atomic_load(&plugins_snapshot_);
+            return snapshot->size();
+        }
+
+        /**
+         * @brief 判断是否有已注册的插件
+         * @return bool 是否为空
+         */
+        [[nodiscard]] bool empty() const noexcept {
+            auto snapshot = std::atomic_load(&plugins_snapshot_);
+            return snapshot->empty();
+        }
+
+        /**
          * @brief 获取异步队列中待处理通知数量
          * @return size_t 队列大小
          */
-        [[nodiscard]] size_t pending_notifications() const noexcept;
+        [[nodiscard]] size_t pending_notifications() const noexcept {
+            return notification_channel_.pending_notifications();
+        }
 
         /**
          * @brief 设置异步通知队列最大容量
          * @details 当队列达到最大容量时，新通知将被丢弃（默认 0 = 无限制）
          * @param max_size 队列最大容量
          */
-        void set_max_queue_size(size_t max_size) noexcept;
+        void set_max_queue_size(size_t max_size) noexcept {
+            notification_channel_.set_max_queue_size(max_size);
+        }
 
         /**
          * @brief 获取异步通知队列最大容量
          * @return size_t 队列最大容量，0 表示无限制
          */
-        [[nodiscard]] size_t get_max_queue_size() const noexcept;
+        [[nodiscard]] size_t get_max_queue_size() const noexcept {
+            return notification_channel_.get_max_queue_size();
+        }
+
+        /**
+         * @brief 异步入队错误通知
+         * @details 将错误上下文副本推入后台队列，由工作线程异步处理。
+         *          在 async_queue 模式下由 error_context_t 构造时调用。
+         *          首次调用时自动启动后台工作线程。
+         *          实现 core::i_error_notifier_t 接口。
+         * @param context 错误上下文
+         */
+        void enqueue_notification(const core::error_context_t& context) noexcept override {
+            notification_channel_.enqueue_notification(context);
+        }
 
         /**
          * @brief 获取单例实例
@@ -272,7 +286,9 @@ namespace error_system::plugin {
          *          返回 true 不保证已有插件注册，只说明 instance() 已被调用过。
          * @return bool true=已初始化，false=未初始化
          */
-        [[nodiscard]] static bool is_initialized() noexcept;
+        [[nodiscard]] static bool is_initialized() noexcept {
+            return initialized_.load(std::memory_order_acquire);
+        }
     };
 
 }  // namespace error_system::plugin

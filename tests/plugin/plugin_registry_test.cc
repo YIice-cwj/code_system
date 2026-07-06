@@ -574,7 +574,7 @@ namespace error_system::plugin {
             void on_error(const core::error_context_t& ctx) noexcept override {
                 call_count.fetch_add(1);
                 seen_codes.push_back(ctx.get_code().get_code());
-                seen_messages.push_back(ctx.message);
+                seen_messages.push_back(ctx.get_message());
             }
             std::atomic<int> call_count{0};
             std::vector<uint64_t> seen_codes;

@@ -14,15 +14,16 @@
 #include "error_system/core/error_level.h"
 #include "error_system/core/error_metadata.h"
 // IWYU pragma: begin_exports
-#include "error_system/core/duplicate_policy.h"
+#include "error_system/core/registry/duplicate_policy.h"
 #include "error_system/core/error_builder.h"
 // IWYU pragma: end_exports
 
 /**
  * @file error_registry.h
  * @brief 错误码注册器
- * @details 定义错误码注册器，用于注册和查找错误码。重复处理策略委托给 duplicate_policy_handler_t，
- *          遵循单一职责原则。子系统/模块名称映射请直接使用 i18n::subsystem_module_catalog_t。
+ * @details 错误码注册与查询，支持主索引/名称索引/模块索引/子系统索引。
+ *          重复处理策略委托给 duplicate_policy_handler_t。
+ *          子系统/模块名称映射请使用 i18n::subsystem_module_catalog_t。
  * @author yiice
  * @version 3.0.0
  * @date 2026-06-29
@@ -32,54 +33,24 @@ namespace error_system::core {
 
     /**
      * @brief 错误码注册器
-     * @details 用于注册和查找错误码。错误码元数据定义见 error_metadata.h。
-     * @author yiice
-     * @version 3.0.0
-     * @date 2026-07-01
+     * @details 单例模式（std::call_once + std::once_flag）。
+     *          支持 register/unregister/find 四类索引查询。
+     *          线程本地缓存（thread_local 环形缓冲）用于热路径优化。
      */
     class error_registry_t {
     private:
-        /**
-         * @brief 主索引，根据错误码快速查找元数据
-         */
         std::unordered_map<code_t, error_metadata_t> primary_index_;
-
-        /**
-         * @brief 名称索引，根据错误码名称快速查找 identity code
-         */
         std::unordered_map<std::string, code_t> name_index_;
-
-        /**
-         * @brief 模块索引，根据模块 ID快速查找错误码
-         */
         std::unordered_map<module_group_id_t, std::vector<code_t>> module_index_;
-
-        /**
-         * @brief 子系统索引，根据子系统 ID 快速查找其下所有模块组
-         * @details key = subsystem_id，value = 该子系统下的所有 module_group_id（去重）
-         */
         std::unordered_map<uint16_t, std::unordered_set<module_group_id_t>> subsystem_index_;
-
-        /**
-         * @brief 索引互斥锁，保护索引的并发访问
-         */
         mutable std::shared_mutex index_mutex_;
-
-        /**
-         * @brief 重复处理策略处理器（自包含，自带互斥锁）
-         */
         duplicate_policy_handler_t duplicate_handler_{};
 
-        /**
-         * @brief 单例初始化一次性标志（规范 22）
-         */
         static std::once_flag once_flag_;
-
         /**
          * @brief 注册表变更纪元（epoch）
          * @details 任何注册/注销变更均 fetch_add+1（release 序），用于驱动线程本地
-         *          元数据缓存失效检测。读取使用 acquire 序，与 release 配对，
-         *          保证缓存重建时能看到所有写操作结果。
+         *          元数据缓存失效检测。读取使用 acquire 序，与 release 配对。
          */
         static std::atomic<uint64_t> epoch_counter_;
 
@@ -90,36 +61,24 @@ namespace error_system::core {
             epoch_counter_.fetch_add(1, std::memory_order_release);
         }
 
-        error_registry_t() = default;
-
-        ~error_registry_t() noexcept = default;
-
         /**
          * @brief 为批量注册提前预留索引容量
-         * @details noexcept 函数，内部捕获 bad_alloc 后静默继续。reserve 失败不影响正确性，
-         *          仅影响性能（后续 emplace/push_back 仍可正常工作，可能触发重分配）。
-         * @param additional_entries 新增条目数量
+         * @details reserve 失败不影响正确性，仅影响性能。
          */
         void reserve_for_registration_(size_t additional_entries) noexcept;
 
         /**
          * @brief 按模块组预分配 module_index_ 桶容量
-         * @details 统计每个模块组的错误码数量，对 module_index_ 中对应桶 reserve，
-         *          避免 push_back 时多次重分配。分配失败时静默继续（push_back 仍可工作）。
-         * @param codes 待注册的错误码列表
          */
         void preallocate_module_buckets_(const std::vector<error_code_t>& codes) noexcept;
 
         /**
          * @brief 注册单个错误码到所有索引（已持有锁）
-         * @details 处理重复策略、移除旧条目、插入新条目到 primary_index_ / name_index_ /
-         *          module_index_ / subsystem_index_。分配失败时记录日志并返回 false。
-         *          warn 策略下会临时释放 lock 调用用户回调后再重新加锁，避免回调读注册表时自死锁。
-         * @param lock 调用方持有的写锁（warn 场景下会被临时释放）
-         * @param code 错误码
-         * @param name 错误码名称
-         * @param description 错误码描述
-         * @return bool true=注册成功，false=跳过（重复策略拒绝或分配失败）
+         * @details 处理重复策略、移除旧条目、插入新条目到所有索引。
+         *          warn 策略下需调用用户回调，回调可能读注册表（再获取 index_mutex_ 共享锁），
+         *          持有写锁时调用会自死锁。先快照元数据，临时释放 lock 调用 apply_duplicate_policy，
+         *          再重新加锁。skip/overwrite 不触发回调，无需释放锁。
+         * @return true=注册成功，false=跳过（重复策略拒绝或分配失败）
          */
         bool register_single_entry_(std::unique_lock<std::shared_mutex>& lock,
                                     error_code_t code, std::string_view name,
@@ -127,32 +86,32 @@ namespace error_system::core {
 
         /**
          * @brief 从模块索引中移除指定错误码
-         * @param module_group_id 模块组 ID
-         * @param identity_code 错误码 identity
          */
         void erase_from_module_index_(module_group_id_t module_group_id, code_t identity_code) noexcept;
 
         /**
          * @brief 从子系统索引中移除空的模块组条目
-         * @param subsystem_id 子系统 ID
-         * @param module_group_id 模块组 ID
          */
         void erase_from_subsystem_index_(uint16_t subsystem_id, module_group_id_t module_group_id) noexcept;
 
+        /**
+         * @brief 默认构造函数（单例模式私有构造）
+         */
+        error_registry_t() noexcept = default;
+
     public:
         error_registry_t(const error_registry_t&) = delete;
-
         error_registry_t& operator=(const error_registry_t&) = delete;
-
         error_registry_t(error_registry_t&&) = delete;
-
         error_registry_t& operator=(error_registry_t&&) = delete;
 
         /**
+         * @brief 获取错误码注册器实例（单例）
+         */
+        static error_registry_t& instance() noexcept;
+
+        /**
          * @brief 注册错误码
-         * @param code 错误码
-         * @param name 错误码宏名称
-         * @param description 错误码中文描述
          */
         void register_error(const error_code_t code,
                             const std::string_view name,
@@ -160,10 +119,7 @@ namespace error_system::core {
 
         /**
          * @brief 批量注册错误码
-         * @param codes 错误码数组
-         * @param names 错误码宏名称数组
-         * @param descriptions 错误码中文描述数组
-         * @return size_t 实际注册成功的错误码数量
+         * @return 实际注册成功的错误码数量
          * @note 如果数组长度不一致，返回0且不执行任何注册
          */
         [[nodiscard]] size_t register_errors(const std::vector<error_code_t>& codes,
@@ -171,24 +127,20 @@ namespace error_system::core {
                                const std::vector<std::string_view>& descriptions) noexcept;
 
         /**
-         * @brief 注销错误码
-         * @details 按错误码值注销，若不存在则静默忽略（无错误返回）
-         * @param code 错误码
+         * @brief 注销错误码（按码值）
+         * @details 若不存在则静默忽略。
          */
         void unregister_error(const error_code_t code) noexcept;
 
         /**
-         * @brief 注销错误码
-         * @details 按名称注销，若不存在则静默忽略
-         * @param name 错误码宏名称
+         * @brief 注销错误码（按名称）
+         * @details 若不存在则静默忽略。
          */
         void unregister_error(const std::string_view name) noexcept;
 
         /**
          * @brief 注销模块组的所有错误码
-         * @details 同步清除 primary_index_/name_index_/module_index_ 中该模块的所有条目，
-         *          已注册的错误码数量不影响性能（O(模块内错误数)）
-         * @param module_group_id 模块组 ID
+         * @details 同步清除所有索引中该模块的条目，O(模块内错误数)。
          */
         void unregister_module(const module_group_id_t module_group_id) noexcept;
 
@@ -198,50 +150,8 @@ namespace error_system::core {
         void unregister_all() noexcept;
 
         /**
-         * @brief 检查错误码是否已注册
-         * @param code 错误码
-         * @return true 错误码已注册
-         * @return false 错误码未注册
-         */
-        [[nodiscard]] bool is_registered(const error_code_t code) const noexcept;
-
-        /**
-         * @brief 通过 64位错误码 获取详情（值副本，线程安全）
-         * @details 返回值副本而非指针，避免锁释放后被另一线程注销导致 use-after-free
-         * @param code 错误码
-         * @return std::optional<error_metadata_t> 错误码元数据副本，若未注册则返回 nullopt
-         */
-        [[nodiscard]] std::optional<error_metadata_t> get_info(const error_code_t code) const noexcept;
-
-        /**
-         * @brief 通过模块 ID 获取所有错误码（值副本，线程安全）
-         * @details 返回值副本而非引用，避免锁释放后被另一线程注销导致悬垂引用
-         * @param module_group_id 模块组 ID
-         * @return std::vector<error_metadata_t> 模块下所有错误码的元数据副本
-         */
-        [[nodiscard]] std::vector<error_metadata_t>
-        get_errors_by_module(const module_group_id_t module_group_id) const noexcept;
-
-        /**
-         * @brief 通过子系统 ID 获取该子系统下所有错误码（值副本，线程安全）
-         * @details 返回值副本而非引用，避免锁释放后被另一线程注销导致悬垂引用
-         * @param subsystem_id 子系统 ID
-         * @return std::vector<error_metadata_t> 子系统下所有错误码的元数据副本
-         */
-        [[nodiscard]] std::vector<error_metadata_t>
-        get_errors_by_subsystem(uint16_t subsystem_id) const noexcept;
-
-        /**
-         * @brief 通过错误码名称查找错误码
-         * @param name 错误码名称
-         * @return std::optional<error_code_t> 错误码，若未注册则返回空可选
-         */
-        [[nodiscard]] std::optional<error_code_t> find_by_name(const std::string_view name) const noexcept;
-
-        /**
          * @brief 设置重复处理策略
-         * @param policy 重复处理策略
-         * @note 转发至 duplicate_handler_，保留接口以最小化调用方改动
+         * @note 转发至 duplicate_handler_
          */
         void set_duplicate_policy(duplicate_policy_t policy) noexcept {
             duplicate_handler_.set_policy(policy);
@@ -249,8 +159,6 @@ namespace error_system::core {
 
         /**
          * @brief 获取当前重复处理策略
-         * @return duplicate_policy_t 当前重复处理策略
-         * @note 转发至 duplicate_handler_，保留接口以最小化调用方改动
          */
         duplicate_policy_t get_duplicate_policy() const noexcept {
             return duplicate_handler_.get_policy();
@@ -258,7 +166,6 @@ namespace error_system::core {
 
         /**
          * @brief 设置重复注册警告回调
-         * @param callback 回调函数，签名为 void(code_t, const error_metadata_t&)
          * @note 传入 nullptr 可清除回调；转发至 duplicate_handler_
          */
         void set_duplicate_warn_callback(duplicate_warn_callback_t callback) noexcept {
@@ -267,25 +174,41 @@ namespace error_system::core {
 
         /**
          * @brief 获取当前重复注册警告回调
-         * @return duplicate_warn_callback_t 当前回调的拷贝（锁内拷贝，线程安全）
-         * @note 转发至 duplicate_handler_，保留接口以最小化调用方改动
          */
         duplicate_warn_callback_t get_duplicate_warn_callback() const noexcept {
             return duplicate_handler_.get_warn_callback();
         }
 
         /**
-         * @brief 获取错误码注册器实例
-         * @return error_registry_t& 错误码注册器实例
+         * @brief 检查错误码是否已注册
          */
-        static error_registry_t& instance() noexcept;
+        [[nodiscard]] bool is_registered(const error_code_t code) const noexcept;
+
+        /**
+         * @brief 通过 64位错误码获取详情（值副本，线程安全）
+         * @details 返回值副本而非指针，避免锁释放后被另一线程注销导致 use-after-free。
+         */
+        [[nodiscard]] std::optional<error_metadata_t> get_info(const error_code_t code) const noexcept;
+
+        /**
+         * @brief 通过模块 ID 获取所有错误码（值副本，线程安全）
+         */
+        [[nodiscard]] std::vector<error_metadata_t>
+        get_errors_by_module(const module_group_id_t module_group_id) const noexcept;
+
+        /**
+         * @brief 通过子系统 ID 获取该子系统下所有错误码（值副本，线程安全）
+         */
+        [[nodiscard]] std::vector<error_metadata_t>
+        get_errors_by_subsystem(uint16_t subsystem_id) const noexcept;
+
+        /**
+         * @brief 通过错误码名称查找错误码
+         */
+        [[nodiscard]] std::optional<error_code_t> find_by_name(const std::string_view name) const noexcept;
 
         /**
          * @brief 获取当前注册表纪元（用于缓存失效检测）
-         * @details 任何 register/unregister 调用都会使纪元自增。线程本地缓存
-         *          在纪元不一致时整体失效重建。读取使用 acquire 序，与
-         *          bump_epoch_ 的 release 序配对。
-         * @return uint64_t 当前纪元值
          */
         [[nodiscard]] uint64_t get_epoch() const noexcept {
             return epoch_counter_.load(std::memory_order_acquire);
@@ -297,17 +220,12 @@ namespace error_system::core {
          *          注册表任何变更（register/unregister）会 bump 纪元，
          *          缓存检测到纪元变化时整体失效重建。
          *          缓存同时记录"未注册"结果（nullopt），避免对未注册码重复查询。
-         *          适用于错误码注册后基本不变的运行时热路径场景。
-         * @note 缓存为 thread_local，每个线程独立，无需加锁。
-         * @param code 错误码
-         * @return std::optional<error_metadata_t> 元数据副本，未注册返回 nullopt
          */
         [[nodiscard]] std::optional<error_metadata_t> get_info_cached(const error_code_t code) const noexcept;
 
         /**
          * @brief 清除当前线程的元数据缓存
-         * @details 仅用于测试与显式刷新场景。正常运行时无需调用，
-         *          纪元机制会自动处理缓存失效。
+         * @details 仅用于测试与显式刷新场景。正常运行时无需调用。
          */
         void invalidate_metadata_cache() const noexcept;
     };
@@ -320,11 +238,8 @@ namespace error_system::core {
     struct error_registrar_t {
         /**
          * @brief 构造函数（自动注册错误码）
-         * @param code 错误码
-         * @param name 错误码宏名称
-         * @param description 错误码中文描述
-         * @param subsystem_name 子系统名称（已废弃，子统/模块名称请通过 i18n::subsystem_module_catalog_t 注册）
-         * @param module_name 模块名称（已废弃，子统/模块名称请通过 i18n::subsystem_module_catalog_t 注册）
+         * @param subsystem_name 子系统名称（已废弃，请通过 i18n::subsystem_module_catalog_t 注册）
+         * @param module_name 模块名称（已废弃，请通过 i18n::subsystem_module_catalog_t 注册）
          */
         error_registrar_t(const error_code_t code,
                           const char* name,
@@ -351,8 +266,8 @@ namespace error_system::core {
  * @param MODULE 模块 ID
  * @param NUMBER 错误编号
  * @param DESC 错误描述字符串
- * @param SUBSYS_NAME 子系统名称（已废弃，保留参数以向后兼容；请通过 i18n::subsystem_module_catalog_t 注册）
- * @param MODULE_NAME 模块名称（已废弃，保留参数以向后兼容；请通过 i18n::subsystem_module_catalog_t 注册）
+ * @param SUBSYS_NAME 子系统名称（已废弃，保留参数以向后兼容）
+ * @param MODULE_NAME 模块名称（已废弃，保留参数以向后兼容）
  * @details 该宏会：
  *          1. 创建一个 constexpr error_code_t 常量（编译期可用，无初始化顺序问题）
  *          2. 在动态初始化阶段自动将错误码注册到 error_registry_t

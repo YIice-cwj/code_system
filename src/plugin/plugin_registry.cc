@@ -27,7 +27,10 @@ namespace error_system::plugin {
     std::atomic<bool> plugin_registry_t::initialized_{false};
 
     namespace {
-        constexpr size_t DEFAULT_DEFERRED_BUFFER_SIZE = 1024;  ///< 默认线程本地延迟缓冲容量
+        /**
+         * @brief 默认线程本地延迟缓冲容量
+         */
+        constexpr size_t DEFAULT_DEFERRED_BUFFER_SIZE = 1024;
 
         /**
          * @brief 线程本地延迟通知缓冲
@@ -36,7 +39,7 @@ namespace error_system::plugin {
          *          缓冲满时丢弃新通知并设置 overflow_dropped 标志。
          */
         struct deferred_buffer_t {
-            std::vector<core::error_context_t> buffer;
+            std::vector<std::shared_ptr<const core::error_context_t>> buffer;
             size_t max_size{DEFAULT_DEFERRED_BUFFER_SIZE};
             bool overflow_dropped{false};
             bool flushing{false};
@@ -130,10 +133,6 @@ namespace error_system::plugin {
         }
     }
 
-    void plugin_registry_t::enqueue_notification(const core::error_context_t& context) noexcept {
-        notification_channel_.enqueue_notification(context);
-    }
-
     void plugin_registry_t::enqueue_deferred_notification(const core::error_context_t& context) noexcept {
         if (tls_deferred_.flushing) {
             return;
@@ -143,7 +142,8 @@ namespace error_system::plugin {
             return;
         }
         try {
-            tls_deferred_.buffer.push_back(context);
+            tls_deferred_.buffer.push_back(
+                std::make_shared<const core::error_context_t>(context.clone()));
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr,
                          "[plugin_registry] enqueue_deferred_notification: std::bad_alloc\n");
@@ -181,7 +181,9 @@ namespace error_system::plugin {
         tls_deferred_.flushing = true;
         auto snapshot = std::atomic_load(&plugins_snapshot_);
         for (const auto& deferred_context : tls_deferred_.buffer) {
-            dispatch_to_plugins(deferred_context, *snapshot);
+            if (deferred_context) {
+                dispatch_to_plugins(*deferred_context, *snapshot);
+            }
         }
         tls_deferred_.buffer.clear();
         tls_deferred_.overflow_dropped = false;
@@ -219,16 +221,6 @@ namespace error_system::plugin {
         return tls_deferred_.overflow_dropped;
     }
 
-    size_t plugin_registry_t::size() const noexcept {
-        auto snapshot = std::atomic_load(&plugins_snapshot_);
-        return snapshot->size();
-    }
-
-    bool plugin_registry_t::empty() const noexcept {
-        auto snapshot = std::atomic_load(&plugins_snapshot_);
-        return snapshot->empty();
-    }
-
     /**
      * @brief 清空所有已注册插件
      */
@@ -237,18 +229,6 @@ namespace error_system::plugin {
             snapshot.clear();
             owned.clear();
         });
-    }
-
-    size_t plugin_registry_t::pending_notifications() const noexcept {
-        return notification_channel_.pending_notifications();
-    }
-
-    void plugin_registry_t::set_max_queue_size(size_t max_size) noexcept {
-        notification_channel_.set_max_queue_size(max_size);
-    }
-
-    size_t plugin_registry_t::get_max_queue_size() const noexcept {
-        return notification_channel_.get_max_queue_size();
     }
 
     /**
@@ -274,10 +254,6 @@ namespace error_system::plugin {
             }
         });
         return *instance_ptr;
-    }
-
-    bool plugin_registry_t::is_initialized() noexcept {
-        return initialized_.load(std::memory_order_acquire);
     }
 
 }  // namespace error_system::plugin

@@ -1,4 +1,4 @@
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 
 #include <atomic>
 #include <set>
