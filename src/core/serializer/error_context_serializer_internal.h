@@ -7,7 +7,7 @@
  * @file error_context_serializer_internal.h
  * @brief 错误上下文序列化器内部共享工具（仅实现内部使用，不对外暴露）
  * @details 提供文本/JSON/二进制三种序列化实现共用的辅助函数。
- *          放置于 src/core/ 目录下，不随公共头文件安装。
+ *          放置于 src/core/serializer/ 目录下，不随公共头文件安装。
  *          各 .cc 文件按需 include 本头文件以获取共用工具。
  * @author yiice
  * @version 3.0.0
@@ -16,10 +16,14 @@
  */
 namespace error_system::core {
 
-constexpr size_t MAX_PAYLOAD_ITEMS = 100000;   ///< 反序列化 payload 最大项数
-constexpr size_t MAX_STACK_FRAMES = 100000;    ///< 反序列化堆栈帧最大数量
-constexpr size_t MAX_CAUSE_DEPTH = 32;         ///< cause 链最大递归深度
-constexpr size_t MAX_STRING_LENGTH = 1048576;  ///< 反序列化单字符串最大长度（1MB），防止恶意输入触发 OOM
+/** 反序列化 payload 最大项数 */
+constexpr size_t MAX_PAYLOAD_ITEMS = 100000;
+/** 反序列化堆栈帧最大数量 */
+constexpr size_t MAX_STACK_FRAMES = 100000;
+/** cause 链最大递归深度 */
+constexpr size_t MAX_CAUSE_DEPTH = 32;
+/** 反序列化单字符串最大长度（1MB），防止恶意输入触发 OOM */
+constexpr size_t MAX_STRING_LENGTH = 1048576;
 
 }  // namespace error_system::core
 

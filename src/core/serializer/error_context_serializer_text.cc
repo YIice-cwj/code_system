@@ -1,8 +1,8 @@
-#include "error_system/core/error_context_serializer.h"
+#include "error_system/core/serializer/error_context_serializer.h"
 #include "error_context_serializer_internal.h"
 
 #include "error_system/config/error_config.h"
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 #include "error_system/i18n/i_subsystem_module_resolver.h"
 #include "error_system/i18n/subsystem_module_catalog.h"
 
@@ -26,11 +26,6 @@ namespace error_system::core {
 
     const error_system::i18n::i_subsystem_module_resolver_t*
         error_context_serializer_t::subsystem_module_resolver_{nullptr};
-
-    void error_context_serializer_t::set_subsystem_module_resolver(
-        const error_system::i18n::i_subsystem_module_resolver_t* resolver) noexcept {
-        subsystem_module_resolver_ = resolver;
-    }
 
     const error_system::i18n::i_subsystem_module_resolver_t*
     error_context_serializer_t::get_subsystem_module_resolver_() noexcept {
@@ -80,20 +75,27 @@ namespace error_system::core {
                                         size_t name_size,
                                         size_t desc_size,
                                         size_t subsys_module_size) noexcept {
-            size_t capacity = 96 + name_size + desc_size + subsys_module_size + context.message.size();
+            const runtime_block_t* blk = context.block();
+            const std::string& msg = blk ? blk->message : std::string{};
+            size_t capacity = 96 + name_size + desc_size + subsys_module_size + msg.size();
 
             context.for_each_payload([&](const std::string& key, const std::string& value) {
                 capacity += key.size() + value.size() + 4;
             });
 
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
-                for (const auto& frame : context.stack_frames) {
-                    capacity += frame.size() + 12;
+                const auto frames = context.get_stack_frames();
+                if (frames) {
+                    for (const auto& frame : *frames) {
+                        capacity += frame.size() + 12;
+                    }
                 }
             }
 
-            if (context.cause) {
-                capacity += 16 + context.cause->message.size();
+            if (const error_context_t* cause = context.cause()) {
+                const runtime_block_t* cause_blk = cause->block();
+                const std::string& cause_msg = cause_blk ? cause_blk->message : std::string{};
+                capacity += 16 + cause_msg.size();
             }
             return capacity;
         }
@@ -103,10 +105,11 @@ namespace error_system::core {
          */
         void append_location_text(std::string& result, const error_context_t& context) {
             if constexpr (feature_flags_t::LOCATION_ENABLED) {
-                if (feature_flags_t::is_source_location_enabled() && context.file_name != nullptr) {
-                    result.append(" [Location: ").append(context.file_name).append(":");
-                    append_decimal(result, context.source_location.line());
-                    result.append(" @ ").append(context.source_location.function_name()).append("]");
+                const runtime_block_t* blk = context.block();
+                if (feature_flags_t::is_source_location_enabled() && blk && blk->file_name != nullptr) {
+                    result.append(" [Location: ").append(blk->file_name).append(":");
+                    append_decimal(result, blk->source_location.line());
+                    result.append(" @ ").append(blk->source_location.function_name()).append("]");
                 }
             }
         }
@@ -152,23 +155,20 @@ namespace error_system::core {
          */
         void append_stacktrace_text(std::string& result, const error_context_t& context) {
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
-                if (context.stack_frames.empty()) {
+                const auto frames = context.get_stack_frames();
+                if (!frames || frames->empty()) {
                     return;
                 }
                 result.append("\n  [Stacktrace]:");
-                for (size_t i = 0; i < context.stack_frames.size(); ++i) {
+                for (size_t i = 0; i < frames->size(); ++i) {
                     result.append("\n    #");
                     append_decimal(result, i);
-                    result.append("  ").append(context.stack_frames[i]);
+                    result.append("  ").append((*frames)[i]);
                 }
             }
         }
 
     }  // namespace
-
-    std::string error_context_serializer_t::to_string(const error_context_t& context) noexcept {
-        return to_string_impl_(context, 0);
-    }
 
     std::string error_context_serializer_t::to_string_impl_(const error_context_t& context, size_t depth) noexcept {
         if (auto formatter = formatter_config_t::get_custom_formatter()) {
@@ -179,10 +179,12 @@ namespace error_system::core {
             }
         }
 
-        const bool has_metadata = !context.metadata_.name.empty();
-        const std::string_view desc = has_metadata ? std::string_view{context.metadata_.description} : std::string_view{"未注册的未知错误"};
-        const std::string_view name = has_metadata ? std::string_view{context.metadata_.name} : std::string_view{"UNKNOWN_ERR_CODE"};
+        const bool has_metadata = context.block_ && context.block_->metadata && !context.block_->metadata->name.empty();
+        const std::string_view desc = has_metadata ? std::string_view{context.block_->metadata->description} : std::string_view{"未注册的未知错误"};
+        const std::string_view name = has_metadata ? std::string_view{context.block_->metadata->name} : std::string_view{"UNKNOWN_ERR_CODE"};
         const std::string subsys_module_str = build_subsystem_module_string_(context);
+
+        const std::string& msg = context.block_ ? context.block_->message : std::string{};
 
         std::string result;
         try {
@@ -190,16 +192,16 @@ namespace error_system::core {
             append_location_text(result, context);
             append_subheader_text(result, context, subsys_module_str);
             result.append(" (").append(name).append(") - ");
-            if (!context.message.empty()) {
-                result.append(context.message).append(": ");
+            if (!msg.empty()) {
+                result.append(msg).append(": ");
             }
             result.append(desc);
             append_payload_text(result, context);
             append_stacktrace_text(result, context);
 
-            if (context.cause && depth + 1 < MAX_CAUSE_DEPTH) {
-                result.append("\n  ↳ Caused by: ").append(to_string_impl_(*context.cause, depth + 1));
-            } else if (context.cause) {
+            if (context.cause_ && depth + 1 < MAX_CAUSE_DEPTH) {
+                result.append("\n  ↳ Caused by: ").append(to_string_impl_(*context.cause_, depth + 1));
+            } else if (context.cause_) {
                 result.append("\n  ↳ ... (cause chain truncated)");
             }
         } catch (const std::bad_alloc&) {

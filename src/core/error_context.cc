@@ -8,18 +8,19 @@
 #include <vector>
 
 #include "error_system/config/feature_flags.h"
-#include "error_system/core/error_context_serializer.h"
+#include "error_system/core/serializer/error_context_serializer.h"
 #include "error_system/utils/source_location.h"
 
 /**
  * @file error_context.cc
- * @brief 错误上下文实现
- * @details 定义错误上下文的核心实现，包括状态判断、因果链包装、payload 管理和比较运算。
- *          序列化实现见 error_context_serializer_*.cc，运行时特性初始化见 error_context_initializer.cc。
- *          payload 采用 SSO（Small Size Optimization），≤4 项时栈上存储零堆分配。
+ * @brief 错误上下文实现（24 字节 Move-Only 重构版）
+ * @details 物理布局：8B error_code + 8B runtime_block* + 8B cause* = 24 字节。
+ *          动态字段全部收拢到 runtime_block_t 堆块，按需分配。
+ *          因果链用 unique_ptr 串联，零引用计数。
+ *          Move-Only：禁用拷贝，仅移动。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-28
+ * @version 4.0.0
+ * @date 2026-07-06
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
@@ -30,248 +31,209 @@ namespace error_system::core {
     }
 
     /**
-     * @brief 拷贝构造函数
-     * @details 深拷贝 SSO payload、溢出 map，共享因果链（shared_ptr 引用计数）。
-     *          POD 字段在初始化列表完成，string/容器拷贝放入 try 块，
-     *          避免 bad_alloc 突破 noexcept 触发 terminate。
-     *          分配失败时对象处于部分构造状态，但调用方仍可安全析构。
+     * @brief 确保 block_ 已分配
+     * @details 首次写入动态字段时按需分配 runtime_block_t。
+     *          分配失败时记录日志并保持 nullptr。
      */
-    error_context_t::error_context_t(const error_context_t& other) noexcept
-        : code_(other.code_),
-        payload_count_(other.payload_count_),
-        source_location(other.source_location), file_name(other.file_name) {
-        try {
-            copy_basic_fields_(other);
-            copy_sso_payload_(other);
-            copy_overflow_payload_(other);
-            copy_cause_(other);
-            copy_stack_frames_(other);
-            repair_source_location_pointers_();
-        } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context] copy constructor: std::bad_alloc\n");
-            payload_count_ = 0;
-            payload_small_ = {};
-            payload_overflow_.reset();
-            file_name = nullptr;
-            source_location = {};
+    void error_context_t::ensure_block_() noexcept {
+        if (!block_) {
+            try {
+                block_ = std::make_unique<runtime_block_t>();
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[error_context] ensure_block_: std::bad_alloc\n");
+            }
         }
     }
 
     /**
-     * @brief 移动赋值运算符
-     * @details 提供移动赋值以允许复用变量（此前为 = delete 导致必须每次声明新变量）。
-     *          自赋值安全：移动赋值过程中隐式释放自身溢出存储与 cause，再从源对象移动。
-     * @param other 源对象（移动后处于有效但未指定状态）
-     * @return error_context_t& 自身引用
+     * @brief 查找 payload 值指针
      */
-    error_context_t& error_context_t::operator=(error_context_t&& other) noexcept {
-        if (this != &other) {
-            code_ = other.code_;
-            metadata_ = std::move(other.metadata_);
-            payload_count_ = other.payload_count_;
-            payload_small_ = std::move(other.payload_small_);
-            payload_overflow_ = std::move(other.payload_overflow_);
-            message = std::move(other.message);
-            source_location = other.source_location;
-            file_name = other.file_name;
-            cause = std::move(other.cause);
-            stack_frames = std::move(other.stack_frames);
-            loc_file_storage_ = std::move(other.loc_file_storage_);
-            loc_func_storage_ = std::move(other.loc_func_storage_);
-            repair_source_location_pointers_();
-            other.payload_count_ = 0;
-            other.file_name = nullptr;
-            other.source_location = utils::source_location_t{};
+    const std::string* error_context_t::find_payload_(const std::string& key) const noexcept {
+        if (!block_) {
+            return nullptr;
         }
-        return *this;
-    }
-
-    /**
-     * @brief 移动构造函数
-     * @details 显式清零源对象 payload_count_，避免移动后源对象状态不一致
-     */
-    error_context_t::error_context_t(error_context_t&& other) noexcept
-        : code_(other.code_),
-        metadata_(std::move(other.metadata_)),
-        payload_count_(other.payload_count_),
-        payload_small_(std::move(other.payload_small_)),
-        payload_overflow_(std::move(other.payload_overflow_)),
-        loc_file_storage_(std::move(other.loc_file_storage_)),
-        loc_func_storage_(std::move(other.loc_func_storage_)),
-        message(std::move(other.message)),
-        source_location(other.source_location), file_name(other.file_name),
-        cause(std::move(other.cause)),
-        stack_frames(std::move(other.stack_frames)) {
-        other.payload_count_ = 0;
-        other.file_name = nullptr;
-        repair_source_location_pointers_();
-        other.source_location = utils::source_location_t{};
-    }
-
-    /**
-     * @brief 拷贝基本字段
-     */
-    void error_context_t::copy_basic_fields_(const error_context_t& other) {
-        metadata_ = other.metadata_;
-        loc_file_storage_ = other.loc_file_storage_;
-        loc_func_storage_ = other.loc_func_storage_;
-        message = other.message;
-    }
-
-    /**
-     * @brief 拷贝 SSO payload
-     */
-    void error_context_t::copy_sso_payload_(const error_context_t& other) {
-        for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
-            payload_small_[i] = other.payload_small_[i];
+        for (size_t i = 0; i < block_->payload_count && i < PAYLOAD_SSO_CAPACITY; ++i) {
+            if (block_->payload_small[i].first == key) {
+                return &block_->payload_small[i].second;
+            }
         }
-    }
-
-    /**
-     * @brief 拷贝溢出 payload
-     */
-    void error_context_t::copy_overflow_payload_(const error_context_t& other) {
-        if (other.payload_overflow_) {
-            payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>(
-                *other.payload_overflow_);
+        if (block_->payload_overflow) {
+            auto it = block_->payload_overflow->find(key);
+            if (it != block_->payload_overflow->end()) {
+                return &it->second;
+            }
         }
-    }
-
-    /**
-     * @brief 拷贝因果链
-     */
-    void error_context_t::copy_cause_(const error_context_t& other) {
-        if (other.cause) {
-            cause = other.cause;
-        }
-    }
-
-    /**
-     * @brief 拷贝堆栈帧
-     */
-    void error_context_t::copy_stack_frames_(const error_context_t& other) {
-        if constexpr (error_system::config::feature_flags_t::STACKTRACE_ENABLED) {
-            stack_frames = other.stack_frames;
-        }
-    }
-
-    /**
-     * @brief 修复源位置指针
-     */
-    void error_context_t::repair_source_location_pointers_() noexcept {
-        if (!loc_file_storage_.empty()) {
-            file_name = loc_file_storage_.c_str();
-            source_location = utils::source_location_t(
-                loc_file_storage_.c_str(), loc_func_storage_.c_str(), source_location.line());
-        }
-    }
-
-    void error_context_t::apply_source_location_(const utils::source_location_t& location) noexcept {
-        if constexpr (error_system::config::feature_flags_t::LOCATION_ENABLED) {
-            source_location = location;
-        }
-    }
-
-    bool error_context_t::is_error() const noexcept {
-        return code_.is_error_code();
-    }
-
-    bool error_context_t::is_success() const noexcept {
-        return code_.is_success_code();
+        return nullptr;
     }
 
     /**
      * @brief 检测指定对象是否在当前 cause 链中
      * @details 沿 cause 链向下遍历，深度上限 MAX_CAUSE_DEPTH。
-     *          用于 wrap() 防止循环引用导致 shared_ptr 内存泄漏与遍历截断。
+     *          用于 wrap() 防止循环引用。
      */
     bool error_context_t::has_cause_in_chain_(const error_context_t* target) const noexcept {
         if (target == nullptr) {
             return false;
         }
-        const error_context_t* current = cause.get();
+        const error_context_t* current = cause_.get();
         size_t depth = 0;
         while (current != nullptr && depth < MAX_CAUSE_DEPTH) {
             if (current == target) {
                 return true;
             }
-            current = current->cause.get();
+            current = current->cause_.get();
             ++depth;
         }
         return false;
     }
 
     /**
-     * @brief 包装底层错误为当前错误的直接原因
-     * @details 拷贝自身后分配 shared_ptr 持有 underlying。
-     *          自环检测：若 underlying 是 this 本身或已在 this 的 cause 链中，跳过 cause 设置。
-     *          分配失败时 cause 保持原值并记录日志，不抛异常。
+     * @brief 修复源位置指针（反序列化后重新指向 loc_file_storage_）
      */
-    error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
-        if (&underlying == this || underlying.has_cause_in_chain_(this)) {
-            std::fprintf(stderr, "[error_context] wrap: cycle detected, skipping cause\n");
-            return *this;
+    void error_context_t::repair_source_location_pointers_() noexcept {
+        if (block_ && !block_->loc_file_storage.empty()) {
+            block_->file_name = block_->loc_file_storage.c_str();
+            block_->source_location = utils::source_location_t(
+                block_->loc_file_storage.c_str(), block_->loc_func_storage.c_str(),
+                block_->source_location.line());
         }
-        error_context_t new_code_context = *this;
-        try {
-            new_code_context.cause = std::make_shared<error_context_t>(underlying);
-        } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context] wrap: std::bad_alloc\n");
-        }
-        return new_code_context;
     }
 
     /**
-     * @brief 包装底层错误为当前错误的直接原因（移动语义版本）
-     * @details 拷贝自身后分配 shared_ptr 持有移动后的 underlying。
+     * @brief 深拷贝当前错误上下文（含 cause 链递归克隆）
+     * @details block_ 通过 runtime_block_t::deep_copy 复制；cause_ 递归调用 clone()
+     *          重建独立 cause 链。分配失败时返回部分拷贝。
+     */
+    error_context_t error_context_t::clone() const noexcept {
+        error_context_t copy{};
+        copy.code_ = code_;
+        if (block_) {
+            try {
+                copy.block_ = runtime_block_t::deep_copy(*block_);
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[error_context] clone: block deep_copy failed\n");
+            }
+        }
+        if (cause_) {
+            try {
+                copy.cause_ = std::make_unique<error_context_t>(cause_->clone());
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[error_context] clone: cause clone failed\n");
+            }
+        }
+        return copy;
+    }
+
+    /**
+     * @brief 包装底层错误为当前错误的直接原因（移动语义）
+     * @details 深拷贝当前对象的 runtime_block_（保留源状态），将 underlying 移动到 cause_。
      *          自环检测：若 underlying 是 this 本身或已在 this 的 cause 链中，跳过 cause 设置。
-     *          分配失败时 cause 保持原值并记录日志，不抛异常。
+     *          分配失败时 cause 保持空并记录日志，不抛异常。
      */
     error_context_t error_context_t::wrap(error_context_t&& underlying) const noexcept {
+        error_context_t new_context{};
+        new_context.code_ = code_;
+        if (block_) {
+            try {
+                new_context.block_ = runtime_block_t::deep_copy(*block_);
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[error_context] wrap: block deep_copy failed\n");
+            }
+        }
         if (&underlying == this || underlying.has_cause_in_chain_(this)) {
-            std::fprintf(stderr, "[error_context] wrap(&&): cycle detected, skipping cause\n");
-            return *this;
+            std::fprintf(stderr, "[error_context] wrap: cycle detected, skipping cause\n");
+            return new_context;
         }
-        error_context_t new_code_context = *this;
         try {
-            new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
+            new_context.cause_ = std::make_unique<error_context_t>(std::move(underlying));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context] wrap(&&): std::bad_alloc\n");
+            std::fprintf(stderr, "[error_context] wrap: cause make_unique failed\n");
         }
-        return new_code_context;
+        return new_context;
     }
 
-    error_context_t& error_context_t::with(const std::string& key, const std::string& value) noexcept {
-        return insert_or_update_payload_(key, value);
-    }
-
-    error_context_t& error_context_t::with(const char* key, const char* value) noexcept {
-        return with(std::string_view(key != nullptr ? key : ""), std::string_view(value != nullptr ? value : ""));
-    }
-
-    error_context_t& error_context_t::with(std::string_view key, std::string_view value) noexcept {
+    /**
+     * @brief 获取堆栈帧（已符号化字符串）
+     * @details 优先返回 resolved_frames（测试手动设置的）；否则对 raw_frames 执行
+     *          延迟符号化（带 thread_local 缓存，二次调用 O(1)）。
+     * @return 堆栈帧 shared_ptr，未分配 block_ 或无帧时返回 nullptr
+     */
+    std::shared_ptr<const std::vector<std::string>> error_context_t::get_stack_frames() const noexcept {
+        if (!block_) { return nullptr; }
+        if (block_->resolved_frames) { return block_->resolved_frames; }
+        if (!block_->raw_frames) { return nullptr; }
         try {
-            return insert_or_update_payload_(std::string(key), std::string(value));
+            return std::make_shared<const std::vector<std::string>>(
+                utils::stack_trace_utils_t::resolve(*block_->raw_frames));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context] with(string_view): std::bad_alloc\n");
-            return *this;
+            std::fprintf(stderr, "[error_context] get_stack_frames: std::bad_alloc\n");
+            return nullptr;
         }
     }
 
-    error_context_t& error_context_t::with(std::string&& key, std::string&& value) noexcept {
-        return insert_or_update_payload_(std::move(key), std::move(value));
-    }
-
-    error_context_t& error_context_t::with_batch(
-        std::initializer_list<std::pair<const std::string, std::string>> items) noexcept {
-        for (const auto& [key, value] : items) {
-            with(key, value);
+    /**
+     * @brief 设置已符号化的堆栈帧
+     * @details 用于测试场景手动设置堆栈帧。生产代码中堆栈帧由构造时自动捕获
+     *          （存为 raw_frames，输出时延迟符号化）。
+     * @param frames 堆栈帧字符串列表
+     * @return 自身引用（支持链式调用）
+     */
+    error_context_t& error_context_t::with_stack_frames(std::vector<std::string> frames) noexcept {
+        ensure_block_();
+        if (block_) {
+            try {
+                block_->resolved_frames = std::make_shared<const std::vector<std::string>>(std::move(frames));
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[error_context] with_stack_frames: std::bad_alloc\n");
+            }
         }
         return *this;
     }
 
+    std::vector<std::pair<std::string, std::string>> error_context_t::get_payload() const noexcept {
+        std::vector<std::pair<std::string, std::string>> result;
+        try {
+            result.reserve(payload_size());
+            for_each_payload([&](const std::string& key, const std::string& value) {
+                result.emplace_back(key, value);
+            });
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_context] get_payload: std::bad_alloc\n");
+        }
+        return result;
+    }
+
+    std::optional<std::string> error_context_t::get_payload_value(const std::string& key) const noexcept {
+        try {
+            const std::string* found = find_payload_(key);
+            if (found != nullptr) {
+                return *found;
+            }
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_context] get_payload_value: std::bad_alloc\n");
+        }
+        return std::nullopt;
+    }
+
+    std::string error_context_t::to_string() const noexcept {
+        return error_context_serializer_t::to_string(*this);
+    }
+
+    std::string error_context_t::to_json() const noexcept {
+        return error_context_serializer_t::to_json(*this);
+    }
+
+    std::string error_context_t::to_binary() const noexcept {
+        return error_context_serializer_t::to_binary(*this);
+    }
+
     bool error_context_t::operator==(const error_context_t& other) const noexcept {
-        if (code_.get_code() != other.code_.get_code() || message != other.message) {
+        if (code_.get_code() != other.code_.get_code()) {
+            return false;
+        }
+        const std::string& this_msg = block_ ? block_->message : std::string{};
+        const std::string& other_msg = other.block_ ? other.block_->message : std::string{};
+        if (this_msg != other_msg) {
             return false;
         }
         const size_t this_size = payload_size();
@@ -291,38 +253,6 @@ namespace error_system::core {
         return equal;
     }
 
-    std::vector<std::pair<std::string, std::string>> error_context_t::get_payload() const noexcept {
-        std::vector<std::pair<std::string, std::string>> result;
-        try {
-            result.reserve(payload_size());
-            for_each_payload([&](const std::string& key, const std::string& value) {
-                result.emplace_back(key, value);
-            });
-        } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context] get_payload: std::bad_alloc\n");
-        }
-        return result;
-    }
-
-    std::optional<std::string> error_context_t::get_payload_value(const std::string& key) const noexcept {
-        try {
-            for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
-                if (payload_small_[i].first == key) {
-                    return payload_small_[i].second;
-                }
-            }
-            if (payload_overflow_) {
-                auto it = payload_overflow_->find(key);
-                if (it != payload_overflow_->end()) {
-                    return it->second;
-                }
-            }
-        } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context] get_payload_value: std::bad_alloc\n");
-        }
-        return std::nullopt;
-    }
-
     /**
      * @brief 严格相等比较（含 cause 链与 stack_frames 深比较）
      * @details operator== 仅比较 code/message/payload；本方法额外比较 cause 链与堆栈，
@@ -337,43 +267,47 @@ namespace error_system::core {
             return false;
         }
         if constexpr (error_system::config::feature_flags_t::STACKTRACE_ENABLED) {
-            if (stack_frames != other.stack_frames) {
+            const auto this_frames = get_stack_frames();
+            const auto other_frames = other.get_stack_frames();
+            const bool this_has = static_cast<bool>(this_frames);
+            const bool other_has = static_cast<bool>(other_frames);
+            if (this_has != other_has) {
+                return false;
+            }
+            if (this_has && *this_frames != *other_frames) {
                 return false;
             }
         }
-        if (cause && other.cause) {
-            return cause->equals_strict(*other.cause, depth + 1);
+        if (cause_ && other.cause_) {
+            return cause_->equals_strict(*other.cause_, depth + 1);
         }
-        return !cause && !other.cause;
+        return !cause_ && !other.cause_;
     }
 
     /**
-     * @brief 渲染为可读文本（便捷方法）
-     * @details 委托给 error_context_serializer_t::to_string()，避免调用方再 include serializer 头文件
+     * @brief 构造最小化错误上下文
+     * @details 跳过 validation/stacktrace/notification，不分配 block_。
+     *          仅供 result_t<T, true>（Lean 模式）的读取路径使用。
+     * @param code 错误码
+     * @param location 源位置
+     * @return 最小化错误上下文
      */
-    std::string error_context_t::to_string() const noexcept {
-        return error_context_serializer_t::to_string(*this);
-    }
-
-    /**
-     * @brief 序列化为 JSON 字符串（便捷方法）
-     */
-    std::string error_context_t::to_json() const noexcept {
-        return error_context_serializer_t::to_json(*this);
-    }
-
-    /**
-     * @brief 序列化为紧凑二进制字符串（便捷方法）
-     */
-    std::string error_context_t::to_binary() const noexcept {
-        return error_context_serializer_t::to_binary(*this);
+    error_context_t error_context_t::make_minimal(error_code_t code,
+                                                  utils::source_location_t location) noexcept {
+        error_context_t ctx{};
+        ctx.code_ = code;
+        ctx.ensure_block_();
+        ctx.block_->source_location = location;
+        return ctx;
     }
 
     /**
      * @brief 聚合多个错误上下文为一个
      * @details 主错误取第一个，其余以 joined_error_N 为键作为 payload 附加。
      *          std::to_string 与 string 拼接可能抛 bad_alloc，用 try-catch 包裹，
-     *          失败时停止追加后续错误（已追加的保留），符合规范 14。
+     *          失败时停止追加后续错误（已追加的保留）。
+     * @param errors 错误上下文列表（将被移动）
+     * @return 聚合后的错误上下文
      */
     error_context_t join_errors(std::vector<error_context_t>&& errors) noexcept {
         if (errors.empty()) {
@@ -386,7 +320,8 @@ namespace error_system::core {
         try {
             for (size_t i = 1; i < errors.size(); ++i) {
                 std::string key = "joined_error_" + std::to_string(i);
-                primary.with(std::move(key), errors[i].message);
+                const std::string& msg = errors[i].block_ ? errors[i].block_->message : std::string{};
+                primary.with(std::move(key), msg);
             }
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[join_errors] std::bad_alloc\n");

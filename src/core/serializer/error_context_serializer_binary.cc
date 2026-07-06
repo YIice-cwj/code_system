@@ -1,10 +1,10 @@
-#include "error_system/core/error_context_serializer.h"
+#include "error_system/core/serializer/error_context_serializer.h"
 #include "error_context_serializer_internal.h"
 
 #include <optional>
 
 #include "error_system/config/error_config.h"
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 
 using error_system::config::feature_flags_t;
 
@@ -57,16 +57,18 @@ namespace error_system::core {
          */
         void write_location_binary(std::string& buffer, const error_context_t& context) noexcept {
             uint8_t has_location = 0;
+            const runtime_block_t* blk = nullptr;
             if constexpr (feature_flags_t::LOCATION_ENABLED) {
-                if (feature_flags_t::is_source_location_enabled() && context.file_name != nullptr) {
+                blk = context.block();
+                if (feature_flags_t::is_source_location_enabled() && blk && blk->file_name != nullptr) {
                     has_location = 1;
                 }
             }
             buffer.push_back(static_cast<char>(has_location));
-            if (has_location) {
-                write_string_len_prefixed(buffer, context.file_name);
-                write_string_len_prefixed(buffer, context.source_location.function_name());
-                write_little_endian(buffer, context.source_location.line());
+            if (has_location && blk != nullptr) {
+                write_string_len_prefixed(buffer, blk->file_name);
+                write_string_len_prefixed(buffer, blk->source_location.function_name());
+                write_little_endian(buffer, blk->source_location.line());
             }
         }
 
@@ -144,27 +146,24 @@ namespace error_system::core {
 
     }  // namespace
 
-    std::string error_context_serializer_t::to_binary(const error_context_t& context) noexcept {
-        return to_binary_impl_(context, 0);
-    }
-
     std::string error_context_serializer_t::to_binary_impl_(const error_context_t& context, size_t depth) noexcept {
         std::string buf;
         const size_t total_payload = context.payload_size();
+        const std::string& msg = context.block_ ? context.block_->message : std::string{};
         try {
-            buf.reserve(128 + context.message.size() + total_payload * 24);
+            buf.reserve(128 + msg.size() + total_payload * 24);
             if (depth == 0) {
                 write_little_endian(buf, BINARY_MAGIC);
                 buf.push_back(static_cast<char>(BINARY_VERSION));
             }
             write_little_endian(buf, context.code_.get_code());
-            write_string_len_prefixed(buf, context.message);
+            write_string_len_prefixed(buf, msg);
             write_location_binary(buf, context);
             write_payload_binary(buf, context);
 
-            if (context.cause && depth + 1 < MAX_CAUSE_DEPTH) {
+            if (context.cause_ && depth + 1 < MAX_CAUSE_DEPTH) {
                 buf.push_back(1);
-                std::string cause_binary = to_binary_impl_(*context.cause, depth + 1);
+                std::string cause_binary = to_binary_impl_(*context.cause_, depth + 1);
                 write_string_len_prefixed(buf, cause_binary);
             } else {
                 buf.push_back(0);
@@ -223,11 +222,15 @@ namespace error_system::core {
             !read_little_endian(data, offset, line)) {
             return false;
         }
-        context.loc_file_storage_ = std::move(file);
-        context.loc_func_storage_ = std::move(func);
-        context.file_name = context.loc_file_storage_.c_str();
-        context.source_location = utils::source_location_t(
-            context.loc_file_storage_.c_str(), context.loc_func_storage_.c_str(), line);
+        context.ensure_block_();
+        if (!context.block_) {
+            return false;
+        }
+        context.block_->loc_file_storage = std::move(file);
+        context.block_->loc_func_storage = std::move(func);
+        context.block_->file_name = context.block_->loc_file_storage.c_str();
+        context.block_->source_location = utils::source_location_t(
+            context.block_->loc_file_storage.c_str(), context.block_->loc_func_storage.c_str(), line);
         return true;
     }
 
@@ -277,9 +280,9 @@ namespace error_system::core {
             return false;
         }
         try {
-            context.cause = std::make_shared<error_context_t>(std::move(*cause_ctx));
+            context.cause_ = std::make_unique<error_context_t>(std::move(*cause_ctx));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context_serializer] parse_binary_cause_field_: cause make_shared failed\n");
+            std::fprintf(stderr, "[error_context_serializer] parse_binary_cause_field_: cause make_unique failed\n");
             return false;
         }
         return true;
@@ -298,12 +301,22 @@ namespace error_system::core {
         }
         context.code_ = error_code_t{raw_code};
 
-        if (!read_string_len_prefixed(data, offset, context.message)) {
+        std::string message;
+        if (!read_string_len_prefixed(data, offset, message)) {
             return std::nullopt;
+        }
+        if (!message.empty()) {
+            context.ensure_block_();
+            if (context.block_) {
+                context.block_->message = std::move(message);
+            }
         }
 
         if (auto info = error_registry_t::instance().get_info(context.code_)) {
-            context.metadata_ = *info;
+            context.ensure_block_();
+            if (context.block_) {
+                context.block_->metadata = std::move(info);
+            }
         }
 
         if (!parse_binary_location_field_(context, data, offset)) {

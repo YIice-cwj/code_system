@@ -1,4 +1,4 @@
-#include "error_system/core/error_context_serializer.h"
+#include "error_system/core/serializer/error_context_serializer.h"
 #include "error_context_serializer_internal.h"
 
 #include <optional>
@@ -7,7 +7,7 @@
 #include <unordered_map>
 
 #include "error_system/config/error_config.h"
-#include "error_system/core/error_registry.h"
+#include "error_system/core/registry/error_registry.h"
 #include "error_system/utils/json_lexer.h"
 #include "error_system/utils/json_utils.h"
 
@@ -48,20 +48,27 @@ namespace error_system::core {
          * @brief 估算 JSON 序列化结果字符串容量
          */
         size_t estimate_json_capacity(const error_context_t& context) noexcept {
-            size_t capacity = 64 + context.message.size();
+            const runtime_block_t* blk = context.block();
+            const std::string& msg = blk ? blk->message : std::string{};
+            size_t capacity = 64 + msg.size();
 
             context.for_each_payload([&](const std::string& key, const std::string& value) {
                 capacity += (key.size() * 2 + 2) + (value.size() * 2 + 2) + 8;
             });
 
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
-                for (const auto& frame : context.stack_frames) {
-                    capacity += frame.size() + 4;
+                const auto frames = context.get_stack_frames();
+                if (frames) {
+                    for (const auto& frame : *frames) {
+                        capacity += frame.size() + 4;
+                    }
                 }
             }
 
-            if (context.cause) {
-                capacity += 16 + context.cause->message.size();
+            if (const error_context_t* cause = context.cause()) {
+                const runtime_block_t* cause_blk = cause->block();
+                const std::string& cause_msg = cause_blk ? cause_blk->message : std::string{};
+                capacity += 16 + cause_msg.size();
             }
             return capacity;
         }
@@ -73,18 +80,19 @@ namespace error_system::core {
         bool append_location_json(std::string& json, const error_context_t& context,
                                   bool& first_field) noexcept {
             if constexpr (feature_flags_t::LOCATION_ENABLED) {
-                if (feature_flags_t::is_source_location_enabled() && context.file_name != nullptr) {
+                const runtime_block_t* blk = context.block();
+                if (feature_flags_t::is_source_location_enabled() && blk && blk->file_name != nullptr) {
                     if (!first_field) {
                         json.push_back(',');
                     }
                     first_field = false;
                     json.append("\"location\":{");
                     json.append("\"file\":");
-                    append_escaped_json_string(json, context.file_name);
+                    append_escaped_json_string(json, blk->file_name);
                     json.append(",\"function\":");
-                    append_escaped_json_string(json, context.source_location.function_name());
+                    append_escaped_json_string(json, blk->source_location.function_name());
                     json.append(",\"line\":");
-                    append_decimal(json, context.source_location.line());
+                    append_decimal(json, blk->source_location.line());
                     json.push_back('}');
                     return true;
                 }
@@ -118,12 +126,13 @@ namespace error_system::core {
          */
         void append_stacktrace_json(std::string& json, const error_context_t& context) {
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
-                if (context.stack_frames.empty()) {
+                const auto frames = context.get_stack_frames();
+                if (!frames || frames->empty()) {
                     return;
                 }
                 json.append(",\"stack_frames\":[");
                 bool first_frame = true;
-                for (const auto& frame : context.stack_frames) {
+                for (const auto& frame : *frames) {
                     if (!first_frame) {
                         json.push_back(',');
                     }
@@ -292,12 +301,18 @@ namespace error_system::core {
          *          将 parse_location_member_ 的参数数量收敛到规范建议的 4 个以内。
          */
         struct location_parse_state_t {
-            std::string file{};          ///< 文件名
-            std::string function{};      ///< 函数名
-            uint32_t line{0};            ///< 行号
-            bool got_file{false};        ///< 是否已识别 file 字段
-            bool got_function{false};    ///< 是否已识别 function 字段
-            bool got_line{false};        ///< 是否已识别 line 字段
+            /** 文件名 */
+            std::string file{};
+            /** 函数名 */
+            std::string function{};
+            /** 行号 */
+            uint32_t line{0};
+            /** 是否已识别 file 字段 */
+            bool got_file{false};
+            /** 是否已识别 function 字段 */
+            bool got_function{false};
+            /** 是否已识别 line 字段 */
+            bool got_line{false};
         };
 
         /**
@@ -383,10 +398,6 @@ namespace error_system::core {
 
     }  // namespace
 
-    std::string error_context_serializer_t::to_json(const error_context_t& context) noexcept {
-        return to_json_impl_(context, 0);
-    }
-
     std::string error_context_serializer_t::to_json_impl_(const error_context_t& context, size_t depth) noexcept {
         std::string json;
         try {
@@ -407,12 +418,13 @@ namespace error_system::core {
             json.append("\"code\":");
             append_escaped_json_string(json, std::to_string(context.code_.get_code()));
             json.append(",\"message\":");
-            append_escaped_json_string(json, context.message);
+            const std::string& msg = context.block_ ? context.block_->message : std::string{};
+            append_escaped_json_string(json, msg);
             append_payload_json(json, context);
             append_stacktrace_json(json, context);
 
-            if (context.cause && depth + 1 < MAX_CAUSE_DEPTH) {
-                json.append(",\"cause\":").append(to_json_impl_(*context.cause, depth + 1));
+            if (context.cause_ && depth + 1 < MAX_CAUSE_DEPTH) {
+                json.append(",\"cause\":").append(to_json_impl_(*context.cause_, depth + 1));
             }
 
             json.push_back('}');
@@ -519,13 +531,16 @@ namespace error_system::core {
         }
         context.code_ = error_code_t{raw_code};
         if (auto info = error_registry_t::instance().get_info(context.code_)) {
-            context.metadata_ = *info;
+            context.ensure_block_();
+            if (context.block_) {
+                context.block_->metadata = std::move(info);
+            }
         }
         return true;
     }
 
     /**
-     * @brief 解析 "message" 字段：字符串 → context.message
+     * @brief 解析 "message" 字段：字符串 → context.block_->message
      */
     bool error_context_serializer_t::parse_json_message_field_(
         error_context_t& context, json_lexer_t& lexer) noexcept {
@@ -533,7 +548,10 @@ namespace error_system::core {
         if (token.type != json_lexer_t::token_type_t::string) {
             return false;
         }
-        context.message = std::move(token.value);
+        context.ensure_block_();
+        if (context.block_) {
+            context.block_->message = std::move(token.value);
+        }
         return true;
     }
 
@@ -556,11 +574,14 @@ namespace error_system::core {
         }
 
         if (state.got_file && state.got_function && state.got_line) {
-            context.loc_file_storage_ = std::move(state.file);
-            context.loc_func_storage_ = std::move(state.function);
-            context.file_name = context.loc_file_storage_.c_str();
-            context.source_location = utils::source_location_t(
-                context.loc_file_storage_.c_str(), context.loc_func_storage_.c_str(), state.line);
+            context.ensure_block_();
+            if (context.block_) {
+                context.block_->loc_file_storage = std::move(state.file);
+                context.block_->loc_func_storage = std::move(state.function);
+                context.block_->file_name = context.block_->loc_file_storage.c_str();
+                context.block_->source_location = utils::source_location_t(
+                    context.block_->loc_file_storage.c_str(), context.block_->loc_func_storage.c_str(), state.line);
+            }
         }
         return true;
     }
@@ -643,6 +664,7 @@ namespace error_system::core {
             if (token.type != token_type_t::left_bracket) {
                 return false;
             }
+            std::vector<std::string> frames;
             token = lexer.next();
             if (token.type == token_type_t::right_bracket) {
                 return true;
@@ -653,7 +675,7 @@ namespace error_system::core {
                     return false;
                 }
                 try {
-                    context.stack_frames.push_back(std::move(token.value));
+                    frames.push_back(std::move(token.value));
                 } catch (const std::bad_alloc&) {
                     std::fprintf(stderr, "[error_context_serializer] parse_json_stack_frames_field_: push_back failed\n");
                     return false;
@@ -671,6 +693,16 @@ namespace error_system::core {
                 }
                 token = lexer.next();
             }
+            if (!frames.empty()) {
+                context.ensure_block_();
+                if (context.block_) {
+                    try {
+                        context.block_->resolved_frames = std::make_shared<const std::vector<std::string>>(std::move(frames));
+                    } catch (const std::bad_alloc&) {
+                        std::fprintf(stderr, "[error_context_serializer] parse_json_stack_frames_field_: make_shared failed\n");
+                    }
+                }
+            }
             return true;
         } else {
             return skip_json_value_(lexer);
@@ -678,7 +710,7 @@ namespace error_system::core {
     }
 
     /**
-     * @brief 解析 "cause" 字段：递归解析子对象到 context.cause
+     * @brief 解析 "cause" 字段：递归解析子对象到 context.cause_
      * @details 递归调用 from_json_node_ 解析 cause 子对象，depth 用于控制递归深度
      * @param context 目标上下文
      * @param lexer JSON 词法分析器
@@ -692,9 +724,9 @@ namespace error_system::core {
             return false;
         }
         try {
-            context.cause = std::make_shared<error_context_t>(std::move(*cause_ctx));
+            context.cause_ = std::make_unique<error_context_t>(std::move(*cause_ctx));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context_serializer] parse_json_cause_field_: make_shared failed\n");
+            std::fprintf(stderr, "[error_context_serializer] parse_json_cause_field_: make_unique failed\n");
             return false;
         }
         return true;
