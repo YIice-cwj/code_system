@@ -132,6 +132,7 @@ BENCHMARK_DEFINE_F(context_fixture_t, construct)(benchmark::State& state) {
     const int scenario = static_cast<int>(state.range(0));
     for (auto _ : state) {
         error_context_t ctx(code_, "bench construct {}", state.iterations());
+        plugin_registry_t::instance().notify_error(ctx);
         benchmark::DoNotOptimize(ctx.get_message().size());
     }
     state.SetLabel(scenario_label(scenario));

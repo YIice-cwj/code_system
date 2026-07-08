@@ -5,6 +5,8 @@
 
 #include "error_system/config/error_config.h"
 #include "error_system/core/registry/error_registry.h"
+#include "error_system/utils/bad_alloc_handler.h"
+#include "error_system/utils/log.h"
 
 using error_system::config::feature_flags_t;
 
@@ -16,8 +18,8 @@ using error_system::config::feature_flags_t;
  *          从 error_context_serializer.cc 拆分而来，仅包含二进制格式相关的辅助函数与逻辑。
  *          使用小端序编码，顶层包含魔数与版本号；cause 链通过递归追加。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-28
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
@@ -37,30 +39,34 @@ namespace error_system::core {
 
         /**
          * @brief 写入长度前缀字符串（4 字节小端长度 + 字符串字节）
+         * @param buffer 目标缓冲区
+         * @param text 待写入的字符串
          */
         void write_string_len_prefixed(std::string& buffer, std::string_view text) noexcept {
             const size_t string_size = text.size();
             if (string_size > 0xFFFFFFFFULL) {
-                std::fprintf(stderr, "[error_context_serializer] write_string_len_prefixed: string too long, truncated\n");
+                LOG_WARN("[error_context_serializer] write_string_len_prefixed: string too long, truncated");
             }
             const uint32_t length = static_cast<uint32_t>(string_size > 0xFFFFFFFFULL ? 0xFFFFFFFFULL : string_size);
             write_little_endian(buffer, length);
             try {
                 buffer.append(text.data(), length);
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[error_context_serializer] to_binary: write_string append failed\n");
+                LOG_ERROR("[error_context_serializer] to_binary: write_string append failed");
             }
         }
 
         /**
          * @brief 写入源位置（has_location 标记 + file/func/line）
+         * @param buffer 目标缓冲区
+         * @param context 错误上下文
          */
         void write_location_binary(std::string& buffer, const error_context_t& context) noexcept {
             uint8_t has_location = 0;
             const runtime_block_t* blk = nullptr;
             if constexpr (feature_flags_t::LOCATION_ENABLED) {
                 blk = context.block();
-                if (feature_flags_t::is_source_location_enabled() && blk && blk->file_name != nullptr) {
+                if (context.is_location_available()) {
                     has_location = 1;
                 }
             }
@@ -74,11 +80,13 @@ namespace error_system::core {
 
         /**
          * @brief 写入 payload（4 字节计数 + 各 key/value 长度前缀字符串）
+         * @param buffer 目标缓冲区
+         * @param context 错误上下文
          */
         void write_payload_binary(std::string& buffer, const error_context_t& context) noexcept {
             const size_t total = context.payload_size();
             if (total > 0xFFFFFFFFULL) {
-                std::fprintf(stderr, "[error_context_serializer] write_payload_binary: payload count overflow, truncated\n");
+                LOG_WARN("[error_context_serializer] write_payload_binary: payload count overflow, truncated");
             }
             write_little_endian(buffer, static_cast<uint32_t>(total > 0xFFFFFFFFULL ? 0xFFFFFFFFULL : total));
             context.for_each_payload([&](const std::string& key, const std::string& value) {
@@ -108,6 +116,10 @@ namespace error_system::core {
 
         /**
          * @brief 读取单字节标记
+         * @param data 数据视图
+         * @param offset 当前偏移量（读取成功时递增）
+         * @param output 输出参数，读取的字节值
+         * @return bool true=成功，false=数据不足
          */
         bool read_byte(std::string_view data, size_t& offset, uint8_t& output) noexcept {
             if (offset >= data.size()) {
@@ -120,6 +132,10 @@ namespace error_system::core {
 
         /**
          * @brief 读取长度前缀字符串（4 字节小端长度 + 字符串字节）
+         * @param data 数据视图
+         * @param offset 当前偏移量（读取成功时递增）
+         * @param output 输出参数，读取的字符串
+         * @return bool true=成功，false=数据不足或长度超限
          */
         bool read_string_len_prefixed(std::string_view data, size_t& offset, std::string& output) noexcept {
             uint32_t length = 0;
@@ -127,8 +143,8 @@ namespace error_system::core {
                 return false;
             }
             if (length > MAX_STRING_LENGTH) {
-                std::fprintf(stderr, "[error_context_serializer] read_string_len_prefixed: length %u exceeds max %zu\n",
-                             length, MAX_STRING_LENGTH);
+                LOG_WARN("[error_context_serializer] read_string_len_prefixed: length {} exceeds max {}",
+                         length, MAX_STRING_LENGTH);
                 return false;
             }
             if (offset + length > data.size()) {
@@ -137,7 +153,7 @@ namespace error_system::core {
             try {
                 output.assign(data.data() + offset, length);
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[error_context_serializer] read_string_len_prefixed: std::bad_alloc\n");
+                utils::report_bad_alloc("error_context_serializer", "read_string_len_prefixed");
                 return false;
             }
             offset += length;
@@ -149,7 +165,7 @@ namespace error_system::core {
     std::string error_context_serializer_t::to_binary_impl_(const error_context_t& context, size_t depth) noexcept {
         std::string buf;
         const size_t total_payload = context.payload_size();
-        const std::string& msg = context.block_ ? context.block_->message : std::string{};
+        const std::string_view msg = context.block_ ? std::string_view(context.block_->message) : std::string_view{};
         try {
             buf.reserve(128 + msg.size() + total_payload * 24);
             if (depth == 0) {
@@ -169,7 +185,7 @@ namespace error_system::core {
                 buf.push_back(0);
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context_serializer] to_binary: std::bad_alloc\n");
+            utils::report_bad_alloc("error_context_serializer", "to_binary");
         }
         return buf;
     }
@@ -205,6 +221,13 @@ namespace error_system::core {
         return result;
     }
 
+    /**
+     * @brief 解析二进制 location 字段（file/func/line 三子字段全部成功才写入）
+     * @param context 目标上下文
+     * @param data 数据视图
+     * @param offset 当前偏移量（解析成功时递增）
+     * @return bool true=成功，false=格式错误或数据不足
+     */
     bool error_context_serializer_t::parse_binary_location_field_(
         error_context_t& context, std::string_view data, size_t& offset) noexcept {
         uint8_t has_location = 0;
@@ -234,6 +257,13 @@ namespace error_system::core {
         return true;
     }
 
+    /**
+     * @brief 解析二进制 payload 字段（4 字节计数 + 各 key/value 长度前缀字符串）
+     * @param context 目标上下文
+     * @param data 数据视图
+     * @param offset 当前偏移量（解析成功时递增）
+     * @return bool true=成功，false=格式错误或超出限制
+     */
     bool error_context_serializer_t::parse_binary_payload_field_(
         error_context_t& context, std::string_view data, size_t& offset) noexcept {
         uint32_t payload_count = 0;
@@ -255,6 +285,14 @@ namespace error_system::core {
         return true;
     }
 
+    /**
+     * @brief 解析二进制 cause 字段（递归解析 cause 子节点）
+     * @param context 目标上下文
+     * @param data 数据视图
+     * @param offset 当前偏移量（解析成功时递增）
+     * @param depth 当前递归深度
+     * @return bool true=成功，false=格式错误或超出深度限制
+     */
     bool error_context_serializer_t::parse_binary_cause_field_(
         error_context_t& context, std::string_view data, size_t& offset, size_t depth) noexcept {
         uint8_t has_cause = 0;
@@ -282,7 +320,7 @@ namespace error_system::core {
         try {
             context.cause_ = std::make_unique<error_context_t>(std::move(*cause_ctx));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context_serializer] parse_binary_cause_field_: cause make_unique failed\n");
+            LOG_ERROR("[error_context_serializer] parse_binary_cause_field_: cause make_unique failed");
             return false;
         }
         return true;
@@ -312,7 +350,7 @@ namespace error_system::core {
             }
         }
 
-        if (auto info = error_registry_t::instance().get_info(context.code_)) {
+        if (auto info = error_registry_t::instance().get_info_cached(context.code_)) {
             context.ensure_block_();
             if (context.block_) {
                 context.block_->metadata = std::move(info);

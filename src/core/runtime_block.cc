@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 
+#include "error_system/utils/object_pool.h"
+
 /**
  * @file runtime_block.cc
  * @brief 动态运行时上下文堆块实现
@@ -14,9 +16,11 @@
  *          仅在需要消息/payload/堆栈等动态数据时分配。
  *          字段为 public，仅供 error_context_t 及其友元
  *          （serializer/initializer）直接访问。
+ *          内存由 utils::object_pool_t<runtime_block_t> 池化管理，
+ *          deep_copy 从池中获取内存。
  * @author yiice
- * @version 4.0.0
- * @date 2026-07-06
+ * @version 4.3.0
+ * @date 2026-07-07
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
@@ -25,11 +29,18 @@ namespace error_system::core {
      * @brief 深拷贝构造
      * @details 用于 error_context_t::clone() 和 wrap() 场景，完整复制所有字段
      *          （含 payload_overflow、raw_frames、resolved_frames 的独立副本）。
+     *          内存从 utils::object_pool_t<runtime_block_t> 获取，
+     *          通过 utils::pool_ptr_t<runtime_block_t> 持有所有权。
+     *          字段拷贝可能抛出 std::bad_alloc，由调用方捕获；
+     *          异常发生时 pool_ptr_t 析构将内存归还池，无泄漏。
      * @param other 源堆块
-     * @return 深拷贝后的新堆块
+     * @return 深拷贝后的新堆块（pool_ptr_t 包装），池分配失败返回空 pool_ptr_t
      */
-    std::unique_ptr<runtime_block_t> runtime_block_t::deep_copy(const runtime_block_t& other) {
-        auto block = std::make_unique<runtime_block_t>();
+    utils::pool_ptr_t<runtime_block_t> runtime_block_t::deep_copy(const runtime_block_t& other) {
+        utils::pool_ptr_t<runtime_block_t> block(utils::object_pool_t<runtime_block_t>::acquire());
+        if (!block) {
+            return block;
+        }
         block->message = other.message;
         block->metadata = other.metadata;
         block->source_location = other.source_location;

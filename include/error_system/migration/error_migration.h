@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "error_system/core/error_code.h"
+#include "error_system/utils/singleton.h"
 
 /**
  * @file error_migration.h
@@ -25,8 +26,8 @@
  *          线程安全（读多写少场景使用 shared_mutex）。
  *          本头文件仅含声明，实现见 error_migration.cc。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-28
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::migration {
@@ -114,7 +115,8 @@ namespace error_system::migration {
      * }
      * @endcode
      */
-    class error_migration_registry_t {
+    class error_migration_registry_t : public utils::singleton_t<error_migration_registry_t> {
+        friend class utils::singleton_t<error_migration_registry_t>;
     private:
         /**
          * @brief code identity → 废弃信息
@@ -128,19 +130,9 @@ namespace error_system::migration {
 
         mutable std::shared_mutex mutex_;
 
-        static std::once_flag once_flag_;
-
         error_migration_registry_t() noexcept = default;
 
         ~error_migration_registry_t() noexcept = default;
-
-        error_migration_registry_t(const error_migration_registry_t&) = delete;
-
-        error_migration_registry_t& operator=(const error_migration_registry_t&) = delete;
-
-        error_migration_registry_t(error_migration_registry_t&&) = delete;
-
-        error_migration_registry_t& operator=(error_migration_registry_t&&) = delete;
 
     public:
         /**
@@ -233,11 +225,6 @@ namespace error_system::migration {
          */
         [[nodiscard]] std::vector<error_system::core::code_t> get_deprecated_codes() const noexcept;
 
-        /**
-         * @brief 获取单例实例
-         * @return error_migration_registry_t& 单例引用
-         */
-        static error_migration_registry_t& instance() noexcept;
     };
 
 }  // namespace error_system::migration

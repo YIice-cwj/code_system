@@ -44,6 +44,12 @@ namespace error_system::plugin {
             error_router_plugin_t::instance().unregister_handler_by_domain(domain::system_domain_t::application);
             error_router_plugin_t::instance().unregister_handler_by_code(make_test_code(1, 1, 1));
             error_router_plugin_t::instance().unregister_handler_by_module_group_id(make_test_code(1, 1, 1).get_module_group_id());
+
+            error_router_plugin_t::instance().unregister_code_handler_by_code(core::error_code_t(TEST_CODE_A));
+            error_router_plugin_t::instance().unregister_code_handler_by_code(core::error_code_t(TEST_CODE_B));
+            error_router_plugin_t::instance().unregister_code_handler_by_domain(domain::system_domain_t::application);
+            error_router_plugin_t::instance().unregister_code_handler_by_domain(domain::system_domain_t::database);
+            error_router_plugin_t::instance().unregister_code_handler_by_module_group_id(make_test_code(1, 1, 1).get_module_group_id());
         }
     };
 
@@ -210,6 +216,98 @@ namespace error_system::plugin {
         error_router_plugin_t::instance().on_error(context);
 
         EXPECT_TRUE(domain_handler_called);
+    }
+
+    TEST_F(error_router_plugin_test_t, on_code_no_handler_does_not_crash) {
+        auto code = make_test_code(1, 1, 1);
+        error_router_plugin_t::instance().on_code(code);
+        SUCCEED();
+    }
+
+    TEST_F(error_router_plugin_test_t, on_code_routes_to_code_handler) {
+        core::error_code_t received_code{0};
+        auto code = core::error_code_t(TEST_CODE_A);
+
+        error_router_plugin_t::instance().register_code_handler_by_code(
+            code, [&received_code](core::error_code_t c) { received_code = c; });
+
+        error_router_plugin_t::instance().on_code(code);
+        EXPECT_EQ(received_code.get_code(), code.get_code());
+    }
+
+    TEST_F(error_router_plugin_test_t, on_code_routes_to_domain_handler) {
+        bool handler_called = false;
+        auto code = make_test_code(1, 1, 1);
+
+        error_router_plugin_t::instance().register_code_handler_by_domain(
+            domain::system_domain_t::application, [&handler_called](core::error_code_t) { handler_called = true; });
+
+        error_router_plugin_t::instance().on_code(code);
+        EXPECT_TRUE(handler_called);
+    }
+
+    TEST_F(error_router_plugin_test_t, on_code_priority_code_over_domain) {
+        bool code_handler_called = false;
+        bool domain_handler_called = false;
+        auto code = core::error_code_t(TEST_CODE_A);
+
+        error_router_plugin_t::instance().register_code_handler_by_code(
+            code, [&code_handler_called](core::error_code_t) { code_handler_called = true; });
+        error_router_plugin_t::instance().register_code_handler_by_domain(
+            domain::system_domain_t::application, [&domain_handler_called](core::error_code_t) { domain_handler_called = true; });
+
+        error_router_plugin_t::instance().on_code(code);
+        EXPECT_TRUE(code_handler_called);
+        EXPECT_FALSE(domain_handler_called);
+    }
+
+    TEST_F(error_router_plugin_test_t, on_code_priority_module_group_over_domain) {
+        bool module_handler_called = false;
+        bool domain_handler_called = false;
+        auto code = make_test_code(1, 1, 1);
+
+        error_router_plugin_t::instance().register_code_handler_by_module_group_id(
+            code.get_module_group_id(), [&module_handler_called](core::error_code_t) { module_handler_called = true; });
+        error_router_plugin_t::instance().register_code_handler_by_domain(
+            domain::system_domain_t::application, [&domain_handler_called](core::error_code_t) { domain_handler_called = true; });
+
+        error_router_plugin_t::instance().on_code(code);
+        EXPECT_TRUE(module_handler_called);
+        EXPECT_FALSE(domain_handler_called);
+    }
+
+    TEST_F(error_router_plugin_test_t, on_code_independent_from_on_error_handlers) {
+        bool error_handler_called = false;
+        bool code_handler_called = false;
+        auto code = core::error_code_t(TEST_CODE_A);
+
+        error_router_plugin_t::instance().register_handler_by_code(
+            code, [&error_handler_called](const core::error_context_t&) { error_handler_called = true; });
+        error_router_plugin_t::instance().register_code_handler_by_code(
+            code, [&code_handler_called](core::error_code_t) { code_handler_called = true; });
+
+        error_router_plugin_t::instance().on_code(code);
+        EXPECT_TRUE(code_handler_called);
+        EXPECT_FALSE(error_handler_called);
+
+        error_handler_called = false;
+        code_handler_called = false;
+        core::error_context_t context(core::located_code_t{code}, "test");
+        error_router_plugin_t::instance().on_error(context);
+        EXPECT_TRUE(error_handler_called);
+        EXPECT_FALSE(code_handler_called);
+    }
+
+    TEST_F(error_router_plugin_test_t, unregister_code_handler_removes_it) {
+        bool handler_called = false;
+        auto code = core::error_code_t(TEST_CODE_B);
+
+        error_router_plugin_t::instance().register_code_handler_by_code(
+            code, [&handler_called](core::error_code_t) { handler_called = true; });
+        error_router_plugin_t::instance().unregister_code_handler_by_code(code);
+
+        error_router_plugin_t::instance().on_code(code);
+        EXPECT_FALSE(handler_called);
     }
 
 }  // namespace error_system::plugin

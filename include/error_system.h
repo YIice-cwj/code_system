@@ -22,7 +22,7 @@
 #include "error_system/core/error_builder.h"
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
-#include "error_system/core/error_context_initializer.h"
+#include "error_system/core/i_error_notifier.h"
 #include "error_system/core/serializer/error_context_serializer.h"
 #include "error_system/core/error_exception.h"
 #include "error_system/core/error_formatter.h"

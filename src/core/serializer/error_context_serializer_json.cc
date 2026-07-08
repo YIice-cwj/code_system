@@ -8,8 +8,10 @@
 
 #include "error_system/config/error_config.h"
 #include "error_system/core/registry/error_registry.h"
+#include "error_system/utils/bad_alloc_handler.h"
 #include "error_system/utils/json_lexer.h"
 #include "error_system/utils/json_utils.h"
+#include "error_system/utils/log.h"
 
 using error_system::config::feature_flags_t;
 using error_system::core::detail::append_decimal;
@@ -24,8 +26,8 @@ using json_lexer_t = error_system::utils::detail::json_lexer_t;
  *          反序列化复用 utils::detail::json_lexer_t 进行 token 化解析，避免重复实现
  *          JSON 字符串/数字/关键字/跳过逻辑。
  * @author yiice
- * @version 3.0.0
- * @date 2026-07-01
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
@@ -33,6 +35,8 @@ namespace error_system::core {
 
         /**
          * @brief 追加转义后的 JSON 字符串字面量（含首尾引号）
+         * @param output 目标字符串
+         * @param value 待转义追加的原始字符串
          */
         void append_escaped_json_string(std::string& output, std::string_view value) noexcept {
             try {
@@ -40,16 +44,18 @@ namespace error_system::core {
                 output.append(utils::json_serializer_t::escape_json(std::string(value)));
                 output.push_back('"');
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[error_context_serializer] append_escaped_json_string: std::bad_alloc\n");
+                utils::report_bad_alloc("error_context_serializer", "append_escaped_json_string");
             }
         }
 
         /**
-         * @brief 估算 JSON 序列化结果字符串容量
+         * @brief 估算 JSON 序列化结果字符串容量，避免多次重分配
+         * @param context 错误上下文
+         * @return size_t 预估容量
          */
         size_t estimate_json_capacity(const error_context_t& context) noexcept {
             const runtime_block_t* blk = context.block();
-            const std::string& msg = blk ? blk->message : std::string{};
+            const std::string_view msg = blk ? std::string_view(blk->message) : std::string_view{};
             size_t capacity = 64 + msg.size();
 
             context.for_each_payload([&](const std::string& key, const std::string& value) {
@@ -67,7 +73,7 @@ namespace error_system::core {
 
             if (const error_context_t* cause = context.cause()) {
                 const runtime_block_t* cause_blk = cause->block();
-                const std::string& cause_msg = cause_blk ? cause_blk->message : std::string{};
+                const std::string_view cause_msg = cause_blk ? std::string_view(cause_blk->message) : std::string_view{};
                 capacity += 16 + cause_msg.size();
             }
             return capacity;
@@ -81,7 +87,7 @@ namespace error_system::core {
                                   bool& first_field) noexcept {
             if constexpr (feature_flags_t::LOCATION_ENABLED) {
                 const runtime_block_t* blk = context.block();
-                if (feature_flags_t::is_source_location_enabled() && blk && blk->file_name != nullptr) {
+                if (context.is_location_available()) {
                     if (!first_field) {
                         json.push_back(',');
                     }
@@ -102,6 +108,8 @@ namespace error_system::core {
 
         /**
          * @brief 追加 payload 字段（"payload":{"k":"v",...}）
+         * @param json 目标 JSON 字符串
+         * @param context 错误上下文
          */
         void append_payload_json(std::string& json, const error_context_t& context) {
             if (context.payload_size() == 0) {
@@ -123,6 +131,8 @@ namespace error_system::core {
 
         /**
          * @brief 追加 stack_frames 字段（"stack_frames":["frame1","frame2"]）
+         * @param json 目标 JSON 字符串
+         * @param context 错误上下文
          */
         void append_stacktrace_json(std::string& json, const error_context_t& context) {
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
@@ -145,6 +155,9 @@ namespace error_system::core {
 
         /**
          * @brief 将十进制字符串解析为 uint64_t（用于 JSON 中字符串形式的错误码）
+         * @param text 十进制数字字符串
+         * @param output 输出参数，解析后的整数
+         * @return bool true=成功，false=格式错误或数值越界
          */
         bool parse_uint64(const std::string& text, uint64_t& output) noexcept {
             if (text.empty()) {
@@ -418,7 +431,7 @@ namespace error_system::core {
             json.append("\"code\":");
             append_escaped_json_string(json, std::to_string(context.code_.get_code()));
             json.append(",\"message\":");
-            const std::string& msg = context.block_ ? context.block_->message : std::string{};
+            const std::string_view msg = context.block_ ? std::string_view(context.block_->message) : std::string_view{};
             append_escaped_json_string(json, msg);
             append_payload_json(json, context);
             append_stacktrace_json(json, context);
@@ -429,7 +442,7 @@ namespace error_system::core {
 
             json.push_back('}');
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context_serializer] to_json: std::bad_alloc\n");
+            utils::report_bad_alloc("error_context_serializer", "to_json");
         }
         return json;
     }
@@ -518,6 +531,9 @@ namespace error_system::core {
 
     /**
      * @brief 解析 "code" 字段：字符串形式错误码 → uint64 → error_code_t，并补齐元数据
+     * @param context 目标上下文
+     * @param lexer JSON 词法分析器
+     * @return bool true=成功，false=格式错误
      */
     bool error_context_serializer_t::parse_json_code_field_(
         error_context_t& context, json_lexer_t& lexer) noexcept {
@@ -530,7 +546,7 @@ namespace error_system::core {
             return false;
         }
         context.code_ = error_code_t{raw_code};
-        if (auto info = error_registry_t::instance().get_info(context.code_)) {
+        if (auto info = error_registry_t::instance().get_info_cached(context.code_)) {
             context.ensure_block_();
             if (context.block_) {
                 context.block_->metadata = std::move(info);
@@ -541,6 +557,9 @@ namespace error_system::core {
 
     /**
      * @brief 解析 "message" 字段：字符串 → context.block_->message
+     * @param context 目标上下文
+     * @param lexer JSON 词法分析器
+     * @return bool true=成功，false=格式错误
      */
     bool error_context_serializer_t::parse_json_message_field_(
         error_context_t& context, json_lexer_t& lexer) noexcept {
@@ -613,6 +632,9 @@ namespace error_system::core {
     /**
      * @brief 解析 "payload" 字段：{key:value,...} 对象
      * @details 限制项数 ≤ MAX_PAYLOAD_ITEMS 防止恶意输入
+     * @param context 目标上下文
+     * @param lexer JSON 词法分析器
+     * @return bool true=成功，false=格式错误或超出限制
      */
     bool error_context_serializer_t::parse_json_payload_field_(
         error_context_t& context, json_lexer_t& lexer) noexcept {
@@ -677,7 +699,7 @@ namespace error_system::core {
                 try {
                     frames.push_back(std::move(token.value));
                 } catch (const std::bad_alloc&) {
-                    std::fprintf(stderr, "[error_context_serializer] parse_json_stack_frames_field_: push_back failed\n");
+                    LOG_ERROR("[error_context_serializer] parse_json_stack_frames_field_: push_back failed");
                     return false;
                 }
                 if (++frame_count > MAX_STACK_FRAMES) {
@@ -699,7 +721,7 @@ namespace error_system::core {
                     try {
                         context.block_->resolved_frames = std::make_shared<const std::vector<std::string>>(std::move(frames));
                     } catch (const std::bad_alloc&) {
-                        std::fprintf(stderr, "[error_context_serializer] parse_json_stack_frames_field_: make_shared failed\n");
+                        LOG_ERROR("[error_context_serializer] parse_json_stack_frames_field_: make_shared failed");
                     }
                 }
             }
@@ -726,7 +748,7 @@ namespace error_system::core {
         try {
             context.cause_ = std::make_unique<error_context_t>(std::move(*cause_ctx));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context_serializer] parse_json_cause_field_: make_unique failed\n");
+            LOG_ERROR("[error_context_serializer] parse_json_cause_field_: make_unique failed");
             return false;
         }
         return true;

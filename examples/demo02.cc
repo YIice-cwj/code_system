@@ -2,7 +2,7 @@
  * @file demo02.cc
  * @brief result_t<T> 结果类型 API 全览
  * @details 演示 result_t<T> 的全部公共 API：构造、取值、映射、链式、匹配、上下文传播。
- *          覆盖主模板 result_t<T> 与特化 result_t<void>。每个示例独立成函数。
+ *          覆盖主模板 result_t<T>、特化 result_t<void> 与 Lean 模式 result_t<T, true>。
  */
 
 #include <iostream>
@@ -372,6 +372,26 @@ void demo_void_or_else() {
     std::cout << "  恢复后: " << void_recover.is_success() << std::endl;
 }
 
+/** @brief 13.1 Lean 模式：result_t<T, true> 仅存储错误码（24 字节） */
+void demo_lean_construct() {
+    section("13.1 Lean 模式：result_t<T, true> 仅存储错误码");
+    auto r = result_t<int, true>::make_error(biz::trade_errors::ERR_ORDER_NOT_FOUND, "Lean 错误");
+    std::cout << "  is_error=" << r.is_error() << std::endl;
+    std::cout << "  error_code=" << r.error_code().get_code() << std::endl;
+    std::cout << "  sizeof(result_t<int, true>)=" << sizeof(result_t<int, true>) << std::endl;
+    std::cout << "  sizeof(result_t<int, false>)=" << sizeof(result_t<int, false>) << std::endl;
+}
+
+/** @brief 13.2 Lean 模式：value_or / map 链式操作 */
+void demo_lean_chain() {
+    section("13.2 Lean 模式：value_or / map 链式操作");
+    auto r = result_t<int, true>::make_error(biz::trade_errors::ERR_ORDER_NOT_FOUND, "Lean");
+    std::cout << "  value_or(-1)=" << r.value_or(-1) << std::endl;
+    auto mapped = r.map([](int v) { return v * 2; });
+    std::cout << "  map 后 is_error=" << mapped.is_error()
+              << " value_or(0)=" << mapped.value_or(0) << std::endl;
+}
+
 }  // namespace
 
 int main() {
@@ -424,6 +444,9 @@ int main() {
     demo_void_and_then();
     demo_void_context();
     demo_void_or_else();
+
+    demo_lean_construct();
+    demo_lean_chain();
 
     return 0;
 }

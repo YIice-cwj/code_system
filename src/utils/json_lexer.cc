@@ -6,14 +6,17 @@
  * @details 实现 JSON 字符串的词法分析，支持字符串（含 \uXXXX 转义与 UTF-16 代理对）、
  *          标点符号（{}[],:）、空白跳过等 token 识别，遵循 RFC 8259 §7。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-28
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 
 #include <cstdint>
 #include <new>
 #include <optional>
+
+#include "error_system/utils/bad_alloc_handler.h"
+#include "error_system/utils/log.h"
 
 namespace error_system::utils::detail {
 
@@ -46,7 +49,7 @@ namespace error_system::utils::detail {
                     output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
                 }
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[json_lexer] append_utf8: bad_alloc\n");
+                LOG_ERROR("[json_lexer] append_utf8: bad_alloc");
             }
         }
 
@@ -166,7 +169,7 @@ namespace error_system::utils::detail {
             }
             return {token_type_t::invalid, ""};
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[json_lexer] parse_string_: string append failed (bad_alloc)\n");
+            LOG_ERROR("[json_lexer] parse_string_: string append failed (bad_alloc)");
             return {token_type_t::invalid, ""};
         }
     }
@@ -215,7 +218,7 @@ namespace error_system::utils::detail {
         try {
             return {token_type_t::number, std::string(json_str_.substr(start, pos_ - start))};
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[json_lexer] parse_number_: std::bad_alloc\n");
+            utils::report_bad_alloc("json_lexer", "parse_number_");
             return {token_type_t::invalid, {}};
         }
     }
@@ -238,7 +241,7 @@ namespace error_system::utils::detail {
         try {
             return {type, std::string(keyword)};
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[json_lexer] parse_keyword_: std::bad_alloc\n");
+            utils::report_bad_alloc("json_lexer", "parse_keyword_");
             return {token_type_t::invalid, {}};
         }
     }
@@ -252,7 +255,7 @@ namespace error_system::utils::detail {
         try {
             json_str_ = std::string(json_text);
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[json_lexer] constructor: std::bad_alloc\n");
+            utils::report_bad_alloc("json_lexer", "constructor");
         }
     }
 
@@ -314,7 +317,7 @@ namespace error_system::utils::detail {
 
             return {token_type_t::invalid, {}};
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[json_lexer] next: std::bad_alloc\n");
+            utils::report_bad_alloc("json_lexer", "next");
             return {token_type_t::invalid, {}};
         }
     }

@@ -1,10 +1,11 @@
 #include "error_system/migration/error_migration.h"
 
-#include <cassert>
 #include <cstdio>
 #include <mutex>
 #include <unordered_set>
 #include <utility>
+
+#include "error_system/utils/bad_alloc_handler.h"
 
 /**
  * @file error_migration.cc
@@ -14,8 +15,8 @@
  *          读取方法（get_deprecation_info / is_deprecated / migrate / migrate_recursive / count / list）使用 shared_lock，
  *          适配读多写少的运行时场景。bad_alloc 等异常在内部 try-catch 捕获并记录到 stderr，保持 noexcept 安全。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-28
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::migration {
@@ -26,18 +27,6 @@ namespace error_system::migration {
 
     using error_system::core::code_t;
     using error_system::core::error_code_t;
-
-    std::once_flag error_migration_registry_t::once_flag_;
-
-    error_migration_registry_t& error_migration_registry_t::instance() noexcept {
-        static error_migration_registry_t* instance_ptr = nullptr;
-        std::call_once(once_flag_, [] {
-            static error_migration_registry_t instance;
-            instance_ptr = &instance;
-        });
-        assert(instance_ptr != nullptr);
-        return *instance_ptr;
-    }
 
     void error_migration_registry_t::mark_deprecated(error_code_t code,
                                                       const deprecation_meta_t& meta) noexcept {
@@ -55,7 +44,7 @@ namespace error_system::migration {
                 migrations_[code.get_identity_code()] = meta.replacement->get_identity_code();
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_migration] mark_deprecated: std::bad_alloc\n");
+            utils::report_bad_alloc("error_migration", "mark_deprecated");
         }
     }
 
@@ -64,7 +53,7 @@ namespace error_system::migration {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             migrations_[old_code.get_identity_code()] = new_code.get_identity_code();
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_migration] register_migration: std::bad_alloc\n");
+            utils::report_bad_alloc("error_migration", "register_migration");
         }
     }
 
@@ -77,7 +66,7 @@ namespace error_system::migration {
         try {
             return it->second;
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_migration] get_deprecation_info: std::bad_alloc\n");
+            utils::report_bad_alloc("error_migration", "get_deprecation_info");
             return std::nullopt;
         }
     }
@@ -113,7 +102,7 @@ namespace error_system::migration {
                 current = it->second;
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_migration] migrate_recursive: std::bad_alloc\n");
+            utils::report_bad_alloc("error_migration", "migrate_recursive");
         }
         return error_code_t{current};
     }
@@ -166,7 +155,7 @@ namespace error_system::migration {
                 codes.push_back(identity);
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_migration] get_deprecated_codes: std::bad_alloc\n");
+            utils::report_bad_alloc("error_migration", "get_deprecated_codes");
             codes.clear();
         }
         return codes;

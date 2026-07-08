@@ -16,11 +16,14 @@
  * @brief 错误指标统计插件
  * @details 继承 i_error_plugin_t，按错误码/级别/子系统维度统计错误次数，
  *          提供 snapshot() 导出快照与 reset() 重置统计。
- *          线程安全：内部用 std::mutex 保护，on_error()/snapshot()/reset() 可并发调用。
+ *          线程安全：内部用 std::mutex 保护，on_error()/on_code()/snapshot()/reset() 可并发调用。
  *          适用场景：错误率监控、热点错误码定位、子系统健康度评估。
+ *
+ *          Lean 路径（on_code）：三维度信息均可从 error_code_t 直接获取，
+ *          与 on_error 共享同一计数路径，统计结果无差别。
  * @author yiice
- * @version 3.0.0
- * @date 2026-07-04
+ * @version 4.4.0
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::plugin {
@@ -60,6 +63,13 @@ namespace error_system::plugin {
         std::unordered_map<uint64_t, uint64_t> code_counts_;
         std::unordered_map<uint16_t, uint64_t> subsystem_counts_;
 
+        /**
+         * @brief 按错误码三维度计数的内部实现
+         * @details on_error 与 on_code 共享此路径，避免重复逻辑（DRY）。
+         * @param code 错误码
+         */
+        void count_code_(core::error_code_t code) noexcept;
+
     public:
         /**
          * @brief 构造指标插件
@@ -82,6 +92,14 @@ namespace error_system::plugin {
          * @param context 错误上下文
          */
         void on_error(const core::error_context_t& context) noexcept override;
+
+        /**
+         * @brief 错误码通知回调（Lean 路径，更新计数）
+         * @details 三维度信息（code/level/subsystem）均可从 error_code_t 直接获取，
+         *          与 on_error 共享同一计数路径。
+         * @param code 错误码
+         */
+        void on_code(core::error_code_t code) noexcept override;
 
         /**
          * @brief 导出当前统计快照

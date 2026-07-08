@@ -94,7 +94,7 @@ namespace error_system::utils {
             size_t cursor = 0;
 
             /**
-             * @brief 追加字面量大括号
+             * @brief 追加格式字符串中的字面量文本（非占位符部分）
              * @details 遍历格式字符串，将非占位符部分追加到结果中
              *          支持 {{ 和 }} 转义
              */

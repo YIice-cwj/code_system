@@ -1,6 +1,16 @@
 #pragma once
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_context.h"
+#include "error_system/utils/log.h"
+
+/**
+ * @file error_context.inl
+ * @brief error_context_t 模板实现
+ * @details error_context_t 的模板成员函数实现，包括 payload 管理、
+ *          构造函数格式化、with 方法多类型支持等。
+ * @version 4.3.1
+ * @date 2026-07-08
+ */
 
 namespace error_system::core {
 
@@ -52,7 +62,7 @@ namespace error_system::core {
             }
             block_->payload_count = 0;
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context] insert_or_update_payload_: std::bad_alloc\n");
+            LOG_ERROR("[error_context] insert_or_update_payload_: std::bad_alloc");
         }
         return *this;
     }
@@ -63,8 +73,9 @@ namespace error_system::core {
      *          1. 分配 runtime_block_t 并格式化消息
      *          2. 通过 located_code_t 捕获源位置（调用者真实位置）
      *          3. 从注册表查询共享只读 metadata（零深拷贝）
-     *          4. 若为错误码：校验错误码、抓取堆栈、通知插件
-     *          若错误码 sign=0（成功），则跳过步骤 4
+     *          4. 若为错误码：校验错误码、抓取堆栈、填充源位置
+     *          若错误码 sign=0（成功），则跳过步骤 4。
+     *          通知插件由 result_t::make_error 工厂显式触发，构造函数不通知。
      * @tparam Args 格式化参数类型包
      * @param located_code 携带源位置的错误码（支持从 error_code_t 隐式构造）
      * @param message_format 错误信息格式化字符串（支持 {} 占位符）
@@ -78,12 +89,12 @@ namespace error_system::core {
             try {
                 block_->message = utils::string_format_t::format(std::move(message_format), std::forward<Args>(args)...);
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[error_context] constructor: message format failed (bad_alloc)\n");
+                LOG_ERROR("[error_context] constructor: message format failed (bad_alloc)");
             }
             try {
                 block_->metadata = error_registry_t::instance().get_info_cached(located_code.code);
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[error_context] constructor: metadata lookup failed\n");
+                LOG_ERROR("[error_context] constructor: metadata lookup failed");
             }
             if constexpr (error_system::config::feature_flags_t::LOCATION_ENABLED) {
                 block_->source_location = located_code.location;
@@ -92,7 +103,12 @@ namespace error_system::core {
         if (is_success()) {
             return;
         }
-        error_context_initializer_t::initialize(*this);
+        fill_validation_fields_();
+        fill_stacktrace_();
+        if constexpr (error_system::config::feature_flags_t::LOCATION_ENABLED) {
+            const bool short_filename_enabled = error_system::config::feature_flags_t::is_short_filename_enabled();
+            fill_source_location_(short_filename_enabled);
+        }
     }
 
     /**
@@ -118,7 +134,7 @@ namespace error_system::core {
                 return with(key, std::string(value));
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context] with(const string&, T): std::bad_alloc\n");
+            LOG_ERROR("[error_context] with(const string&, T): std::bad_alloc");
             return *this;
         }
     }
@@ -134,13 +150,13 @@ namespace error_system::core {
     template <typename T>
     inline error_context_t& error_context_t::with(const char* key, T value) noexcept {
         if (key == nullptr) {
-            std::fprintf(stderr, "[error_context] with(const char*, T): key is nullptr\n");
+            LOG_WARN("[error_context] with(const char*, T): key is nullptr");
             return *this;
         }
         try {
             return with(std::string(key), std::move(value));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context] with(const char*, T): std::bad_alloc\n");
+            LOG_ERROR("[error_context] with(const char*, T): std::bad_alloc");
             return *this;
         }
     }
@@ -158,7 +174,7 @@ namespace error_system::core {
         try {
             return with(std::string(key), std::move(value));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context] with(string_view, T): std::bad_alloc\n");
+            LOG_ERROR("[error_context] with(string_view, T): std::bad_alloc");
             return *this;
         }
     }

@@ -433,4 +433,68 @@ namespace error_system::core {
             std::runtime_error);
     }
 
+    namespace {
+        struct non_formattable_t {};
+    }
+
+    TEST_F(result_test_t, to_string_success_with_arithmetic_value) {
+        result_t<int> result(42);
+        EXPECT_EQ(result.to_string(), "[OK: 42]");
+    }
+
+    TEST_F(result_test_t, to_string_success_with_string_value) {
+        result_t<std::string> result(std::string("hello"));
+        EXPECT_EQ(result.to_string(), "[OK: hello]");
+    }
+
+    TEST_F(result_test_t, to_string_success_with_non_formattable_value) {
+        result_t<non_formattable_t> result(non_formattable_t{});
+        EXPECT_EQ(result.to_string(), "[OK: <value>]");
+    }
+
+    TEST_F(result_test_t, to_string_error_full_mode_includes_message) {
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none,
+                                 subsystem_id_t{0}, module_id_t{0}, error_number_t{201});
+        error_registry_t::instance().register_error(code, "ERR_TS_FULL", "full mode test");
+        auto result = result_t<int>::make_error(code, "failure detail");
+        const auto str = result.to_string();
+        EXPECT_NE(str.find("[ERR:"), std::string::npos);
+        EXPECT_NE(str.find("failure detail"), std::string::npos);
+    }
+
+    TEST_F(result_test_t, to_string_error_lean_mode_includes_raw_code) {
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none,
+                                 subsystem_id_t{0}, module_id_t{0}, error_number_t{202});
+        error_registry_t::instance().register_error(code, "ERR_TS_LEAN", "lean mode test");
+        auto result = result_t<int, true>::make_error(code, "ignored in lean");
+        const auto str = result.to_string();
+        EXPECT_NE(str.find("[ERR:"), std::string::npos);
+        EXPECT_NE(str.find(std::to_string(code.get_code())), std::string::npos);
+    }
+
+    TEST_F(result_test_t, void_to_string_success) {
+        result_t<void> result;
+        EXPECT_EQ(result.to_string(), "[OK]");
+    }
+
+    TEST_F(result_test_t, void_to_string_error_full_mode) {
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none,
+                                 subsystem_id_t{0}, module_id_t{0}, error_number_t{203});
+        error_registry_t::instance().register_error(code, "ERR_TS_VOID_FULL", "void full");
+        auto result = result_t<void>::make_error(code, "void failure");
+        const auto str = result.to_string();
+        EXPECT_NE(str.find("[ERR:"), std::string::npos);
+        EXPECT_NE(str.find("void failure"), std::string::npos);
+    }
+
+    TEST_F(result_test_t, void_to_string_error_lean_mode) {
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none,
+                                 subsystem_id_t{0}, module_id_t{0}, error_number_t{204});
+        error_registry_t::instance().register_error(code, "ERR_TS_VOID_LEAN", "void lean");
+        auto result = result_t<void, true>::make_error(code, "ignored");
+        const auto str = result.to_string();
+        EXPECT_NE(str.find("[ERR:"), std::string::npos);
+        EXPECT_NE(str.find(std::to_string(code.get_code())), std::string::npos);
+    }
+
 }  // namespace error_system::core

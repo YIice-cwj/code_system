@@ -43,6 +43,10 @@ public:
     void on_error(const error_context_t& context) noexcept override {
         std::cerr << "[LOG] " << context.get_message() << std::endl;
     }
+
+    void on_code(error_code_t code) noexcept override {
+        std::cerr << "[LOG] [ERR: " << code.get_code() << "]" << std::endl;
+    }
 };
 
 /** @brief 统计插件：用 atomic 计数各错误码出现次数 */
@@ -59,6 +63,13 @@ public:
     void on_error(const error_context_t& context) noexcept override {
         try {
             ++counters_[context.get_code().get_code()];
+        } catch (const std::bad_alloc&) {
+        }
+    }
+
+    void on_code(error_code_t code) noexcept override {
+        try {
+            ++counters_[code.get_code()];
         } catch (const std::bad_alloc&) {
         }
     }
@@ -148,6 +159,16 @@ void demo_notify_info_level() {
     (void)ctx_info;
 }
 
+/** @brief 3.3 Lean 路径：result_t<T, true> 触发 on_code 而非 on_error */
+void demo_lean_on_code() {
+    section("3.3 Lean 路径：result_t<T, true> 触发 on_code");
+    auto& registry = plugin_registry_t::instance();
+    registry.clear();
+    registry.register_plugin_ref(g_logger);
+    auto r = result_t<int, true>::make_error(biz::trade_errors::ERR_ORDER_NOT_FOUND, "Lean 错误");
+    std::cout << "  is_error=" << r.is_error() << " (上方应出现 [LOG] [ERR: ...])" << std::endl;
+}
+
 /** @brief 4.1 unregister_plugin 按名称注销 */
 void demo_unregister_plugin() {
     section("4.1 unregister_plugin 按名称注销");
@@ -208,6 +229,22 @@ void demo_router_unregister() {
     registry.unregister_plugin("router");
     error_router_plugin_t::instance().unregister_handler_by_domain(system_domain_t::middleware);
     (void)ctx_unroute;
+}
+
+/** @brief 5.4 error_router_plugin_t Lean 路径：register_code_handler_by_code */
+void demo_router_code_handler() {
+    section("5.4 error_router_plugin_t Lean 路径：register_code_handler_by_code");
+    auto& registry = plugin_registry_t::instance();
+    registry.clear();
+    error_router_plugin_t::instance().register_code_handler_by_code(
+        biz::trade_errors::ERR_ORDER_NOT_FOUND,
+        [](error_code_t code) {
+            std::cout << "  [Lean 路由] code=" << code.get_code() << std::endl;
+        });
+    registry.register_plugin_ref(error_router_plugin_t::instance());
+    auto r = result_t<int, true>::make_error(biz::trade_errors::ERR_ORDER_NOT_FOUND, "Lean 路由");
+    error_router_plugin_t::instance().unregister_code_handler_by_code(biz::trade_errors::ERR_ORDER_NOT_FOUND);
+    std::cout << "  is_error=" << r.is_error() << " (上方应出现 [Lean 路由] 输出)" << std::endl;
 }
 
 /** @brief 6.1 sync 同步模式（默认） */
@@ -395,6 +432,7 @@ int main() {
 
     demo_notify_error_level();
     demo_notify_info_level();
+    demo_lean_on_code();
 
     demo_unregister_plugin();
     demo_clear();
@@ -402,6 +440,7 @@ int main() {
     demo_router_by_code();
     demo_router_by_domain();
     demo_router_unregister();
+    demo_router_code_handler();
 
     demo_notify_sync();
     demo_notify_async();

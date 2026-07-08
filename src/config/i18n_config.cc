@@ -14,6 +14,10 @@
  */
 namespace error_system::config {
 
+    /**
+     * @brief 获取 locale parent 静态存储（仅初始化一次）
+     * @return 指向 locale parent 数组的指针
+     */
     std::atomic<uint8_t>* i18n_config_t::get_locale_parent_storage_() noexcept {
         static std::atomic<uint8_t> parents[error_system::i18n::LOCALE_COUNT];
         static std::once_flag init_flag;
@@ -25,6 +29,9 @@ namespace error_system::config {
         return parents;
     }
 
+    /**
+     * @brief 重置所有 locale 的 parent 为默认值
+     */
     void i18n_config_t::reset_all_locale_parents() noexcept {
         for (size_t i = 0; i < error_system::i18n::LOCALE_COUNT; ++i) {
             get_locale_parent_storage_()[i].store(

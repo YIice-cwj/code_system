@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cstring>
+#include <memory>
 
 #include "error_system/core/error_code.h"
 
@@ -31,8 +32,8 @@
  *
  *          本头文件为可选包含，不污染 core 头文件依赖关系。
  * @author yiice
- * @version 3.0.0
- * @date 2026-07-04
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::abi {
@@ -52,11 +53,13 @@ namespace error_system::abi {
      * @param raw_code 64 位原始错误码值
      * @return handle_t 句柄指针，调用方必须用 free_handle 释放；分配失败返回 nullptr
      *
-     * 实现思路：堆分配 error_code_t 并返回指针。分配失败返回 nullptr。
+     * 实现思路：通过 make_unique 分配并用 RAII 管理所有权，release() 将裸指针
+     *          所有权移交给 C 调用方；分配失败返回 nullptr。
      */
     inline handle_t create_handle(code_t raw_code) noexcept {
         try {
-            return new error_code_t{raw_code};
+            auto holder = std::make_unique<error_code_t>(raw_code);
+            return holder.release();
         } catch (...) {
             return nullptr;
         }
@@ -67,7 +70,7 @@ namespace error_system::abi {
      * @param handle 待释放句柄，可为 nullptr（安全空操作）
      */
     inline void free_handle(handle_t handle) noexcept {
-        delete handle;
+        std::unique_ptr<const error_code_t>{handle};
     }
 
     /**
@@ -214,18 +217,31 @@ namespace error_system::abi {
 extern "C" {
 #endif
 
+/** @brief C API：委托到 error_system::abi::create_handle */
 const void* error_system_code_create(uint64_t raw_code);
+/** @brief C API：委托到 error_system::abi::free_handle */
 void error_system_code_handle_free(const void* handle);
+/** @brief C API：委托到 error_system::abi::get_raw */
 uint64_t error_system_code_raw(const void* handle);
+/** @brief C API：委托到 error_system::abi::is_error */
 int error_system_code_is_error(const void* handle);
+/** @brief C API：委托到 error_system::abi::is_success */
 int error_system_code_is_success(const void* handle);
+/** @brief C API：委托到 error_system::abi::get_level */
 uint8_t error_system_code_level(const void* handle);
+/** @brief C API：委托到 error_system::abi::get_system */
 uint8_t error_system_code_system(const void* handle);
+/** @brief C API：委托到 error_system::abi::get_subsystem */
 uint16_t error_system_code_subsystem(const void* handle);
+/** @brief C API：委托到 error_system::abi::get_module */
 uint16_t error_system_code_module(const void* handle);
+/** @brief C API：委托到 error_system::abi::get_number */
 uint16_t error_system_code_number(const void* handle);
+/** @brief C API：委托到 error_system::abi::is_retryable */
 int error_system_code_is_retryable(const void* handle);
+/** @brief C API：委托到 error_system::abi::is_transient */
 int error_system_code_is_transient(const void* handle);
+/** @brief C API：委托到 error_system::abi::get_message */
 int error_system_code_message(const void* handle, char* buf, int buf_size);
 
 #ifdef __cplusplus

@@ -17,6 +17,9 @@
 #include "error_system/core/registry/duplicate_policy.h"
 #include "error_system/core/error_builder.h"
 // IWYU pragma: end_exports
+#include "error_system/utils/singleton.h"
+
+#include "error_system/config/feature_flags.h"
 
 /**
  * @file error_registry.h
@@ -25,8 +28,8 @@
  *          重复处理策略委托给 duplicate_policy_handler_t。
  *          子系统/模块名称映射请使用 i18n::subsystem_module_catalog_t。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-29
+ * @version 3.1.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
@@ -37,7 +40,8 @@ namespace error_system::core {
      *          支持 register/unregister/find 四类索引查询。
      *          线程本地缓存（thread_local 环形缓冲）用于热路径优化。
      */
-    class error_registry_t {
+    class error_registry_t : public utils::singleton_t<error_registry_t> {
+        friend class utils::singleton_t<error_registry_t>;
     private:
         std::unordered_map<code_t, error_metadata_t> primary_index_;
         std::unordered_map<std::string, code_t> name_index_;
@@ -46,7 +50,6 @@ namespace error_system::core {
         mutable std::shared_mutex index_mutex_;
         duplicate_policy_handler_t duplicate_handler_{};
 
-        static std::once_flag once_flag_;
         /**
          * @brief 注册表变更纪元（epoch）
          * @details 任何注册/注销变更均 fetch_add+1（release 序），用于驱动线程本地
@@ -100,16 +103,6 @@ namespace error_system::core {
         error_registry_t() noexcept = default;
 
     public:
-        error_registry_t(const error_registry_t&) = delete;
-        error_registry_t& operator=(const error_registry_t&) = delete;
-        error_registry_t(error_registry_t&&) = delete;
-        error_registry_t& operator=(error_registry_t&&) = delete;
-
-        /**
-         * @brief 获取错误码注册器实例（单例）
-         */
-        static error_registry_t& instance() noexcept;
-
         /**
          * @brief 注册错误码
          */
@@ -151,17 +144,19 @@ namespace error_system::core {
 
         /**
          * @brief 设置重复处理策略
-         * @note 转发至 duplicate_handler_
+         * @details 转发至 config::feature_flags_t（全局配置）并同步至 duplicate_handler_
          */
         void set_duplicate_policy(duplicate_policy_t policy) noexcept {
+            config::feature_flags_t::set_duplicate_policy(policy);
             duplicate_handler_.set_policy(policy);
         }
 
         /**
          * @brief 获取当前重复处理策略
+         * @return 当前重复处理策略
          */
         duplicate_policy_t get_duplicate_policy() const noexcept {
-            return duplicate_handler_.get_policy();
+            return config::feature_flags_t::get_duplicate_policy();
         }
 
         /**
@@ -174,6 +169,7 @@ namespace error_system::core {
 
         /**
          * @brief 获取当前重复注册警告回调
+         * @return 当前回调的拷贝（线程安全）
          */
         duplicate_warn_callback_t get_duplicate_warn_callback() const noexcept {
             return duplicate_handler_.get_warn_callback();
@@ -181,6 +177,7 @@ namespace error_system::core {
 
         /**
          * @brief 检查错误码是否已注册
+         * @return 已注册返回 true，否则 false
          */
         [[nodiscard]] bool is_registered(const error_code_t code) const noexcept;
 
@@ -204,11 +201,14 @@ namespace error_system::core {
 
         /**
          * @brief 通过错误码名称查找错误码
+         * @param name 错误码宏名称
+         * @return 找到返回错误码，未找到返回 std::nullopt
          */
         [[nodiscard]] std::optional<error_code_t> find_by_name(const std::string_view name) const noexcept;
 
         /**
          * @brief 获取当前注册表纪元（用于缓存失效检测）
+         * @return 当前纪元计数值
          */
         [[nodiscard]] uint64_t get_epoch() const noexcept {
             return epoch_counter_.load(std::memory_order_acquire);

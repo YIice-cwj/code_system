@@ -39,7 +39,7 @@ namespace error_system::domain {
         "none", "system", "middleware", "database", "application", "third_party"};
 
     /**
-     * @brief 系统域整数
+     * @brief 将系统域枚举转换为整数
      * @details 用于将系统域转换为系统域整数
      * @param domain 系统域
      * @return uint8_t 系统域整数
@@ -47,7 +47,7 @@ namespace error_system::domain {
     [[nodiscard]] inline constexpr uint8_t to_int(system_domain_t domain) noexcept;
 
     /**
-     * @brief 系统域字符串
+     * @brief 将系统域枚举转换为字符串
      * @details 用于将系统域转换为系统域字符串
      * @param domain 系统域
      * @return const char* 系统域字符串

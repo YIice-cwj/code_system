@@ -22,26 +22,26 @@ namespace error_system::utils::detail {
     class json_lexer_t {
     public:
         /**
-     * @brief JSON词法分析器的token类型枚举
-     * @details
-     * 定义JSON词法分析器的token类型枚举，包括字符串、数字、关键字、
-     * 冒号、逗号、左右大括号、左右中括号、文件结束标识和无效字符或错误。
-     */
-    enum class token_type_t {
-        string,
-        number,
-        true_literal,
-        false_literal,
-        null_literal,
-        colon,
-        comma,
-        left_brace,
-        right_brace,
-        left_bracket,
-        right_bracket,
-        eof,
-        invalid
-    };
+         * @brief JSON词法分析器的token类型枚举
+         * @details
+         * 定义JSON词法分析器的token类型枚举，包括字符串、数字、关键字、
+         * 冒号、逗号、左右大括号、左右中括号、文件结束标识和无效字符或错误。
+         */
+        enum class token_type_t {
+            string,
+            number,
+            true_literal,
+            false_literal,
+            null_literal,
+            colon,
+            comma,
+            left_brace,
+            right_brace,
+            left_bracket,
+            right_bracket,
+            eof,
+            invalid
+        };
 
         /**
          * @brief JSON词法分析器的token结构体

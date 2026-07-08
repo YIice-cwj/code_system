@@ -247,6 +247,27 @@ BENCHMARK_DEFINE_F(result_lean_fixture_t, and_then_success_lean)(benchmark::Stat
     and_then_success<int, true>(state);
 }
 
+BENCHMARK_REGISTER_F(result_lean_fixture_t, make_success_full_int)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, make_success_lean_int)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, make_success_full_string)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, make_success_lean_string)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, make_error_code_msg_full)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, make_error_code_msg_lean)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, make_error_from_ctx_full)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, make_error_from_ctx_lean)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, access_value_full)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, access_value_lean)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, access_error_code_full)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, access_error_code_lean)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, is_success_full)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, is_success_lean)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, map_success_full)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, map_success_lean)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, map_error_full)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, map_error_lean)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, and_then_success_full)->MinTime(0.5);
+BENCHMARK_REGISTER_F(result_lean_fixture_t, and_then_success_lean)->MinTime(0.5);
+
 static void memory_footprint_sizes(benchmark::State& state) {
     std::size_t full_int = sizeof(result_t<int, false>);
     std::size_t lean_int = sizeof(result_t<int, true>);

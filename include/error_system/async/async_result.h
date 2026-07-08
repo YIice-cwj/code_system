@@ -39,13 +39,26 @@ namespace error_system::async {
      */
     template <typename ResultType>
     struct result_traits;
+    /**
+     * @brief result_t<T, Lean> 的特化版本
+     * @tparam T 结果值类型
+     * @tparam Lean 精简模式标志
+     */
     template <typename T, bool Lean>
     struct result_traits<core::result_t<T, Lean>> {
         using value_type = T;
         static constexpr bool lean = Lean;
     };
+    /**
+     * @brief 从 result_t 类型提取值类型
+     * @tparam ResultType result_t<T, Lean> 类型
+     */
     template <typename ResultType>
     using result_value_t = typename result_traits<std::decay_t<ResultType>>::value_type;
+    /**
+     * @brief 从 result_t 类型提取 Lean 标志
+     * @tparam ResultType result_t<T, Lean> 类型
+     */
     template <typename ResultType>
     constexpr bool result_lean_v = result_traits<std::decay_t<ResultType>>::lean;
 

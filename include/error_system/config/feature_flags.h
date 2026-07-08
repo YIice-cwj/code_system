@@ -1,19 +1,21 @@
 #pragma once
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 
 #include "error_system/core/error_level.h"
+#include "error_system/core/registry/duplicate_policy.h"
 
 /**
  * @file feature_flags.h
- * @brief 特性开关配置类
- * @details 从 error_config_t 拆分而来，单一职责：管理错误系统的编译期特性开关与
- *          运行时布尔标志位（堆栈追踪、验证、源位置、文件名缩写、通知模式）。
- *          文本/i18n 输出开关已统一迁移到 i18n_config_t::set_enable_i18n。
+ * @brief 特性开关与运行时配置类
+ * @details 单一职责：管理错误系统的编译期特性开关与运行时配置项。
+ *          涵盖：编译期特性开关（堆栈/验证/源位置）、运行时布尔标志、
+ *          通知模式与通知通道容量、注册表重复处理策略。
  *          编译期常量通过 if constexpr 消除运行时开销，由编译器死代码消除未启用分支。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-27
+ * @version 4.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::config {
@@ -27,7 +29,8 @@ namespace error_system::config {
     public:
         /**
          * @brief 插件通知模式
-         * @details sync：同步通知（默认），error_context_t 构造时立即调用所有插件；
+         * @details sync：同步通知（默认），由 result_t::make_error 经 i_error_notifier_t::try_notify()
+         *          立即分发到所有插件；
          *          async_queue：异步模式，通知推入内部队列，由工作线程消费；
          *          sync_deferred：同步延迟模式，通知累积到线程本地缓冲，
          *                         由调用方显式调用 flush_deferred_notifications() 触发批量通知
@@ -92,6 +95,27 @@ namespace error_system::config {
          * @return std::atomic<notify_mode_t>& 通知模式存储引用
          */
         static std::atomic<notify_mode_t>& get_notify_mode_() noexcept;
+
+        /**
+         * @brief 异步通知队列最大容量存储
+         * @details async_queue 模式下队列上限，0 表示无限制
+         * @return std::atomic<size_t>& 队列容量存储引用
+         */
+        static std::atomic<size_t>& get_async_queue_max_size_() noexcept;
+
+        /**
+         * @brief 延迟通知缓冲最大容量存储
+         * @details sync_deferred 模式下线程本地缓冲上限，0 表示无限制
+         * @return std::atomic<size_t>& 缓冲容量存储引用
+         */
+        static std::atomic<size_t>& get_deferred_buffer_max_size_() noexcept;
+
+        /**
+         * @brief 注册表重复处理策略存储
+         * @details 使用 std::atomic<uint8_t> 存储 duplicate_policy_t 枚举值
+         * @return std::atomic<uint8_t>& 策略存储引用
+         */
+        static std::atomic<uint8_t>& get_duplicate_policy_() noexcept;
 
     public:
         feature_flags_t() = delete;
@@ -172,6 +196,44 @@ namespace error_system::config {
          * @return notify_mode_t 当前通知模式
          */
         [[nodiscard]] static notify_mode_t get_notify_mode() noexcept;
+
+        /**
+         * @brief 设置异步通知队列最大容量
+         * @details async_queue 模式下队列达到上限时新通知被丢弃，0 表示无限制
+         * @param max_size 队列最大容量
+         */
+        static void set_async_queue_max_size(size_t max_size) noexcept;
+
+        /**
+         * @brief 获取异步通知队列最大容量
+         * @return size_t 队列最大容量，0 表示无限制
+         */
+        [[nodiscard]] static size_t get_async_queue_max_size() noexcept;
+
+        /**
+         * @brief 设置延迟通知缓冲最大容量
+         * @details sync_deferred 模式下线程本地缓冲上限，0 表示无限制
+         * @param max_size 缓冲最大容量
+         */
+        static void set_deferred_buffer_max_size(size_t max_size) noexcept;
+
+        /**
+         * @brief 获取延迟通知缓冲最大容量
+         * @return size_t 缓冲最大容量，0 表示无限制
+         */
+        [[nodiscard]] static size_t get_deferred_buffer_max_size() noexcept;
+
+        /**
+         * @brief 设置注册表重复处理策略
+         * @param policy 重复处理策略
+         */
+        static void set_duplicate_policy(core::duplicate_policy_t policy) noexcept;
+
+        /**
+         * @brief 获取注册表重复处理策略
+         * @return duplicate_policy_t 当前策略
+         */
+        [[nodiscard]] static core::duplicate_policy_t get_duplicate_policy() noexcept;
     };
 
     inline std::atomic<bool>& feature_flags_t::get_flag_stacktrace_() noexcept {
@@ -197,6 +259,21 @@ namespace error_system::config {
     inline std::atomic<feature_flags_t::notify_mode_t>& feature_flags_t::get_notify_mode_() noexcept {
         static std::atomic<feature_flags_t::notify_mode_t> mode{feature_flags_t::notify_mode_t::sync};
         return mode;
+    }
+
+    inline std::atomic<size_t>& feature_flags_t::get_async_queue_max_size_() noexcept {
+        static std::atomic<size_t> max_size{0};
+        return max_size;
+    }
+
+    inline std::atomic<size_t>& feature_flags_t::get_deferred_buffer_max_size_() noexcept {
+        static std::atomic<size_t> max_size{1024};
+        return max_size;
+    }
+
+    inline std::atomic<uint8_t>& feature_flags_t::get_duplicate_policy_() noexcept {
+        static std::atomic<uint8_t> policy{static_cast<uint8_t>(core::duplicate_policy_t::skip)};
+        return policy;
     }
 
     inline void feature_flags_t::set_enable_stacktrace(bool enable) noexcept {
@@ -261,6 +338,30 @@ namespace error_system::config {
 
     inline feature_flags_t::notify_mode_t feature_flags_t::get_notify_mode() noexcept {
         return get_notify_mode_().load();
+    }
+
+    inline void feature_flags_t::set_async_queue_max_size(size_t max_size) noexcept {
+        get_async_queue_max_size_().store(max_size);
+    }
+
+    inline size_t feature_flags_t::get_async_queue_max_size() noexcept {
+        return get_async_queue_max_size_().load();
+    }
+
+    inline void feature_flags_t::set_deferred_buffer_max_size(size_t max_size) noexcept {
+        get_deferred_buffer_max_size_().store(max_size);
+    }
+
+    inline size_t feature_flags_t::get_deferred_buffer_max_size() noexcept {
+        return get_deferred_buffer_max_size_().load();
+    }
+
+    inline void feature_flags_t::set_duplicate_policy(core::duplicate_policy_t policy) noexcept {
+        get_duplicate_policy_().store(static_cast<uint8_t>(policy));
+    }
+
+    inline core::duplicate_policy_t feature_flags_t::get_duplicate_policy() noexcept {
+        return static_cast<core::duplicate_policy_t>(get_duplicate_policy_().load());
     }
 
 }  // namespace error_system::config

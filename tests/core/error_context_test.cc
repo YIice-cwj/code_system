@@ -778,4 +778,26 @@ namespace error_system::core {
         EXPECT_EQ(find_payload_value(joined, "joined_error_2"), "third error");
     }
 
+    TEST_F(error_context_test_t, get_metadata_returns_cached_metadata_for_registered_code) {
+        error_context_t context(located_code_t{registered_code_}, "metadata cache test");
+        const auto meta = context.get_metadata();
+        ASSERT_TRUE(meta.has_value());
+        EXPECT_EQ(meta->name, "ERR_CTX_REGISTERED");
+        EXPECT_EQ(meta->description, "Registered error context");
+    }
+
+    TEST_F(error_context_test_t, get_metadata_falls_back_to_registry_when_not_cached) {
+        auto minimal = error_context_t::make_minimal(registered_code_);
+        ASSERT_TRUE(minimal.block() != nullptr);
+        EXPECT_FALSE(minimal.block()->metadata.has_value());
+        const auto meta = minimal.get_metadata();
+        ASSERT_TRUE(meta.has_value());
+        EXPECT_EQ(meta->name, "ERR_CTX_REGISTERED");
+    }
+
+    TEST_F(error_context_test_t, get_metadata_returns_nullopt_for_default_constructed) {
+        error_context_t empty;
+        EXPECT_FALSE(empty.get_metadata().has_value());
+    }
+
 }  // namespace error_system::core

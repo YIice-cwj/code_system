@@ -1,12 +1,14 @@
 #include "error_system/utils/string_format.h"
 
+#include "error_system/utils/log.h"
+
 /**
  * @file string_format.cc
  * @brief 字符串格式化引擎实现
  * @details 提供 std::format 风格的占位符替换功能，支持算术类型、指针、bool 及自定义 to_string 类型
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-27
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 
@@ -39,7 +41,7 @@ namespace error_system::utils {
                 ++cursor;
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[string_format] append_literal_braces: bad_alloc\n");
+            LOG_ERROR("[string_format] append_literal_braces: bad_alloc");
         }
     }
 

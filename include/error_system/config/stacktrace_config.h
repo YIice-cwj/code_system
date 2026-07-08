@@ -1,6 +1,5 @@
 #pragma once
 #include <atomic>
-#include <cstdio>
 #include <new>
 #include <optional>
 #include <shared_mutex>
@@ -8,6 +7,7 @@
 
 #include "error_system/config/feature_flags.h"
 #include "error_system/core/error_level.h"
+#include "error_system/utils/log.h"
 
 /**
  * @file stacktrace_config.h
@@ -16,8 +16,8 @@
  *          通过 if constexpr + 编译期常量 STACKTRACE_ENABLED 消除运行时开销，
  *          编译器死代码消除未启用分支。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-27
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::config {
@@ -103,7 +103,7 @@ namespace error_system::config {
                     std::unique_lock<std::shared_mutex> lock(get_per_code_mutex_());
                     get_per_code_stacktrace_map_()[identity_code] = level;
                 } catch (const std::bad_alloc&) {
-                    std::fprintf(stderr, "[stacktrace_config] set_per_code_stacktrace_level: std::bad_alloc\n");
+                    LOG_ERROR("[stacktrace_config] set_per_code_stacktrace_level: std::bad_alloc");
                 }
             }
         }

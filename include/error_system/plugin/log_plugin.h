@@ -18,9 +18,12 @@
  *
  *          不内置文件管理逻辑（KISS 原则），调用方负责流的生命周期；
  *          默认输出到 std::cerr，构造时传入自定义流即可重定向。
+ *
+ *          Lean 路径（on_code）：仅输出 raw code，格式固定为 "[ERR: <code>]"，
+ *          不查注册表、不分配字符串，保证热路径零开销。
  * @author yiice
- * @version 3.0.0
- * @date 2026-07-04
+ * @version 4.4.0
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::plugin {
@@ -80,6 +83,15 @@ namespace error_system::plugin {
          * @param context 错误上下文
          */
         void on_error(const core::error_context_t& context) noexcept override;
+
+        /**
+         * @brief 错误码通知回调（Lean 路径）
+         * @details 仅输出 raw code，格式固定为 "[ERR: <code>]\n"。
+         *          不查注册表、不分配字符串，保证热路径零开销。
+         *          text/json 两种 format_ 均走此路径，Lean 模式无完整上下文可格式化。
+         * @param code 错误码
+         */
+        void on_code(core::error_code_t code) noexcept override;
 
         /**
          * @brief 获取插件名称

@@ -1,12 +1,14 @@
 #pragma once
 #include <cassert>
-#include <cstdio>
 #include <functional>
 #include <new>
+#include <string>
 #include <string_view>
 #include <type_traits>
 
 #include "error_system/core/error_context.h"
+#include "error_system/utils/log.h"
+#include "error_system/utils/string_format.h"
 
 /**
  * @file result.h
@@ -18,9 +20,12 @@
  *          存储方案：union + result_state_t 手写判别式替代 std::variant，以支持 Move-Only
  *          的 error_context_t（C++17 std::variant 要求元素可拷贝）。Lean=false 时 result_t
  *          整体为 Move-Only；Lean=true 时若 T 可拷贝则 result_t 可拷贝。
+ *
+ *          Lean 模式：error_storage_t 为 error_code_t（8B），零堆开销，体积最小。
+ *          通知路径走 on_code(code)，不构造 error_context_t。
  * @author yiice
- * @version 4.0.0
- * @date 2026-07-06
+ * @version 4.4.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
@@ -40,17 +45,19 @@ namespace error_system::core {
         constexpr uint16_t FATAL_ERROR_NUMBER = 0xFFFE;
 
         inline void report_unchecked_result(const char* file, int line) noexcept {
-            std::fprintf(stderr,
-                         "[result_t] unchecked error result destroyed at %s:%d\n"
-                         "  call is_error()/is_success()/value()/error()/operator bool/\n"
-                         "  value_pointer()/value_or()/match() before destruction.\n",
-                         file,
-                         line);
+            ::error_system::utils::log(::error_system::utils::log_level_t::error, file, line,
+                                       "[result_t] unchecked error result destroyed at {}:{}\n"
+                                       "  call is_error()/is_success()/value()/error()/operator bool/\n"
+                                       "  value_pointer()/value_or()/match() before destruction.",
+                                       file, line);
             assert(false && "unchecked error result destroyed");
-            (void)file;
-            (void)line;
         }
 
+        /**
+         * @brief 构造调用异常上下文
+         * @param message 异常描述信息
+         * @return 构造好的错误上下文，分配失败时返回空哨兵克隆
+         */
         inline error_context_t make_invoke_exception_context(const char* message) noexcept {
             try {
                 return error_context_t{located_code_t{error_code_t(error_level_t::fatal,
@@ -60,7 +67,7 @@ namespace error_system::core {
                                                                    error_number_t{FATAL_ERROR_NUMBER})},
                                        message};
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[result_t] make_invoke_exception_context: std::bad_alloc\n");
+                LOG_ERROR("[result_t] make_invoke_exception_context: std::bad_alloc");
                 static thread_local error_context_t fallback{};
                 return fallback.clone();
             }
@@ -82,6 +89,9 @@ namespace error_system::core {
 
         private:
         using error_storage_t = std::conditional_t<Lean, error_code_t, error_context_t>;
+
+        template <typename OtherT, bool OtherLean>
+        friend class result_t;
 
         result_state_t state_{result_state_t::value};
         union storage_t {
@@ -105,10 +115,11 @@ namespace error_system::core {
 
         /**
          * @brief Lean 模式专用私有构造函数
-         * @details 完整模式下 if constexpr 分支不使用
+         * @details 仅 Lean 模式启用，直接接受 error_code_t，零堆开销。
          * @param code 错误码
          */
-        explicit result_t(error_code_t code) noexcept(std::is_nothrow_move_constructible_v<error_code_t>);
+        template <bool IsLean = Lean, typename = std::enable_if_t<IsLean>>
+        explicit result_t(error_code_t code) noexcept;
 
         public:
         /**
@@ -464,6 +475,16 @@ namespace error_system::core {
         [[nodiscard]] value_type_t* operator->() noexcept { return value_pointer(); }
 
         /**
+         * @brief 转换为字符串描述
+         * @details 成功返回 "[OK: <value>]"（若 T 可被 string_format_t 格式化），
+         *          错误返回 "[ERR: <context>]"（Full 模式委托 error_context_t::to_string，
+         *          Lean 模式输出 code @ file:line），empty 返回 "[empty]"。
+         *          提供本方法后 result_t 可直接作为 string_format_t 的 "{}" 参数。
+         * @return 状态描述字符串
+         */
+        [[nodiscard]] std::string to_string() const noexcept;
+
+        /**
          * @brief 成功结果工厂
          * @param value 成功值
          * @return 构造好的成功结果
@@ -488,6 +509,9 @@ namespace error_system::core {
         private:
         using error_storage_t = std::conditional_t<Lean, error_code_t, error_context_t>;
 
+        template <typename OtherT, bool OtherLean>
+        friend class result_t;
+
         result_state_t state_{result_state_t::empty};
         union storage_t {
             error_storage_t error;
@@ -509,8 +533,10 @@ namespace error_system::core {
 
         /**
          * @brief Lean 模式专用私有构造函数
+         * @details 仅 Lean 模式启用，直接接受 error_code_t，零堆开销。
          * @param code 错误码
          */
+        template <bool IsLean = Lean, typename = std::enable_if_t<IsLean>>
         explicit result_t(error_code_t code) noexcept;
 
         public:
@@ -725,6 +751,15 @@ namespace error_system::core {
             checked_ = true;
             return state_ == result_state_t::empty;
         }
+
+        /**
+         * @brief 转换为字符串描述
+         * @details 成功返回 "[OK]"，错误返回 "[ERR: <context>]"（Full 模式委托
+         *          error_context_t::to_string，Lean 模式输出 code @ file:line）。
+         *          提供本方法后 result_t 可直接作为 string_format_t 的 "{}" 参数。
+         * @return 状态描述字符串
+         */
+        [[nodiscard]] std::string to_string() const noexcept;
 
         /**
          * @brief 成功结果工厂

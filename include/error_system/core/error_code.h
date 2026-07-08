@@ -482,6 +482,7 @@ namespace error_system::core {
      * @details O(n^2) constexpr 暴力比较，适合小规模（<100）编译期常量数组。
      *          配合 static_assert 使用，在编译期捕获重复错误码定义。
      * @tparam N 数组大小
+     * @param codes 错误码数组
      */
     template <size_t N>
     [[nodiscard]] constexpr bool all_unique(const std::array<error_code_t, N>& codes) noexcept {

@@ -6,19 +6,20 @@
  * @details 提供错误码的注册、注销、查询能力，含主索引、名称索引、模块组索引、子系统索引。
  *          基于纪元机制 + 线程本地环形缓存实现低开销的元数据查询，写操作时 bump 纪元使缓存失效。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-28
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 
 #include <array>
-#include <cassert>
 #include <mutex>
 #include <new>
 
+#include "error_system/utils/bad_alloc_handler.h"
+#include "error_system/utils/log.h"
+
 namespace error_system::core {
 
-    std::once_flag error_registry_t::once_flag_;
     std::atomic<uint64_t> error_registry_t::epoch_counter_{0};
 
     namespace {
@@ -116,6 +117,10 @@ namespace error_system::core {
         thread_local metadata_cache_t tls_metadata_cache_;
     }  // namespace
 
+    /**
+     * @brief 预分配索引容器容量，避免多次重分配
+     * @param additional_entries 预估需注册的错误码数量
+     */
     void error_registry_t::reserve_for_registration_(size_t additional_entries) noexcept {
         if (additional_entries == 0) {
             return;
@@ -126,10 +131,14 @@ namespace error_system::core {
             name_index_.reserve(name_index_.size() + additional_entries);
             module_index_.reserve(module_index_.size() + (additional_entries / 8) + 1);
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] reserve_for_registration_: std::bad_alloc\n");
+            utils::report_bad_alloc("error_registry", "reserve_for_registration_");
         }
     }
 
+    /**
+     * @brief 预分配模块组索引桶容量，按模块组统计数量后 reserve
+     * @param codes 待注册的错误码列表
+     */
     void error_registry_t::preallocate_module_buckets_(const std::vector<error_code_t>& codes) noexcept {
         std::unordered_map<module_group_id_t, size_t> module_group_counts;
         try {
@@ -138,7 +147,7 @@ namespace error_system::core {
                 ++module_group_counts[code.get_module_group_id()];
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] preallocate_module_buckets_: module_group_counts std::bad_alloc\n");
+            LOG_ERROR("[error_registry] preallocate_module_buckets_: module_group_counts std::bad_alloc");
             return;
         }
         try {
@@ -147,10 +156,18 @@ namespace error_system::core {
                 module_codes.reserve(module_codes.size() + count);
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] preallocate_module_buckets_: std::bad_alloc\n");
+            utils::report_bad_alloc("error_registry", "preallocate_module_buckets_");
         }
     }
 
+    /**
+     * @brief 注册单条错误码到所有索引
+     * @param lock 已持有的写锁（本函数会临时解锁以调用 duplicate 策略）
+     * @param code 错误码
+     * @param name 错误码宏名称
+     * @param description 错误码描述
+     * @return bool true=注册成功，false=重复策略拒绝或分配失败
+     */
     bool error_registry_t::register_single_entry_(std::unique_lock<std::shared_mutex>& lock,
                                                   error_code_t code, std::string_view name,
                                                   std::string_view description) noexcept {
@@ -187,7 +204,7 @@ namespace error_system::core {
             name_index_.emplace(meta.name, identity_code);
             primary_index_.emplace(identity_code, std::move(meta));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] register_single_entry_: std::bad_alloc\n");
+            utils::report_bad_alloc("error_registry", "register_single_entry_");
             return false;
         }
         try {
@@ -196,11 +213,16 @@ namespace error_system::core {
             module_codes.push_back(identity_code);
             subsystem_index_[code.get_subsys()].insert(code.get_module_group_id());
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] register_single_entry_: index std::bad_alloc\n");
+            LOG_ERROR("[error_registry] register_single_entry_: index std::bad_alloc");
         }
         return true;
     }
 
+    /**
+     * @brief 从模块组索引中移除指定错误码
+     * @param module_group_id 模块组 ID
+     * @param identity_code 错误码标识
+     */
     void error_registry_t::erase_from_module_index_(module_group_id_t module_group_id, code_t identity_code) noexcept {
         auto mod_it = module_index_.find(module_group_id);
         if (mod_it == module_index_.end()) {
@@ -214,6 +236,11 @@ namespace error_system::core {
         }
     }
 
+    /**
+     * @brief 从子系统索引中移除指定模块组
+     * @param subsystem_id 子系统 ID
+     * @param module_group_id 模块组 ID
+     */
     void error_registry_t::erase_from_subsystem_index_(uint16_t subsystem_id,
                                                         module_group_id_t module_group_id) noexcept {
         auto it = subsystem_index_.find(subsystem_id);
@@ -224,21 +251,6 @@ namespace error_system::core {
         if (it->second.empty()) {
             subsystem_index_.erase(it);
         }
-    }
-
-    /**
-     * @brief 获取单例实例
-     * @details 使用 std::call_once + 函数局部静态保证线程安全的单例初始化
-     * @return 单例引用
-     */
-    error_registry_t& error_registry_t::instance() noexcept {
-        static error_registry_t* instance_ptr = nullptr;
-        std::call_once(once_flag_, [] {
-            static error_registry_t instance;
-            instance_ptr = &instance;
-        });
-        assert(instance_ptr != nullptr && "error_registry_t::instance() called before initialization");
-        return *instance_ptr;
     }
 
     /**
@@ -322,7 +334,7 @@ namespace error_system::core {
             try {
                 return name_index_.find(std::string(name));
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[error_registry] unregister_error: std::bad_alloc\n");
+                utils::report_bad_alloc("error_registry", "unregister_error");
                 return name_index_.end();
             }
         }();
@@ -410,7 +422,7 @@ namespace error_system::core {
         try {
             return it->second;
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] get_info: std::bad_alloc\n");
+            utils::report_bad_alloc("error_registry", "get_info");
             return std::nullopt;
         }
     }
@@ -438,7 +450,7 @@ namespace error_system::core {
                 }
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] get_errors_by_module: std::bad_alloc\n");
+            utils::report_bad_alloc("error_registry", "get_errors_by_module");
         }
         return errors;
     }
@@ -489,7 +501,7 @@ namespace error_system::core {
                 collect_module_errors(mod_it->second, primary_index_, errors);
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_registry] get_errors_by_subsystem: std::bad_alloc\n");
+            utils::report_bad_alloc("error_registry", "get_errors_by_subsystem");
         }
         return errors;
     }
@@ -505,7 +517,7 @@ namespace error_system::core {
             try {
                 return name_index_.find(std::string(name));
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[error_registry] find_by_name: std::bad_alloc\n");
+                utils::report_bad_alloc("error_registry", "find_by_name");
                 return name_index_.end();
             }
         }();
@@ -515,6 +527,13 @@ namespace error_system::core {
         return std::nullopt;
     }
 
+    /**
+     * @brief 获取错误码元数据（带线程本地环形缓存）
+     * @details 缓存命中时零锁、零原子操作；未命中时委托 get_info 并插入缓存。
+     *          纪元不一致时清空缓存重建。
+     * @param code 错误码
+     * @return std::optional<error_metadata_t> 元数据副本，未注册返回 nullopt
+     */
     std::optional<error_metadata_t> error_registry_t::get_info_cached(const error_code_t code) const noexcept {
         const uint64_t current_epoch = epoch_counter_.load(std::memory_order_acquire);
         if (!tls_metadata_cache_.matches_epoch(current_epoch)) {
@@ -535,6 +554,10 @@ namespace error_system::core {
         return meta;
     }
 
+    /**
+     * @brief 使所有线程的元数据缓存失效
+     * @details 将当前线程的缓存重置为当前纪元，其他线程在下次查询时自动感知纪元变更并清空。
+     */
     void error_registry_t::invalidate_metadata_cache() const noexcept {
         tls_metadata_cache_.reset(epoch_counter_.load(std::memory_order_acquire));
     }

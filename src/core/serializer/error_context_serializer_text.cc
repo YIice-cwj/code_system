@@ -5,6 +5,8 @@
 #include "error_system/core/registry/error_registry.h"
 #include "error_system/i18n/i_subsystem_module_resolver.h"
 #include "error_system/i18n/subsystem_module_catalog.h"
+#include "error_system/utils/bad_alloc_handler.h"
+#include "error_system/utils/log.h"
 
 using error_system::config::feature_flags_t;
 using error_system::config::formatter_config_t;
@@ -18,19 +20,17 @@ using error_system::core::detail::append_decimal;
  *          从 error_context_serializer.cc 拆分而来，仅包含文本格式相关的辅助函数与逻辑。
  *          子系统/模块名称从 i18n_config_t 解析输出 locale，保证与错误码消息使用同一语言。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-29
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
 
     const error_system::i18n::i_subsystem_module_resolver_t*
-        error_context_serializer_t::subsystem_module_resolver_{nullptr};
-
-    const error_system::i18n::i_subsystem_module_resolver_t*
     error_context_serializer_t::get_subsystem_module_resolver_() noexcept {
-        if (subsystem_module_resolver_ != nullptr) {
-            return subsystem_module_resolver_;
+        const auto* resolver = config::formatter_config_t::get_subsystem_module_resolver();
+        if (resolver != nullptr) {
+            return resolver;
         }
         static const auto* default_resolver = error_system::i18n::get_default_subsystem_module_resolver();
         return default_resolver;
@@ -50,7 +50,7 @@ namespace error_system::core {
                 subsys_module_str.reserve(sm_info.subsystem_name.size() + sm_info.module_name.size() + 3);
                 subsys_module_str.append(sm_info.subsystem_name).append(" / ").append(sm_info.module_name);
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[error_context_serializer] build_subsystem_module_string: text mode failed\n");
+                LOG_ERROR("[error_context_serializer] build_subsystem_module_string: text mode failed");
             }
         } else {
             try {
@@ -60,7 +60,7 @@ namespace error_system::core {
                 subsys_module_str.append(", Module: ");
                 append_decimal(subsys_module_str, code.get_module());
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[error_context_serializer] build_subsystem_module_string: numeric mode failed\n");
+                LOG_ERROR("[error_context_serializer] build_subsystem_module_string: numeric mode failed");
             }
         }
         return subsys_module_str;
@@ -70,13 +70,18 @@ namespace error_system::core {
 
         /**
          * @brief 估算文本序列化结果字符串容量，避免多次重分配
+         * @param context 错误上下文
+         * @param name_size 错误码名称长度
+         * @param desc_size 错误码描述长度
+         * @param subsys_module_size 子系统/模块字符串长度
+         * @return size_t 预估容量
          */
         size_t estimate_string_capacity(const error_context_t& context,
                                         size_t name_size,
                                         size_t desc_size,
                                         size_t subsys_module_size) noexcept {
             const runtime_block_t* blk = context.block();
-            const std::string& msg = blk ? blk->message : std::string{};
+            const std::string_view msg = blk ? std::string_view(blk->message) : std::string_view{};
             size_t capacity = 96 + name_size + desc_size + subsys_module_size + msg.size();
 
             context.for_each_payload([&](const std::string& key, const std::string& value) {
@@ -94,7 +99,7 @@ namespace error_system::core {
 
             if (const error_context_t* cause = context.cause()) {
                 const runtime_block_t* cause_blk = cause->block();
-                const std::string& cause_msg = cause_blk ? cause_blk->message : std::string{};
+                const std::string_view cause_msg = cause_blk ? std::string_view(cause_blk->message) : std::string_view{};
                 capacity += 16 + cause_msg.size();
             }
             return capacity;
@@ -102,11 +107,13 @@ namespace error_system::core {
 
         /**
          * @brief 追加源位置信息文本（[Location: file:line @ function]）
+         * @param result 目标字符串
+         * @param context 错误上下文
          */
         void append_location_text(std::string& result, const error_context_t& context) {
             if constexpr (feature_flags_t::LOCATION_ENABLED) {
                 const runtime_block_t* blk = context.block();
-                if (feature_flags_t::is_source_location_enabled() && blk && blk->file_name != nullptr) {
+                if (context.is_location_available()) {
                     result.append(" [Location: ").append(blk->file_name).append(":");
                     append_decimal(result, blk->source_location.line());
                     result.append(" @ ").append(blk->source_location.function_name()).append("]");
@@ -116,6 +123,9 @@ namespace error_system::core {
 
         /**
          * @brief 追加签名/等级/系统域/子系统/模块/错误编号子头部
+         * @param result 目标字符串
+         * @param context 错误上下文
+         * @param subsys_module_str 子系统/模块字符串
          */
         void append_subheader_text(std::string& result, const error_context_t& context,
                                    const std::string& subsys_module_str) {
@@ -133,6 +143,8 @@ namespace error_system::core {
 
         /**
          * @brief 追加 payload 文本段（{key=value, ...}）
+         * @param result 目标字符串
+         * @param context 错误上下文
          */
         void append_payload_text(std::string& result, const error_context_t& context) {
             if (context.payload_size() == 0) {
@@ -152,6 +164,8 @@ namespace error_system::core {
 
         /**
          * @brief 追加堆栈跟踪文本段（\n  [Stacktrace]:\n    #0  frame...）
+         * @param result 目标字符串
+         * @param context 错误上下文
          */
         void append_stacktrace_text(std::string& result, const error_context_t& context) {
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
@@ -174,17 +188,18 @@ namespace error_system::core {
         if (auto formatter = formatter_config_t::get_custom_formatter()) {
             try {
                 return formatter(context);
-            } catch (...) {
-                std::fprintf(stderr, "[error_context_serializer] to_string: custom formatter threw unknown exception\n");
+            } catch (const std::exception& e) {
+                LOG_ERROR("[error_context_serializer] to_string: custom formatter threw exception: {}", e.what());
             }
         }
 
-        const bool has_metadata = context.block_ && context.block_->metadata && !context.block_->metadata->name.empty();
-        const std::string_view desc = has_metadata ? std::string_view{context.block_->metadata->description} : std::string_view{"未注册的未知错误"};
-        const std::string_view name = has_metadata ? std::string_view{context.block_->metadata->name} : std::string_view{"UNKNOWN_ERR_CODE"};
+        const auto metadata = context.get_metadata();
+        const bool has_metadata = metadata && !metadata->name.empty();
+        const std::string_view desc = has_metadata ? std::string_view{metadata->description} : std::string_view{"未注册的未知错误"};
+        const std::string_view name = has_metadata ? std::string_view{metadata->name} : std::string_view{"UNKNOWN_ERR_CODE"};
         const std::string subsys_module_str = build_subsystem_module_string_(context);
 
-        const std::string& msg = context.block_ ? context.block_->message : std::string{};
+        const std::string_view msg = context.block_ ? std::string_view(context.block_->message) : std::string_view{};
 
         std::string result;
         try {
@@ -205,7 +220,7 @@ namespace error_system::core {
                 result.append("\n  ↳ ... (cause chain truncated)");
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context_serializer] to_string: std::bad_alloc\n");
+            utils::report_bad_alloc("error_context_serializer", "to_string");
         }
         return result;
     }

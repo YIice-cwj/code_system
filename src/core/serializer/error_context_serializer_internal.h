@@ -3,6 +3,8 @@
 #include <string>
 #include <type_traits>
 
+#include "error_system/utils/bad_alloc_handler.h"
+
 /**
  * @file error_context_serializer_internal.h
  * @brief 错误上下文序列化器内部共享工具（仅实现内部使用，不对外暴露）
@@ -42,7 +44,7 @@ namespace error_system::core::detail {
         try {
             output.append(std::to_string(value));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[error_context_serializer] append_decimal: std::bad_alloc\n");
+            utils::report_bad_alloc("error_context_serializer", "append_decimal");
         }
     }
 

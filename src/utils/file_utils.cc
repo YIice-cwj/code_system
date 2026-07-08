@@ -6,13 +6,14 @@
  * @details 提供文件读取、写入、创建、删除、存在性检查等基础文件操作能力。
  *          读取时进行文件大小校验，避免恶意大文件导致 OOM。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-28
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 
-#include <cstdio>
 #include <fstream>
+
+#include "error_system/utils/log.h"
 
 namespace error_system::utils {
 
@@ -41,8 +42,8 @@ namespace error_system::utils {
                 return std::nullopt;
             }
             if (static_cast<size_t>(size) > MAX_READ_FILE_SIZE) {
-                std::fprintf(stderr, "[file_utils] read_file: file too large (%lld bytes, max=%zu)\n",
-                             static_cast<long long>(size), MAX_READ_FILE_SIZE);
+                LOG_WARN("[file_utils] read_file: file too large ({} bytes, max={})",
+                         static_cast<long long>(size), MAX_READ_FILE_SIZE);
                 return std::nullopt;
             }
 

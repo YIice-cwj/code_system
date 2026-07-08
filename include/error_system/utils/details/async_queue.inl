@@ -1,5 +1,17 @@
 #pragma once
+
+/**
+ * @file async_queue.inl
+ * @brief async_queue_t 模板实现
+ * @author yiice
+ * @version 3.0.1
+ * @date 2026-07-08
+ * @copyright Copyright (c) 2026
+ */
+
 #include <system_error>
+
+#include "error_system/utils/log.h"
 
 namespace error_system::utils {
 
@@ -17,7 +29,7 @@ void async_queue_t<T, Processor>::stop_() noexcept {
         try {
             worker_.join();
         } catch (const std::system_error&) {
-            std::fprintf(stderr, "[async_queue] stop_: worker_.join() threw std::system_error\n");
+            LOG_ERROR("[async_queue] stop_: worker_.join() threw std::system_error");
         }
     }
 }
@@ -40,9 +52,9 @@ void async_queue_t<T, Processor>::worker_loop_() noexcept {
         try {
             processor_(item);
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[async_queue] processor std::bad_alloc caught and ignored\n");
+            LOG_ERROR("[async_queue] processor std::bad_alloc caught and ignored");
         } catch (...) {
-            std::fprintf(stderr, "[async_queue] processor unknown exception caught and ignored\n");
+            LOG_ERROR("[async_queue] processor unknown exception caught and ignored");
         }
     }
 }
@@ -65,7 +77,7 @@ bool async_queue_t<T, Processor>::enqueue(value_type_t item) noexcept {
                 worker_ = std::thread(&async_queue_t::worker_loop_, this);
                 running_.store(true);
             } catch (const std::system_error&) {
-                std::fprintf(stderr, "[async_queue] enqueue: failed to create worker thread\n");
+                LOG_ERROR("[async_queue] enqueue: failed to create worker thread");
                 return false;
             }
         }
@@ -75,7 +87,7 @@ bool async_queue_t<T, Processor>::enqueue(value_type_t item) noexcept {
         try {
             queue_.push(std::move(item));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[async_queue] enqueue: std::bad_alloc\n");
+            LOG_ERROR("[async_queue] enqueue: std::bad_alloc");
             return false;
         }
     }

@@ -20,6 +20,7 @@
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_level.h"
+#include "error_system/core/i_error_notifier.h"
 #include "error_system/core/registry/error_registry.h"
 #include "error_system/domain/system_domain.h"
 #include "error_system/plugin/i_error_plugin.h"
@@ -31,6 +32,7 @@ using error_system::core::error_context_t;
 using error_system::core::error_level_t;
 using error_system::core::error_number_t;
 using error_system::core::error_registry_t;
+using error_system::core::i_error_notifier_t;
 using error_system::core::located_code_t;
 using error_system::core::module_id_t;
 using error_system::core::subsystem_id_t;
@@ -66,11 +68,18 @@ namespace {
         }
     };
 
-    /** @brief 构造测试用错误上下文 */
+    /**
+     * @brief 构造测试用错误上下文并触发通知
+     * @details 新架构下 error_context_t 构造函数不通知，需显式调用
+     *          i_error_notifier_t::notify(ctx) 触发。本函数封装该流程，
+     *          使测试代码保持简洁。
+     */
     error_context_t make_context(uint16_t number) {
         const error_code_t code(error_level_t::error, system_domain_t::application,
                                 subsystem_id_t{1}, module_id_t{1}, error_number_t{number});
-        return error_context_t{located_code_t{code}, "模式对比测试"};
+        error_context_t ctx{located_code_t{code}, "模式对比测试"};
+        i_error_notifier_t::try_notify(ctx);
+        return ctx;
     }
 
     /** @brief 等待计数到达预期 */
@@ -104,6 +113,9 @@ protected:
 
     void TearDown() override {
         feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::sync);
+        for (int i = 0; i < 200 && plugin_registry_t::instance().pending_notifications() > 0; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
         feature_flags_t::set_enable_validation(saved_validation_);
         feature_flags_t::set_enable_stacktrace(saved_stacktrace_);
         feature_flags_t::set_enable_source_location(saved_location_);
@@ -226,7 +238,7 @@ TEST_F(notify_mode_comparison_test_t, min_level_filter_consistent_across_modes) 
         const error_code_t info_code(error_level_t::info, system_domain_t::application,
                                      subsystem_id_t{1}, module_id_t{1}, error_number_t{10});
         error_context_t ctx{located_code_t{info_code}, "info 级别"};
-        (void)ctx;
+        i_error_notifier_t::try_notify(ctx);
         EXPECT_EQ(plugin.count(), 0) << "sync: info level should be filtered by min_level=error";
     }
 
@@ -237,7 +249,7 @@ TEST_F(notify_mode_comparison_test_t, min_level_filter_consistent_across_modes) 
         const error_code_t info_code(error_level_t::info, system_domain_t::application,
                                      subsystem_id_t{1}, module_id_t{1}, error_number_t{11});
         error_context_t ctx{located_code_t{info_code}, "info 级别"};
-        (void)ctx;
+        i_error_notifier_t::try_notify(ctx);
         plugin_registry_t::instance().flush_deferred_notifications();
         EXPECT_EQ(plugin.count(), 0) << "sync_deferred: info level should be filtered on flush";
     }
@@ -249,7 +261,7 @@ TEST_F(notify_mode_comparison_test_t, min_level_filter_consistent_across_modes) 
         const error_code_t err_code(error_level_t::error, system_domain_t::application,
                                     subsystem_id_t{1}, module_id_t{1}, error_number_t{12});
         error_context_t ctx{located_code_t{err_code}, "error 级别"};
-        (void)ctx;
+        i_error_notifier_t::try_notify(ctx);
         EXPECT_EQ(plugin.count(), 1) << "sync: error level should pass min_level=error";
     }
 }

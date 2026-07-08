@@ -9,8 +9,8 @@
  *          3. POSIX 用 dladdr 逐帧解析替代 backtrace_symbols 一次大 malloc；
  *             Windows 沿用 SymFromAddr（本就是逐帧）
  * @author yiice
- * @version 4.1.0
- * @date 2026-07-06
+ * @version 4.1.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 
@@ -22,6 +22,9 @@
 #if defined(__APPLE__) || defined(__linux__)
 #include <dlfcn.h>
 #endif
+
+#include "error_system/utils/bad_alloc_handler.h"
+#include "error_system/utils/log.h"
 
 namespace error_system::utils {
 
@@ -116,8 +119,8 @@ namespace error_system::utils {
             dbghelp_manager_t() noexcept {
                 SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
                 if (!SymInitialize(process, nullptr, TRUE)) {
-                    std::fprintf(stderr, "[stack_trace_utils] SymInitialize failed (error=%lu)\n",
-                                 static_cast<unsigned long>(GetLastError()));
+                    LOG_ERROR("[stack_trace_utils] SymInitialize failed (error={})",
+                              static_cast<unsigned long>(GetLastError()));
                 }
             }
 
@@ -255,7 +258,7 @@ namespace error_system::utils {
             }
             return callstack;
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[stack_trace_utils] capture: std::bad_alloc\n");
+            utils::report_bad_alloc("stack_trace_utils", "capture");
             return {};
         }
     }
@@ -272,7 +275,7 @@ namespace error_system::utils {
                 result.push_back(query_or_resolve(const_cast<void*>(frames[i])));
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[stack_trace_utils] resolve: std::bad_alloc\n");
+            utils::report_bad_alloc("stack_trace_utils", "resolve");
         }
         return result;
     }

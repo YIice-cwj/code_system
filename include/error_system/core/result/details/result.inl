@@ -1,6 +1,8 @@
 #pragma once
 
 #include "error_system/core/error_context.h"
+#include "error_system/core/i_error_notifier.h"
+#include "error_system/utils/log.h"
 
 /**
  * @file result.inl
@@ -14,6 +16,8 @@
  *
  *          小型函数（is_error/is_success/operator bool/value_pointer/value_or/operator->
  *          /make_success）已移至 .h 内联定义。
+ * @version 4.4.2
+ * @date 2026-07-08
  */
 
 /**
@@ -21,6 +25,93 @@
  * @details 主模板成员函数的实现，按 .h 声明顺序组织。
  */
 namespace error_system::core {
+
+    namespace detail {
+        /**
+         * @brief Lean 模式条件下的错误存储类型
+         * @details Lean=true 为 error_code_t（8B），Lean=false 为 error_context_t
+         */
+        template <bool Lean>
+        using error_storage_for_t = std::conditional_t<Lean, error_code_t, error_context_t>;
+
+        /**
+         * @brief 构造错误存储并通知（const 消息版本）
+         * @details Lean 路径仅存储 code 并走 on_code 通知；Full 路径构造 error_context_t 并走 on_error 通知。
+         *          主模板与 void 特化的 make_error 共用此组助手以消除重复逻辑。
+         * @param code 错误码
+         * @param message 错误消息
+         * @param location 源位置
+         * @return 错误存储（Lean 返回 error_code_t，Full 返回 error_context_t）
+         */
+        template <bool Lean>
+        inline error_storage_for_t<Lean> make_error_storage(error_code_t code, const std::string& message,
+                                                             utils::source_location_t location) noexcept {
+            if constexpr (Lean) {
+                (void)message;
+                (void)location;
+                i_error_notifier_t::try_notify(code);
+                return code;
+            } else {
+                error_context_t ctx{located_code_t{code, location}, message};
+                i_error_notifier_t::try_notify(ctx);
+                return ctx;
+            }
+        }
+
+        /**
+         * @brief 构造错误存储并通知（移动消息版本）
+         * @param code 错误码
+         * @param message 错误消息（右值，将被移动）
+         * @param location 源位置
+         * @return 错误存储
+         */
+        template <bool Lean>
+        inline error_storage_for_t<Lean> make_error_storage(error_code_t code, std::string&& message,
+                                                             utils::source_location_t location) noexcept {
+            if constexpr (Lean) {
+                (void)message;
+                (void)location;
+                i_error_notifier_t::try_notify(code);
+                return code;
+            } else {
+                error_context_t ctx{located_code_t{code, location}, std::move(message)};
+                i_error_notifier_t::try_notify(ctx);
+                return ctx;
+            }
+        }
+
+        /**
+         * @brief 构造错误存储并通知（const error_context_t 版本）
+         * @details Lean 路径提取 code 走 on_code 通知；Full 路径克隆上下文
+         * @param context 错误上下文 const 引用
+         * @return 错误存储
+         */
+        template <bool Lean>
+        inline error_storage_for_t<Lean> make_error_storage(const error_context_t& context) noexcept {
+            if constexpr (Lean) {
+                i_error_notifier_t::try_notify(context.get_code());
+                return context.get_code();
+            } else {
+                return context.clone();
+            }
+        }
+
+        /**
+         * @brief 构造错误存储并通知（error_context_t 右值版本）
+         * @details Lean 路径提取 code 走 on_code 通知；Full 路径移动上下文
+         * @param context 错误上下文右值
+         * @return 错误存储
+         */
+        template <bool Lean>
+        inline error_storage_for_t<Lean> make_error_storage(error_context_t&& context) noexcept {
+            if constexpr (Lean) {
+                i_error_notifier_t::try_notify(context.get_code());
+                return context.get_code();
+            } else {
+                return std::move(context);
+            }
+        }
+    }  // namespace detail
 
     /**
      * @brief 析构当前活跃的 union 成员
@@ -59,10 +150,12 @@ namespace error_system::core {
 
     /**
      * @brief Lean 模式专用私有构造函数
+     * @details 直接接受 error_code_t，零堆开销。
      * @param code 错误码
      */
     template <typename T, bool Lean>
-    result_t<T, Lean>::result_t(error_code_t code) noexcept(std::is_nothrow_move_constructible_v<error_code_t>)
+    template <bool IsLean, typename>
+    result_t<T, Lean>::result_t(error_code_t code) noexcept
         : state_(result_state_t::error) {
         new (&storage_.error) error_storage_t(code);
     }
@@ -164,6 +257,7 @@ namespace error_system::core {
 
     /**
      * @brief 错误构造工厂（推荐替代直接构造错误结果，避免重载混淆）
+     * @details 委托 detail::make_error_storage 完成通知与存储构造，消除主模板与 void 特化的重复逻辑
      * @param code 错误码
      * @param message 错误消息
      * @param location 源位置
@@ -173,13 +267,7 @@ namespace error_system::core {
     result_t<T, Lean> result_t<T, Lean>::make_error(error_code_t code, const std::string& message,
                                                      utils::source_location_t location) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
         assert(!code.is_success_code() && "make_error called with a success code");
-        if constexpr (Lean) {
-            (void)message;
-            (void)location;
-            return result_t(code);
-        } else {
-            return result_t(error_context_t{located_code_t{code, location}, message});
-        }
+        return result_t(detail::make_error_storage<Lean>(code, message, location));
     }
 
     /**
@@ -193,13 +281,7 @@ namespace error_system::core {
     result_t<T, Lean> result_t<T, Lean>::make_error(error_code_t code, std::string&& message,
                                                      utils::source_location_t location) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
         assert(!code.is_success_code() && "make_error called with a success code");
-        if constexpr (Lean) {
-            (void)message;
-            (void)location;
-            return result_t(code);
-        } else {
-            return result_t(error_context_t{located_code_t{code, location}, std::move(message)});
-        }
+        return result_t(detail::make_error_storage<Lean>(code, std::move(message), location));
     }
 
     /**
@@ -209,11 +291,7 @@ namespace error_system::core {
      */
     template <typename T, bool Lean>
     result_t<T, Lean> result_t<T, Lean>::make_error(const error_context_t& context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
-        if constexpr (Lean) {
-            return result_t(context.get_code());
-        } else {
-            return result_t(context.clone());
-        }
+        return result_t(detail::make_error_storage<Lean>(context));
     }
 
     /**
@@ -223,11 +301,7 @@ namespace error_system::core {
      */
     template <typename T, bool Lean>
     result_t<T, Lean> result_t<T, Lean>::make_error(error_context_t&& context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
-        if constexpr (Lean) {
-            return result_t(context.get_code());
-        } else {
-            return result_t(std::move(context));
-        }
+        return result_t(detail::make_error_storage<Lean>(std::move(context)));
     }
 
     /**
@@ -271,7 +345,7 @@ namespace error_system::core {
     /**
      * @brief 获取错误上下文
      * @details 完整模式返回 const 引用（成功状态返回线程局部哨兵值）；
-     *          Lean 模式返回值类型 error_context_t（临时构造仅含 code）
+     *          Lean 模式返回值类型 error_context_t（临时构造仅含 code，无 file:line）
      * @return 错误上下文
      */
     template <typename T, bool Lean>
@@ -341,7 +415,7 @@ namespace error_system::core {
         using new_type = decltype(std::invoke(std::forward<Function>(function), std::declval<const value_type_t&>()));
         if (is_error()) {
             if constexpr (Lean) {
-                return result_t<new_type, Lean>(error_code());
+                return result_t<new_type, Lean>(storage_.error);
             } else {
                 return result_t<new_type, Lean>(error().clone());
             }
@@ -349,7 +423,7 @@ namespace error_system::core {
         try {
             return result_t<new_type, Lean>(std::invoke(std::forward<Function>(function), value()));
         } catch (...) {
-            std::fprintf(stderr, "[result_t] map: std::invoke threw exception\n");
+            LOG_ERROR("[result_t] map: std::invoke threw exception");
             return result_t<new_type, Lean>(detail::make_invoke_exception_context("map: function threw exception"));
         }
     }
@@ -367,7 +441,7 @@ namespace error_system::core {
         using new_type = decltype(std::invoke(std::forward<Function>(function), std::move(value())));
         if (is_error()) {
             if constexpr (Lean) {
-                return result_t<new_type, Lean>(error_code());
+                return result_t<new_type, Lean>(storage_.error);
             } else {
                 return result_t<new_type, Lean>(std::move(error()));
             }
@@ -375,7 +449,7 @@ namespace error_system::core {
         try {
             return result_t<new_type, Lean>(std::invoke(std::forward<Function>(function), std::move(value())));
         } catch (...) {
-            std::fprintf(stderr, "[result_t] map(&&): std::invoke threw exception\n");
+            LOG_ERROR("[result_t] map(&&): std::invoke threw exception");
             return result_t<new_type, Lean>(detail::make_invoke_exception_context("map(&&): function threw exception"));
         }
     }
@@ -391,12 +465,12 @@ namespace error_system::core {
     result_t<T, Lean> result_t<T, Lean>::map_error(Function&& function) const& noexcept {
         if (is_error()) {
             if constexpr (Lean) {
-                return result_t<T, Lean>(error_code());
+                return result_t<T, Lean>(storage_.error);
             } else {
                 try {
                     return result_t<T, Lean>(std::invoke(std::forward<Function>(function), error()));
                 } catch (...) {
-                    std::fprintf(stderr, "[result_t] map_error: std::invoke threw exception\n");
+                    LOG_ERROR("[result_t] map_error: std::invoke threw exception");
                     return result_t<T, Lean>(error().clone());
                 }
             }
@@ -415,12 +489,12 @@ namespace error_system::core {
     result_t<T, Lean> result_t<T, Lean>::map_error(Function&& function) && noexcept {
         if (is_error()) {
             if constexpr (Lean) {
-                return result_t<T, Lean>(error_code());
+                return result_t<T, Lean>(storage_.error);
             } else {
                 try {
                     return result_t<T, Lean>(std::invoke(std::forward<Function>(function), std::move(error())));
                 } catch (...) {
-                    std::fprintf(stderr, "[result_t] map_error(&&): std::invoke threw exception\n");
+                    LOG_ERROR("[result_t] map_error(&&): std::invoke threw exception");
                     return result_t<T, Lean>(detail::make_invoke_exception_context("map_error(&&): function threw exception"));
                 }
             }
@@ -441,7 +515,7 @@ namespace error_system::core {
         using return_type = decltype(std::invoke(std::forward<Function>(function), std::move(value())));
         if (is_error()) {
             if constexpr (Lean) {
-                return return_type(error_code());
+                return return_type(storage_.error);
             } else {
                 return return_type(std::move(error()));
             }
@@ -449,7 +523,7 @@ namespace error_system::core {
         try {
             return std::invoke(std::forward<Function>(function), std::move(value()));
         } catch (...) {
-            std::fprintf(stderr, "[result_t] and_then(&&): std::invoke threw exception\n");
+            LOG_ERROR("[result_t] and_then(&&): std::invoke threw exception");
             return return_type(detail::make_invoke_exception_context("and_then(&&): function threw exception"));
         }
     }
@@ -467,7 +541,7 @@ namespace error_system::core {
         using return_type = decltype(std::invoke(std::forward<Function>(function), value()));
         if (is_error()) {
             if constexpr (Lean) {
-                return return_type(error_code());
+                return return_type(storage_.error);
             } else {
                 return return_type(error().clone());
             }
@@ -475,7 +549,7 @@ namespace error_system::core {
         try {
             return std::invoke(std::forward<Function>(function), value());
         } catch (...) {
-            std::fprintf(stderr, "[result_t] and_then(&): std::invoke threw exception\n");
+            LOG_ERROR("[result_t] and_then(&): std::invoke threw exception");
             return return_type(detail::make_invoke_exception_context("and_then(&): function threw exception"));
         }
     }
@@ -493,7 +567,7 @@ namespace error_system::core {
         using return_type = decltype(std::invoke(std::forward<Function>(function), value()));
         if (is_error()) {
             if constexpr (Lean) {
-                return return_type(error_code());
+                return return_type(storage_.error);
             } else {
                 return return_type(error().clone());
             }
@@ -501,7 +575,7 @@ namespace error_system::core {
         try {
             return std::invoke(std::forward<Function>(function), value());
         } catch (...) {
-            std::fprintf(stderr, "[result_t] and_then(const&): std::invoke threw exception\n");
+            LOG_ERROR("[result_t] and_then(const&): std::invoke threw exception");
             return return_type(detail::make_invoke_exception_context("and_then(const&): function threw exception"));
         }
     }
@@ -517,12 +591,12 @@ namespace error_system::core {
     result_t<T, Lean> result_t<T, Lean>::or_else(Function&& function) && noexcept {
         if (is_error()) {
             if constexpr (Lean) {
-                return result_t<T, Lean>(error_code());
+                return result_t<T, Lean>(storage_.error);
             } else {
                 try {
                     return std::invoke(std::forward<Function>(function), std::move(error()));
                 } catch (...) {
-                    std::fprintf(stderr, "[result_t] or_else(&&): std::invoke threw exception\n");
+                    LOG_ERROR("[result_t] or_else(&&): std::invoke threw exception");
                     return result_t<T, Lean>(detail::make_invoke_exception_context("or_else(&&): function threw exception"));
                 }
             }
@@ -541,12 +615,12 @@ namespace error_system::core {
     result_t<T, Lean> result_t<T, Lean>::or_else(Function&& function) & noexcept {
         if (is_error()) {
             if constexpr (Lean) {
-                return result_t<T, Lean>(error_code());
+                return result_t<T, Lean>(storage_.error);
             } else {
                 try {
                     return std::invoke(std::forward<Function>(function), error());
                 } catch (...) {
-                    std::fprintf(stderr, "[result_t] or_else(&): std::invoke threw exception\n");
+                    LOG_ERROR("[result_t] or_else(&): std::invoke threw exception");
                     return result_t<T, Lean>(error().clone());
                 }
             }
@@ -624,6 +698,50 @@ namespace error_system::core {
     }
 
     /**
+     * @brief 转换为字符串描述
+     * @details 成功返回 "[OK: <value>]"（若 T 可被 string_format_t 格式化），
+     *          错误返回 "[ERR: <context>]"（Full 模式委托 error_context_t::to_string，
+     *          Lean 模式输出 [ERR: <raw_code>]），empty 返回 "[empty]"。
+     *          提供本方法后 result_t 可直接作为 string_format_t 的 "{}" 参数。
+     * @return 状态描述字符串
+     *
+     * 实现思路：按 state_ 分支处理，成功路径用 if constexpr 判定 T 是否可被
+     *          string_format_t 格式化，避免对任意 T 强求 to_string 支持。
+     *          bad_alloc 时回退到固定字符串，保证 noexcept。
+     */
+    template <typename T, bool Lean>
+    std::string result_t<T, Lean>::to_string() const noexcept {
+        checked_ = true;
+        try {
+            switch (state_) {
+                case result_state_t::value: {
+                    if constexpr (utils::is_member_to_string_v<value_type_t> ||
+                                  utils::is_global_to_string_v<value_type_t> ||
+                                  std::is_arithmetic_v<value_type_t> ||
+                                  std::is_convertible_v<value_type_t, std::string_view>) {
+                        return utils::string_format_t::format("[OK: {}]", storage_.value);
+                    } else {
+                        return "[OK: <value>]";
+                    }
+                }
+                case result_state_t::error: {
+                    if constexpr (Lean) {
+                        return utils::string_format_t::format("[ERR: {}]", storage_.error.get_code());
+                    } else {
+                        return "[ERR: " + storage_.error.to_string() + "]";
+                    }
+                }
+                case result_state_t::empty:
+                default:
+                    return "[empty]";
+            }
+        } catch (const std::bad_alloc&) {
+            LOG_ERROR("[result_t] to_string: bad_alloc");
+            return "[error: alloc failed]";
+        }
+    }
+
+    /**
      * @brief result_t<void, Lean> 特化实现
      * @details void 特化的成员函数实现，按 .h 声明顺序组织。
      */
@@ -658,9 +776,11 @@ namespace error_system::core {
 
     /**
      * @brief Lean 模式专用私有构造函数
+     * @details 直接接受 error_code_t，零堆开销。
      * @param code 错误码
      */
     template <bool Lean>
+    template <bool IsLean, typename>
     inline result_t<void, Lean>::result_t(error_code_t code) noexcept
         : state_(result_state_t::error) {
         new (&storage_.error) error_storage_t(code);
@@ -735,6 +855,7 @@ namespace error_system::core {
 
     /**
      * @brief 错误构造工厂
+     * @details 委托 detail::make_error_storage 完成通知与存储构造，与主模板共用同一组助手
      * @param code 错误码
      * @param message 错误消息
      * @param location 源位置
@@ -744,13 +865,7 @@ namespace error_system::core {
     inline result_t<void, Lean> result_t<void, Lean>::make_error(error_code_t code, const std::string& message,
                                                                   utils::source_location_t location) noexcept {
         assert(!code.is_success_code() && "make_error called with a success code");
-        if constexpr (Lean) {
-            (void)message;
-            (void)location;
-            return result_t<void, Lean>(code);
-        } else {
-            return result_t<void, Lean>(error_context_t{located_code_t{code, location}, message});
-        }
+        return result_t<void, Lean>(detail::make_error_storage<Lean>(code, message, location));
     }
 
     /**
@@ -764,13 +879,7 @@ namespace error_system::core {
     inline result_t<void, Lean> result_t<void, Lean>::make_error(error_code_t code, std::string&& message,
                                                                   utils::source_location_t location) noexcept {
         assert(!code.is_success_code() && "make_error called with a success code");
-        if constexpr (Lean) {
-            (void)message;
-            (void)location;
-            return result_t<void, Lean>(code);
-        } else {
-            return result_t<void, Lean>(error_context_t{located_code_t{code, location}, std::move(message)});
-        }
+        return result_t<void, Lean>(detail::make_error_storage<Lean>(code, std::move(message), location));
     }
 
     /**
@@ -780,11 +889,7 @@ namespace error_system::core {
      */
     template <bool Lean>
     inline result_t<void, Lean> result_t<void, Lean>::make_error(const error_context_t& context) noexcept {
-        if constexpr (Lean) {
-            return result_t<void, Lean>(context.get_code());
-        } else {
-            return result_t<void, Lean>(context.clone());
-        }
+        return result_t<void, Lean>(detail::make_error_storage<Lean>(context));
     }
 
     /**
@@ -794,17 +899,13 @@ namespace error_system::core {
      */
     template <bool Lean>
     inline result_t<void, Lean> result_t<void, Lean>::make_error(error_context_t&& context) noexcept {
-        if constexpr (Lean) {
-            return result_t<void, Lean>(context.get_code());
-        } else {
-            return result_t<void, Lean>(std::move(context));
-        }
+        return result_t<void, Lean>(detail::make_error_storage<Lean>(std::move(context)));
     }
 
     /**
      * @brief 获取错误上下文
      * @details 完整模式返回 const 引用（成功状态返回线程局部哨兵值）；
-     *          Lean 模式返回值类型 error_context_t（临时构造仅含 code）
+     *          Lean 模式返回值类型 error_context_t（临时构造仅含 code，无 file:line）
      * @return 错误上下文
      */
     template <bool Lean>
@@ -874,7 +975,7 @@ namespace error_system::core {
         using return_type = decltype(std::invoke(std::forward<Function>(function)));
         if (is_error()) {
             if constexpr (Lean) {
-                return return_type(error_code());
+                return return_type(storage_.error);
             } else {
                 return return_type(std::move(error()));
             }
@@ -882,7 +983,7 @@ namespace error_system::core {
         try {
             return std::invoke(std::forward<Function>(function));
         } catch (...) {
-            std::fprintf(stderr, "[result_t<void>] and_then(&&): std::invoke threw exception\n");
+            LOG_ERROR("[result_t<void>] and_then(&&): std::invoke threw exception");
             return return_type(detail::make_invoke_exception_context("and_then(&&): function threw exception"));
         }
     }
@@ -900,7 +1001,7 @@ namespace error_system::core {
         using return_type = decltype(std::invoke(std::forward<Function>(function)));
         if (is_error()) {
             if constexpr (Lean) {
-                return return_type(error_code());
+                return return_type(storage_.error);
             } else {
                 return return_type(error().clone());
             }
@@ -908,7 +1009,7 @@ namespace error_system::core {
         try {
             return std::invoke(std::forward<Function>(function));
         } catch (...) {
-            std::fprintf(stderr, "[result_t<void>] and_then(&): std::invoke threw exception\n");
+            LOG_ERROR("[result_t<void>] and_then(&): std::invoke threw exception");
             return return_type(detail::make_invoke_exception_context("and_then(&): function threw exception"));
         }
     }
@@ -924,12 +1025,12 @@ namespace error_system::core {
     result_t<void, Lean> result_t<void, Lean>::map_error(Function&& function) const& noexcept {
         if (is_error()) {
             if constexpr (Lean) {
-                return result_t<void, Lean>(error_code());
+                return result_t<void, Lean>(storage_.error);
             } else {
                 try {
                     return result_t<void, Lean>(std::invoke(std::forward<Function>(function), error()));
                 } catch (...) {
-                    std::fprintf(stderr, "[result_t<void>] map_error: std::invoke threw exception\n");
+                    LOG_ERROR("[result_t<void>] map_error: std::invoke threw exception");
                     return result_t<void, Lean>(error().clone());
                 }
             }
@@ -948,12 +1049,12 @@ namespace error_system::core {
     result_t<void, Lean> result_t<void, Lean>::map_error(Function&& function) && noexcept {
         if (is_error()) {
             if constexpr (Lean) {
-                return result_t<void, Lean>(error_code());
+                return result_t<void, Lean>(storage_.error);
             } else {
                 try {
                     return result_t<void, Lean>(std::invoke(std::forward<Function>(function), std::move(error())));
                 } catch (...) {
-                    std::fprintf(stderr, "[result_t<void>] map_error(&&): std::invoke threw exception\n");
+                    LOG_ERROR("[result_t<void>] map_error(&&): std::invoke threw exception");
                     return result_t<void, Lean>(detail::make_invoke_exception_context("map_error(&&): function threw exception"));
                 }
             }
@@ -972,12 +1073,12 @@ namespace error_system::core {
     result_t<void, Lean> result_t<void, Lean>::or_else(Function&& function) && noexcept {
         if (is_error()) {
             if constexpr (Lean) {
-                return result_t<void, Lean>(error_code());
+                return result_t<void, Lean>(storage_.error);
             } else {
                 try {
                     return std::invoke(std::forward<Function>(function), std::move(error()));
                 } catch (...) {
-                    std::fprintf(stderr, "[result_t<void>] or_else(&&): std::invoke threw exception\n");
+                    LOG_ERROR("[result_t<void>] or_else(&&): std::invoke threw exception");
                     return result_t<void, Lean>(detail::make_invoke_exception_context("or_else(&&): function threw exception"));
                 }
             }
@@ -996,12 +1097,12 @@ namespace error_system::core {
     result_t<void, Lean> result_t<void, Lean>::or_else(Function&& function) & noexcept {
         if (is_error()) {
             if constexpr (Lean) {
-                return result_t<void, Lean>(error_code());
+                return result_t<void, Lean>(storage_.error);
             } else {
                 try {
                     return std::invoke(std::forward<Function>(function), error());
                 } catch (...) {
-                    std::fprintf(stderr, "[result_t<void>] or_else(&): std::invoke threw exception\n");
+                    LOG_ERROR("[result_t<void>] or_else(&): std::invoke threw exception");
                     return result_t<void, Lean>(error().clone());
                 }
             }
@@ -1047,6 +1148,35 @@ namespace error_system::core {
             }
         }
         return std::move(*this);
+    }
+
+    /**
+     * @brief 转换为字符串描述
+     * @details 成功返回 "[OK]"，错误返回 "[ERR: <context>]"（Full 模式委托
+     *          error_context_t::to_string，Lean 模式输出 raw code）。
+     *          提供本方法后 result_t 可直接作为 string_format_t 的 "{}" 参数。
+     * @return 状态描述字符串
+     *
+     * 实现思路：void 特化无成功值，成功路径直接返回 "[OK]"；
+     *          错误路径与主模板一致，按 Lean/Full 分支处理。
+     *          bad_alloc 时回退到固定字符串，保证 noexcept。
+     */
+    template <bool Lean>
+    std::string result_t<void, Lean>::to_string() const noexcept {
+        checked_ = true;
+        try {
+            if (state_ == result_state_t::error) {
+                if constexpr (Lean) {
+                    return utils::string_format_t::format("[ERR: {}]", storage_.error.get_code());
+                } else {
+                    return "[ERR: " + storage_.error.to_string() + "]";
+                }
+            }
+            return "[OK]";
+        } catch (const std::bad_alloc&) {
+            LOG_ERROR("[result_t<void>] to_string: bad_alloc");
+            return "[error: alloc failed]";
+        }
     }
 
 }  // namespace error_system::core

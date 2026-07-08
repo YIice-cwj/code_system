@@ -1,5 +1,6 @@
 #pragma once
 #include "error_system/plugin/plugin_registry.h"
+#include "error_system/utils/bad_alloc_handler.h"
 
 namespace error_system::plugin {
 
@@ -26,7 +27,7 @@ namespace error_system::plugin {
             std::atomic_store(&plugins_snapshot_,
                               std::static_pointer_cast<const plugin_list_t>(new_snapshot_ptr));
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[plugin_registry] update_snapshot_: std::bad_alloc\n");
+            utils::report_bad_alloc("plugin_registry", "update_snapshot_");
         }
     }
 

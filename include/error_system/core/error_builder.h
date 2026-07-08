@@ -50,6 +50,12 @@ namespace error_system::core {
          *          后委托 error_code_t 构造函数。
          * @tparam SubSystemEnum 子系统枚举类型（受 is_uint16_enum_v 约束）
          * @tparam ModuleEnum 模块枚举类型（受 is_uint16_enum_v 约束）
+         * @param level 错误等级
+         * @param system 系统域
+         * @param subsystem 子系统值（枚举）
+         * @param module 模块值（枚举）
+         * @param number 错误编号
+         * @return error_code_t 错误码对象
          *
          * @example
          * enum class subsys_t : uint16_t { db_conn = 1 };
@@ -70,6 +76,8 @@ namespace error_system::core {
          * @brief 从原始 64 位码值恢复错误码
          * @details 用于从网络传输、持久化存储或二进制协议中恢复错误码。
          *          与 error_code_t(code_t) 构造函数等价，但语义上明确表达"反序列化"意图。
+         * @param code 原始 64 位码值
+         * @return 恢复后的 error_code_t 对象
          *
          * @example
          * code_t raw = recv_from_network();

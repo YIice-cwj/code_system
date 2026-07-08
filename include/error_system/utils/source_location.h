@@ -6,8 +6,8 @@
  * @brief 源文件位置
  * @details 定义源文件位置相关的操作，如获取源文件位置
  * @author yiice
- * @version 3.0.0
- * @date 2026-05-07
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::utils {
@@ -42,6 +42,10 @@ namespace error_system::utils {
         uint32_t line_{0};
 
     public:
+        /**
+         * @brief 默认构造函数
+         * @details 使用 "unknown" 初始化各字段
+         */
         constexpr source_location_t() noexcept;
 
         /**
@@ -87,11 +91,7 @@ namespace error_system::utils {
          * @return source_location_t 源文件位置
          */
         [[nodiscard]] static constexpr source_location_t current(
-#if defined(__GNUC__) || defined(__clang__)
-            const char* file = __builtin_FILE(),
-            const char* func = __builtin_FUNCTION(),
-            uint32_t line = __builtin_LINE()
-#elif defined(_MSC_VER) && _MSC_VER >= 1926
+#if defined(__GNUC__) || defined(__clang__) || (defined(_MSC_VER) && _MSC_VER >= 1926)
             const char* file = __builtin_FILE(),
             const char* func = __builtin_FUNCTION(),
             uint32_t line = __builtin_LINE()

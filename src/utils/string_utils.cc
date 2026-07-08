@@ -5,15 +5,42 @@
  * @brief 字符串工具实现
  * @details 提供字符串替换、分割、合并、首尾空白去除、大小写转换等基础字符串操作能力。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-28
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 
 #include <algorithm>
 #include <cctype>
 
+#include "error_system/utils/log.h"
+
 namespace error_system::utils {
+    namespace {
+        /**
+         * @brief 通用大小写转换实现
+         * @details 预分配并逐字符应用转换函数，内存不足时返回空字符串
+         * @param string 输入字符串视图
+         * @param transform 字符转换函数（std::tolower / std::toupper）
+         * @param fn_name 调用方函数名，用于日志上报
+         * @return std::string 转换后的字符串
+         */
+        std::string transform_chars_(std::string_view string, int (*transform)(int),
+                                     const char* fn_name) noexcept {
+            std::string result{};
+            try {
+                result.resize(string.size());
+            } catch (const std::bad_alloc&) {
+                LOG_ERROR("[string_utils] {}: resize failed", fn_name);
+                return {};
+            }
+            std::transform(string.begin(), string.end(), result.begin(),
+                           [transform](unsigned char character) {
+                               return static_cast<char>(transform(character));
+                           });
+            return result;
+        }
+    }  // namespace
 
     /**
      * @brief 替换字符串中所有的指定子串
@@ -37,7 +64,7 @@ namespace error_system::utils {
                 result.reserve(string.size());
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[string_utils] replace_all: reserve failed\n");
+            LOG_ERROR("[string_utils] replace_all: reserve failed");
         }
 
         size_t current_pos = 0;
@@ -53,7 +80,7 @@ namespace error_system::utils {
                 result.append(string.data() + current_pos, string.size() - current_pos);
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[string_utils] replace_all: append failed (bad_alloc)\n");
+            LOG_ERROR("[string_utils] replace_all: append failed (bad_alloc)");
         }
 
         return result;
@@ -85,7 +112,7 @@ namespace error_system::utils {
                 result.push_back(string.substr(start));
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[string_utils] split: push_back failed (bad_alloc)\n");
+            LOG_ERROR("[string_utils] split: push_back failed (bad_alloc)");
         }
         return result;
     }
@@ -115,7 +142,7 @@ namespace error_system::utils {
                 result.append(tokens[i]);
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[string_utils] join: append failed (bad_alloc)\n");
+            LOG_ERROR("[string_utils] join: append failed (bad_alloc)");
         }
         return result;
     }
@@ -143,17 +170,7 @@ namespace error_system::utils {
      * @return std::string 小写的字符串
      */
     std::string string_utils_t::to_lower(std::string_view string) noexcept {
-        std::string result{};
-        try {
-            result.resize(string.size());
-        } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[string_utils] to_lower: resize failed\n");
-            return {};
-        }
-        std::transform(string.begin(), string.end(), result.begin(), [](unsigned char character) {
-            return static_cast<char>(std::tolower(character));
-        });
-        return result;
+        return transform_chars_(string, std::tolower, "to_lower");
     }
 
     /**
@@ -163,18 +180,7 @@ namespace error_system::utils {
      * @return std::string 大写的字符串
      */
     std::string string_utils_t::to_upper(std::string_view string) noexcept {
-        std::string result{};
-        try {
-            result.resize(string.size());
-        } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[string_utils] to_upper: resize failed\n");
-            return {};
-        }
-
-        std::transform(string.begin(), string.end(), result.begin(), [](unsigned char character) {
-            return static_cast<char>(std::toupper(character));
-        });
-        return result;
+        return transform_chars_(string, std::toupper, "to_upper");
     }
 
 }  // namespace error_system::utils

@@ -6,19 +6,19 @@
  * @details 实现基于状态机的 JSON 解析（支持嵌套对象与点分路径键）、JSON 字典查询、
  *          以及 JSON 字符串安全转义（含控制字符 \u00XX 编码）。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-28
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 
 #include <array>
 #include <charconv>
 #include <cstdint>
-#include <cstdio>
 #include <vector>
 
 #include "error_system/utils/file_utils.h"
 #include "error_system/utils/json_lexer.h"
+#include "error_system/utils/log.h"
 
 namespace error_system::utils {
     namespace {
@@ -84,7 +84,7 @@ namespace error_system::utils {
                 try {
                     context.current_key = token.value;
                 } catch (const std::bad_alloc&) {
-                    std::fprintf(stderr, "[json_utils] handle_expect_key_or_end: bad_alloc\n");
+                    LOG_ERROR("[json_utils] handle_expect_key_or_end: bad_alloc");
                     return false;
                 }
                 context.state = parse_state_t::expect_colon;
@@ -120,7 +120,7 @@ namespace error_system::utils {
                         context.path_prefix += context.current_key;
                     }
                 } catch (const std::bad_alloc&) {
-                    std::fprintf(stderr, "[json_utils] handle_expect_value_or_start: bad_alloc\n");
+                    LOG_ERROR("[json_utils] handle_expect_value_or_start: bad_alloc");
                     return false;
                 }
                 context.current_key.clear();
@@ -138,7 +138,7 @@ namespace error_system::utils {
                     full_path += context.current_key;
                     context.temp_dict.emplace(std::move(full_path), token.value);
                 } catch (const std::bad_alloc&) {
-                    std::fprintf(stderr, "[json_utils] handle_expect_value_or_start: emplace failed\n");
+                    LOG_ERROR("[json_utils] handle_expect_value_or_start: emplace failed");
                     return false;
                 }
 
@@ -178,7 +178,7 @@ namespace error_system::utils {
             try {
                 return it->second;
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[json_utils] get_value: copy failed (bad_alloc)\n");
+                LOG_ERROR("[json_utils] get_value: copy failed (bad_alloc)");
                 return std::nullopt;
             }
         }
@@ -201,7 +201,7 @@ namespace error_system::utils {
         try {
             return default_value;
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[json_utils] get_value_or: copy default failed (bad_alloc)\n");
+            LOG_ERROR("[json_utils] get_value_or: copy default failed (bad_alloc)");
             return {};
         }
     }
@@ -251,8 +251,8 @@ namespace error_system::utils {
                 if (token.type == detail::json_lexer_t::token_type_t::invalid)
                     return std::nullopt;
                 if (context.path_stack.size() > MAX_PARSE_DEPTH) {
-                    std::fprintf(stderr, "[json_utils] parse: nested depth exceeded %zu\n",
-                                 static_cast<size_t>(MAX_PARSE_DEPTH));
+                    LOG_ERROR("[json_utils] parse: nested depth exceeded {}",
+                              static_cast<size_t>(MAX_PARSE_DEPTH));
                     return std::nullopt;
                 }
 
@@ -309,7 +309,7 @@ namespace error_system::utils {
                     result.append(buffer.data(), 2);
                 }
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[json_utils] append_control_escape: bad_alloc\n");
+                LOG_ERROR("[json_utils] append_control_escape: bad_alloc");
             }
         }
 
@@ -343,7 +343,7 @@ namespace error_system::utils {
                 }
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[json_utils] escape_json: append failed (bad_alloc)\n");
+            LOG_ERROR("[json_utils] escape_json: append failed (bad_alloc)");
         }
         return result;
     }

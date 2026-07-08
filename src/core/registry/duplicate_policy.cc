@@ -1,6 +1,7 @@
 #include "error_system/core/registry/duplicate_policy.h"
 
 #include "error_system/core/registry/error_registry.h"
+#include "error_system/utils/bad_alloc_handler.h"
 
 namespace error_system::core {
 
@@ -23,7 +24,7 @@ namespace error_system::core {
                 callback_copy(raw_code, existing);
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[duplicate_policy] warn callback: std::bad_alloc\n");
+            utils::report_bad_alloc("duplicate_policy", "warn callback");
         }
         return false;
     }

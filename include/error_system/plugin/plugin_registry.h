@@ -17,7 +17,7 @@
  * @brief 插件注册表
  * @details 单例模式，管理所有已注册的错误系统插件，
  *          在错误事件发生时依次通知所有插件。
- *          支持同步（默认）和异步队列两种通知模式。
+ *          支持三种通知模式：sync（同步，默认）、async_queue（异步队列）、sync_deferred（同步延迟）。
  *          使用 RCU（Read-Copy-Update）快照机制，notify_error 热路径零拷贝无锁读取。
  *          异步通知通道由 async_notification_channel_t 封装，自动管理后台线程生命周期。
  *
@@ -25,7 +25,7 @@
  * - 插件注册表必须在构造任何 error_context_t 之前完成初始化，否则错误通知会被静默丢弃。
  * - 调用 plugin_registry_t::instance() 会自动完成初始化，并自注册为默认通知器。
  * - 若需要自定义通知器，应在调用 instance() 之前通过
- *   error_context_initializer_t::set_error_notifier() 设置；否则 instance() 会覆盖为默认值。
+ *   i_error_notifier_t::set_current() 设置；否则 instance() 会覆盖为默认值。
  * - 在 async_queue / sync_deferred 模式下，后台线程/线程本地缓冲的生命周期由注册表管理，
  *   无需手动创建线程。
  * - 线程安全：register_plugin / unregister_plugin / notify_error 均线程安全；
@@ -33,8 +33,8 @@
  *   仅操作当前线程的缓冲，必须由同一线程调用。
  *
  * @author yiice
- * @version 3.0.0
- * @date 2026-05-01
+ * @version 4.4.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::plugin {
@@ -45,9 +45,9 @@ namespace error_system::plugin {
      *          register_plugin_ref() 提供非持有引用注册（用于单例等场景）。
      *          异步模式下自动启动后台工作线程处理通知队列，
      *          队列处理回调转发至本类的 notify_error。
-     *          实现 core::i_error_notifier_t 接口，通过 instance() 自注册到
-     *          error_context_initializer_t，使 core 层经由抽象接口完成通知，
-     *          解耦 core→plugin 反向依赖（依赖倒置原则）。
+     *          实现 core::i_error_notifier_t 接口（notify(ctx) + notify(code) 两个重载），
+     *          通过 instance() 自注册到 i_error_notifier_t 全局指针，
+     *          使 core 层经由抽象接口完成通知，解耦 core→plugin 反向依赖（依赖倒置原则）。
      */
     class plugin_registry_t : public core::i_error_notifier_t {
     public:
@@ -121,6 +121,43 @@ namespace error_system::plugin {
         template <typename Modifier>
         void update_snapshot_(Modifier&& modifier) noexcept;
 
+        /**
+         * @brief 同步分发 error_code 到所有插件（Lean 路径）
+         * @details 遍历插件快照，按 min_level 过滤后调用 on_code(code)。
+         *          不构造 error_context_t，零堆开销。
+         *          notify(code) sync 模式与 async code worker 出队后统一委托本函数。
+         */
+        void notify_code_error_(core::error_code_t code) noexcept;
+
+        /**
+         * @brief 处理 error_code 异步通知回调
+         * @details 由 async_notification_channel 的 error_code 后台线程调用。
+         *          直接调用 notify_code_error_ 分发到插件的 on_code，
+         *          不构造 error_context_t。
+         */
+        void handle_code_notification_(core::error_code_t code) noexcept;
+
+        /**
+         * @brief 原子加载插件快照
+         * @details 统一封装 std::atomic_load 调用，消除 size()/empty()/notify_error 等处的重复
+         * @return std::shared_ptr<const plugin_list_t> 快照指针
+         */
+        [[nodiscard]] std::shared_ptr<const plugin_list_t> load_snapshot_() const noexcept {
+            return std::atomic_load(&plugins_snapshot_);
+        }
+
+        /**
+         * @brief 插入或替换插件（核心逻辑）
+         * @details 同名插件替换旧条目并从 owned 中移除旧指针，新插件追加到 snapshot 与 owned。
+         *          消除 register_plugin / register_plugin_ref 的重复逻辑。
+         * @param snapshot 快照副本（写锁内）
+         * @param owned 持有所有权列表副本（写锁内）
+         * @param new_plugin 新插件 shared_ptr
+         */
+        void upsert_plugin_(plugin_list_t& snapshot,
+                            std::vector<shared_plugin_ptr_t>& owned,
+                            shared_plugin_ptr_t new_plugin) noexcept;
+
     public:
         /**
          * @brief 注册插件（转移所有权）
@@ -149,24 +186,11 @@ namespace error_system::plugin {
          * @brief 同步通知所有插件发生了错误事件
          * @details 通过 RCU 快照无锁读取插件列表，依次调用每个插件的 on_error()。
          *          on_error 为 noexcept，插件实现必须保证不抛异常，否则 std::terminate。
-         *          在 sync 模式下由 error_context_t 构造时直接调用。
          *          同时作为异步通道出队上下文的处理回调。
-         *          实现 core::i_error_notifier_t 接口。
+         *          公共方法供测试与 benchmark 强制走同步路径调用，不再作为虚接口。
          * @param context 错误上下文
          */
-        void notify_error(const core::error_context_t& context) noexcept override;
-
-        /**
-         * @brief 累积延迟通知到线程本地缓冲（sync_deferred 模式）
-         * @details 通知不会立即触发，而是累积到当前线程的本地缓冲中，
-         *          直至调用 flush_deferred_notifications() 时统一批量通知。
-         *          适用于请求处理等批处理场景：在请求处理期间累积错误，
-         *          请求结束时一次性 flush，避免每个错误都阻塞在插件回调上。
-         *          缓冲满时（默认 1024）丢弃新通知并设置溢出标志。
-         *          实现 core::i_error_notifier_t 接口。
-         * @param context 错误上下文
-         */
-        void enqueue_deferred_notification(const core::error_context_t& context) noexcept override;
+        void notify_error(const core::error_context_t& context) noexcept;
 
         /**
          * @brief 触发当前线程累积的所有延迟通知
@@ -192,17 +216,20 @@ namespace error_system::plugin {
 
         /**
          * @brief 设置延迟通知缓冲最大容量
-         * @details 缓冲满时新通知将被丢弃，overflow_dropped 标志置位。
-         *          默认容量 1024。仅影响后续 enqueue，不截断已有缓冲。
+         * @details 转发至 config::feature_flags_t::set_deferred_buffer_max_size()，全局生效。
          * @param max_size 最大容量，0 表示无限制
          */
-        void set_deferred_buffer_size(size_t max_size) noexcept;
+        void set_deferred_buffer_size(size_t max_size) noexcept {
+            config::feature_flags_t::set_deferred_buffer_max_size(max_size);
+        }
 
         /**
          * @brief 获取延迟通知缓冲最大容量
          * @return size_t 最大容量，0 表示无限制
          */
-        [[nodiscard]] size_t get_deferred_buffer_size() const noexcept;
+        [[nodiscard]] size_t get_deferred_buffer_size() const noexcept {
+            return config::feature_flags_t::get_deferred_buffer_max_size();
+        }
 
         /**
          * @brief 查询延迟通知缓冲是否发生过溢出丢弃
@@ -221,8 +248,7 @@ namespace error_system::plugin {
          * @return size_t 插件数量
          */
         [[nodiscard]] size_t size() const noexcept {
-            auto snapshot = std::atomic_load(&plugins_snapshot_);
-            return snapshot->size();
+            return load_snapshot_()->size();
         }
 
         /**
@@ -230,24 +256,27 @@ namespace error_system::plugin {
          * @return bool 是否为空
          */
         [[nodiscard]] bool empty() const noexcept {
-            auto snapshot = std::atomic_load(&plugins_snapshot_);
-            return snapshot->empty();
+            return load_snapshot_()->empty();
         }
 
         /**
          * @brief 获取异步队列中待处理通知数量
+         * @details 包含 error_context 通道与 error_code 通道两路待处理数量之和。
+         *          error_code 通道仅返回 0/1 指示是否有待处理项（mpsc_queue_t 无 size 接口）。
          * @return size_t 队列大小
          */
         [[nodiscard]] size_t pending_notifications() const noexcept {
-            return notification_channel_.pending_notifications();
+            return notification_channel_.pending_notifications()
+                 + notification_channel_.pending_codes();
         }
 
         /**
          * @brief 设置异步通知队列最大容量
-         * @details 当队列达到最大容量时，新通知将被丢弃（默认 0 = 无限制）
+         * @details 转发至 config::feature_flags_t::set_async_queue_max_size()，全局生效。
          * @param max_size 队列最大容量
          */
         void set_max_queue_size(size_t max_size) noexcept {
+            config::feature_flags_t::set_async_queue_max_size(max_size);
             notification_channel_.set_max_queue_size(max_size);
         }
 
@@ -256,25 +285,61 @@ namespace error_system::plugin {
          * @return size_t 队列最大容量，0 表示无限制
          */
         [[nodiscard]] size_t get_max_queue_size() const noexcept {
-            return notification_channel_.get_max_queue_size();
+            return config::feature_flags_t::get_async_queue_max_size();
         }
 
         /**
-         * @brief 异步入队错误通知
+         * @brief 异步入队错误通知（公共入口，供测试直接调用）
          * @details 将错误上下文副本推入后台队列，由工作线程异步处理。
-         *          在 async_queue 模式下由 error_context_t 构造时调用。
          *          首次调用时自动启动后台工作线程。
-         *          实现 core::i_error_notifier_t 接口。
          * @param context 错误上下文
          */
-        void enqueue_notification(const core::error_context_t& context) noexcept override {
+        void enqueue_notification(const core::error_context_t& context) noexcept {
             notification_channel_.enqueue_notification(context);
         }
 
         /**
+         * @brief 累积延迟通知到线程本地缓冲（公共入口，供测试直接调用）
+         * @details 通知累积到当前线程的本地缓冲中，直至显式 flush 时统一批量通知。
+         *          缓冲满时（默认 1024）丢弃新通知并设置溢出标志。
+         * @param context 错误上下文
+         */
+        void enqueue_deferred_notification(const core::error_context_t& context) noexcept;
+
+        /**
+         * @brief 累积延迟 error_code 到线程本地缓冲（公共入口，供测试直接调用）
+         * @details sync_deferred 模式下的 Lean 路径入口。
+         *          缓冲满时丢弃并设置溢出标志。
+         * @param code 错误码
+         */
+        void enqueue_deferred_code(core::error_code_t code) noexcept;
+
+        /**
+         * @brief 通知完整错误上下文（i_error_notifier_t 接口实现）
+         * @details 根据 feature_flags_t::get_notify_mode() 分发到对应路径：
+         *          - sync: 调用 notify_error 同步通知所有插件
+         *          - async_queue: 调用 enqueue_notification 异步入队
+         *          - sync_deferred: 调用 enqueue_deferred_notification 累积到线程本地
+         *          调用方无需关心通知模式，由本方法内部统一分发。
+         * @param context 错误上下文
+         */
+        void notify(const core::error_context_t& context) noexcept override;
+
+        /**
+         * @brief 通知纯错误码（i_error_notifier_t 接口实现，Lean 模式入口）
+         * @details 根据 feature_flags_t::get_notify_mode() 分发到对应路径：
+         *          - sync: 调用 notify_code_error_ 同步分发到插件 on_code
+         *          - async_queue: 调用 enqueue_code 异步入队（零构造）
+         *          - sync_deferred: 调用 enqueue_deferred_code 累积到线程本地
+         *          全程不构造 error_context_t，零堆开销。
+         * @param code 错误码
+         */
+        void notify(core::error_code_t code) noexcept override;
+
+        /**
          * @brief 获取单例实例
          * @details 首次调用时完成单例构造，并尝试自注册为默认错误通知器。
-         *          若调用前已通过 error_context_initializer_t::set_error_notifier()
+         *          若调用前已通过 i_error_notifier_t::set_current()
          *          设置自定义通知器，则保留该通知器并输出提示。
          * @return plugin_registry_t& 单例引用
          */

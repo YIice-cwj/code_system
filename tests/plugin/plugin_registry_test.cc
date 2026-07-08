@@ -22,7 +22,7 @@ namespace error_system::plugin {
         public:
         std::string plugin_name;
         mutable std::atomic<int> call_count{0};
-        mutable const core::error_context_t* last_context = nullptr;
+        mutable std::atomic<const core::error_context_t*> last_context{nullptr};
 
         explicit mock_plugin_t(const std::string& name) : plugin_name(name) {}
 
@@ -30,7 +30,7 @@ namespace error_system::plugin {
 
         void on_error(const core::error_context_t& context) noexcept override {
             call_count.fetch_add(1);
-            last_context = &context;
+            last_context.store(&context, std::memory_order_relaxed);
         }
     };
 
@@ -128,7 +128,7 @@ namespace error_system::plugin {
         core::error_context_t context(core::located_code_t{core::error_code_t(0x800000000000002AULL)}, "test message");
         plugin_registry_t::instance().notify_error(context);
 
-        EXPECT_EQ(plugin.last_context->get_code().get_code(), 0x800000000000002AULL);
+        EXPECT_EQ(plugin.last_context.load(std::memory_order_relaxed)->get_code().get_code(), 0x800000000000002AULL);
     }
 
     TEST_F(plugin_registry_test_t, concurrent_notify_with_stable_registry) {
@@ -153,9 +153,7 @@ namespace error_system::plugin {
         }
 
         EXPECT_EQ(notify_count.load(), 1000);
-        // error_context_t 构造时也会经由默认通知器触发 notify_error，
-        // 因此 plugin.on_error 被调用 2 × notify_count 次
-        EXPECT_EQ(plugin.call_count.load(), 2000);
+        EXPECT_EQ(plugin.call_count.load(), 1000);
     }
 
     // 冒烟级别测试：各线程操作不相交插件，仅验证并发期间不崩溃
@@ -324,26 +322,31 @@ namespace error_system::plugin {
         core::error_context_t ctx_debug(
             core::located_code_t{error_code_t(core::error_level_t::debug, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{1})},
             "debug message");
+        plugin_registry_t::instance().notify_error(ctx_debug);
         EXPECT_EQ(plugin.call_count.load(), 0);
 
         core::error_context_t ctx_info(
             core::located_code_t{error_code_t(core::error_level_t::info, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{2})},
             "info message");
+        plugin_registry_t::instance().notify_error(ctx_info);
         EXPECT_EQ(plugin.call_count.load(), 0);
 
         core::error_context_t ctx_warn(
             core::located_code_t{error_code_t(core::error_level_t::warn, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{3})},
             "warn message");
+        plugin_registry_t::instance().notify_error(ctx_warn);
         EXPECT_EQ(plugin.call_count.load(), 0);
 
         core::error_context_t ctx_error(
             core::located_code_t{error_code_t(core::error_level_t::error, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{4})},
             "error message");
+        plugin_registry_t::instance().notify_error(ctx_error);
         EXPECT_EQ(plugin.call_count.load(), 1);
 
         core::error_context_t ctx_fatal(
             core::located_code_t{error_code_t(core::error_level_t::fatal, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{5})},
             "fatal message");
+        plugin_registry_t::instance().notify_error(ctx_fatal);
         EXPECT_EQ(plugin.call_count.load(), 2);
     }
 
@@ -386,14 +389,27 @@ namespace error_system::plugin {
             plugin_registry_t::instance().clear();
             error_system::core::error_registry_t::instance().unregister_all();
         }
+
+        /**
+         * @brief 构造错误上下文并触发通知
+         * @details 新架构下 error_context_t 构造函数不通知，需显式调用
+         *          plugin_registry_t::notify(ctx) 触发，由 registry 按
+         *          sync_deferred 模式累积到线程本地缓冲。
+         */
+        error_system::core::error_context_t make_ctx(const std::string& message) {
+            error_system::core::error_context_t ctx(
+                error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)},
+                message);
+            plugin_registry_t::instance().notify(ctx);
+            return ctx;
+        }
     };
 
     TEST_F(deferred_notify_test_t, enqueue_buffers_without_notifying) {
         mock_plugin_t plugin("deferred_plugin");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "buffered error");
+        auto ctx = make_ctx("buffered error");
 
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
         EXPECT_EQ(plugin.call_count.load(), 0);
@@ -403,10 +419,8 @@ namespace error_system::plugin {
         mock_plugin_t plugin("flush_plugin");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        error_system::core::error_context_t ctx1(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "error 1");
-        error_system::core::error_context_t ctx2(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "error 2");
+        auto ctx1 = make_ctx("error 1");
+        auto ctx2 = make_ctx("error 2");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 2UL);
 
         plugin_registry_t::instance().flush_deferred_notifications();
@@ -427,8 +441,7 @@ namespace error_system::plugin {
         mock_plugin_t plugin("clear_plugin");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "to be dropped");
+        auto ctx = make_ctx("to be dropped");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
         const size_t dropped = plugin_registry_t::instance().clear_deferred_notifications();
@@ -446,8 +459,7 @@ namespace error_system::plugin {
         plugin_registry_t::instance().set_deferred_buffer_size(3);
         EXPECT_FALSE(plugin_registry_t::instance().deferred_buffer_overflowed());
 
-        error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "overflow test");
+        auto ctx = make_ctx("overflow test");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
         plugin_registry_t::instance().enqueue_deferred_notification(ctx);
@@ -487,9 +499,11 @@ namespace error_system::plugin {
         error_system::core::error_context_t info_ctx(
             error_system::core::located_code_t{error_code_t(error_system::core::error_level_t::info, error_system::domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{9})},
             "info level");
+        plugin_registry_t::instance().notify(info_ctx);
         error_system::core::error_context_t error_ctx(
             error_system::core::located_code_t{error_code_t(error_system::core::error_level_t::error, error_system::domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{1})},
             "error level");
+        plugin_registry_t::instance().notify(error_ctx);
 
         plugin_registry_t::instance().flush_deferred_notifications();
 
@@ -509,7 +523,7 @@ namespace error_system::plugin {
             plugin_registry_t::instance().enqueue_deferred_notification(ctx);
         }
         EXPECT_FALSE(plugin_registry_t::instance().deferred_buffer_overflowed());
-        EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1100UL);
+        EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1099UL);
 
         plugin_registry_t::instance().clear_deferred_notifications();
     }
@@ -518,13 +532,13 @@ namespace error_system::plugin {
         mock_plugin_t plugin("tls_plugin");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "main thread");
+        auto ctx = make_ctx("main thread");
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
         std::thread t([] {
             error_system::core::error_context_t child_ctx(
                 error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "child thread");
+            plugin_registry_t::instance().notify(child_ctx);
             EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
             plugin_registry_t::instance().flush_deferred_notifications();
             EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 0UL);
@@ -546,7 +560,7 @@ namespace error_system::plugin {
             void on_error(const core::error_context_t&) noexcept override {
                 call_count.fetch_add(1);
                 core::error_context_t nested(core::located_code_t{core::error_code_t(0x800000000000002AULL)}, "nested during flush");
-                (void)nested;
+                plugin_registry_t::instance().notify(nested);
             }
             std::atomic<int> call_count{0};
         };
@@ -554,8 +568,7 @@ namespace error_system::plugin {
         reentrant_plugin_t plugin;
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "outer error");
+        auto ctx = make_ctx("outer error");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
         plugin_registry_t::instance().flush_deferred_notifications();
@@ -574,7 +587,7 @@ namespace error_system::plugin {
             void on_error(const core::error_context_t& ctx) noexcept override {
                 call_count.fetch_add(1);
                 seen_codes.push_back(ctx.get_code().get_code());
-                seen_messages.push_back(ctx.get_message());
+                seen_messages.emplace_back(ctx.get_message());
             }
             std::atomic<int> call_count{0};
             std::vector<uint64_t> seen_codes;
@@ -584,10 +597,8 @@ namespace error_system::plugin {
         capturing_plugin_t plugin;
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        error_system::core::error_context_t ctx1(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "first message");
-        error_system::core::error_context_t ctx2(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "second message");
+        auto ctx1 = make_ctx("first message");
+        auto ctx2 = make_ctx("second message");
 
         plugin_registry_t::instance().flush_deferred_notifications();
 
@@ -602,10 +613,8 @@ namespace error_system::plugin {
      * @brief 无插件注册时 flush 非空缓冲应安全完成且清空缓冲
      */
     TEST_F(deferred_notify_test_t, flush_with_no_plugins_is_noop) {
-        error_system::core::error_context_t ctx1(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "no plugin 1");
-        error_system::core::error_context_t ctx2(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "no plugin 2");
+        auto ctx1 = make_ctx("no plugin 1");
+        auto ctx2 = make_ctx("no plugin 2");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 2UL);
         ASSERT_EQ(plugin_registry_t::instance().size(), 0UL);
 
@@ -641,8 +650,7 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(second);
         plugin_registry_t::instance().register_plugin_ref(third);
 
-        error_system::core::error_context_t ctx(
-            error_system::core::located_code_t{error_system::core::error_code_t(0x800000000000002AULL)}, "ordering test");
+        auto ctx = make_ctx("ordering test");
 
         plugin_registry_t::instance().flush_deferred_notifications();
 
@@ -650,6 +658,227 @@ namespace error_system::plugin {
         EXPECT_EQ(call_log[0], "first");
         EXPECT_EQ(call_log[1], "second");
         EXPECT_EQ(call_log[2], "third");
+    }
+
+    TEST_F(plugin_registry_test_t, dispatch_to_plugins_filters_each_plugin_independently) {
+        class tiered_plugin_t : public i_error_plugin_t {
+            public:
+            explicit tiered_plugin_t(std::string n, core::error_level_t threshold)
+                : plugin_name(std::move(n)), min_threshold(threshold) {}
+            std::string_view name() const noexcept override { return plugin_name; }
+            core::error_level_t min_level() const noexcept override { return min_threshold; }
+            void on_error(const core::error_context_t&) noexcept override {
+                call_count.fetch_add(1);
+            }
+            std::string plugin_name;
+            core::error_level_t min_threshold;
+            std::atomic<int> call_count{0};
+        };
+
+        tiered_plugin_t info_plugin("info_tier", core::error_level_t::info);
+        tiered_plugin_t error_plugin("error_tier", core::error_level_t::error);
+        plugin_registry_t::instance().register_plugin_ref(info_plugin);
+        plugin_registry_t::instance().register_plugin_ref(error_plugin);
+
+        const auto info_code = error_code_t(core::error_level_t::info,
+                                            domain::system_domain_t::application,
+                                            core::subsystem_id_t{1}, core::module_id_t{1},
+                                            core::error_number_t{71});
+        const auto error_code = error_code_t(core::error_level_t::error,
+                                             domain::system_domain_t::application,
+                                             core::subsystem_id_t{1}, core::module_id_t{1},
+                                             core::error_number_t{72});
+        error_system::core::error_registry_t::instance().register_error(info_code, "TIER_INFO", "info");
+        error_system::core::error_registry_t::instance().register_error(error_code, "TIER_ERROR", "error");
+
+        core::error_context_t info_ctx(core::located_code_t{info_code}, "info level");
+        plugin_registry_t::instance().notify_error(info_ctx);
+        EXPECT_EQ(info_plugin.call_count.load(), 1);
+        EXPECT_EQ(error_plugin.call_count.load(), 0);
+
+        core::error_context_t error_ctx(core::located_code_t{error_code}, "error level");
+        plugin_registry_t::instance().notify_error(error_ctx);
+        EXPECT_EQ(info_plugin.call_count.load(), 2);
+        EXPECT_EQ(error_plugin.call_count.load(), 1);
+    }
+
+    /**
+     * @brief on_code 接口测试夹具
+     * @details 专用于验证 Lean 模式纯错误码通知路径（notify(code) → on_code）。
+     *          覆盖 sync/async/deferred 三种模式及 min_level 过滤。
+     */
+    class code_notify_test_t : public ::testing::Test {
+        protected:
+        error_system::config::feature_flags_t::notify_mode_t original_mode_{
+            error_system::config::feature_flags_t::notify_mode_t::sync};
+
+        void SetUp() override {
+            plugin_registry_t::instance().clear();
+            plugin_registry_t::instance().clear_deferred_notifications();
+            original_mode_ = error_system::config::feature_flags_t::get_notify_mode();
+        }
+
+        void TearDown() override {
+            error_system::config::feature_flags_t::set_notify_mode(original_mode_);
+            plugin_registry_t::instance().clear_deferred_notifications();
+            plugin_registry_t::instance().clear();
+        }
+    };
+
+    TEST_F(code_notify_test_t, sync_notify_code_calls_on_code) {
+        class code_plugin_t : public i_error_plugin_t {
+            public:
+            std::string_view name() const noexcept override { return "code_plugin"; }
+            void on_error(const core::error_context_t&) noexcept override {}
+            void on_code(core::error_code_t c) noexcept override {
+                last_code.store(c.get_code(), std::memory_order_relaxed);
+                call_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            std::atomic<int> call_count{0};
+            std::atomic<uint64_t> last_code{0};
+        };
+
+        code_plugin_t plugin;
+        plugin_registry_t::instance().register_plugin_ref(plugin);
+        config::feature_flags_t::set_notify_mode(config::feature_flags_t::notify_mode_t::sync);
+
+        const auto code = error_code_t(core::error_level_t::error,
+                                       domain::system_domain_t::application,
+                                       core::subsystem_id_t{1}, core::module_id_t{1},
+                                       core::error_number_t{100});
+        plugin_registry_t::instance().notify(code);
+
+        EXPECT_EQ(plugin.call_count.load(), 1);
+        EXPECT_EQ(plugin.last_code.load(std::memory_order_relaxed), code.get_code());
+    }
+
+    TEST_F(code_notify_test_t, default_on_code_is_noop) {
+        class error_only_plugin_t : public i_error_plugin_t {
+            public:
+            std::string_view name() const noexcept override { return "error_only"; }
+            void on_error(const core::error_context_t&) noexcept override {
+                call_count.fetch_add(1);
+            }
+            std::atomic<int> call_count{0};
+        };
+
+        error_only_plugin_t plugin;
+        plugin_registry_t::instance().register_plugin_ref(plugin);
+        config::feature_flags_t::set_notify_mode(config::feature_flags_t::notify_mode_t::sync);
+
+        const auto code = error_code_t(core::error_level_t::error,
+                                       domain::system_domain_t::application,
+                                       core::subsystem_id_t{1}, core::module_id_t{1},
+                                       core::error_number_t{101});
+        plugin_registry_t::instance().notify(code);
+
+        EXPECT_EQ(plugin.call_count.load(), 0);
+    }
+
+    TEST_F(code_notify_test_t, notify_code_respects_min_level) {
+        class level_code_plugin_t : public i_error_plugin_t {
+            public:
+            level_code_plugin_t(std::string n, core::error_level_t threshold)
+                : plugin_name(std::move(n)), min_threshold(threshold) {}
+            std::string_view name() const noexcept override { return plugin_name; }
+            core::error_level_t min_level() const noexcept override { return min_threshold; }
+            void on_error(const core::error_context_t&) noexcept override {}
+            void on_code(core::error_code_t) noexcept override {
+                call_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            std::string plugin_name;
+            core::error_level_t min_threshold;
+            std::atomic<int> call_count{0};
+        };
+
+        level_code_plugin_t error_plugin("error_tier", core::error_level_t::error);
+        level_code_plugin_t fatal_plugin("fatal_tier", core::error_level_t::fatal);
+        plugin_registry_t::instance().register_plugin_ref(error_plugin);
+        plugin_registry_t::instance().register_plugin_ref(fatal_plugin);
+        config::feature_flags_t::set_notify_mode(config::feature_flags_t::notify_mode_t::sync);
+
+        const auto warn_code = error_code_t(core::error_level_t::warn,
+                                            domain::system_domain_t::application,
+                                            core::subsystem_id_t{1}, core::module_id_t{1},
+                                            core::error_number_t{102});
+        plugin_registry_t::instance().notify(warn_code);
+        EXPECT_EQ(error_plugin.call_count.load(), 0);
+        EXPECT_EQ(fatal_plugin.call_count.load(), 0);
+
+        const auto error_code_val = error_code_t(core::error_level_t::error,
+                                                 domain::system_domain_t::application,
+                                                 core::subsystem_id_t{1}, core::module_id_t{1},
+                                                 core::error_number_t{103});
+        plugin_registry_t::instance().notify(error_code_val);
+        EXPECT_EQ(error_plugin.call_count.load(), 1);
+        EXPECT_EQ(fatal_plugin.call_count.load(), 0);
+
+        const auto fatal_code = error_code_t(core::error_level_t::fatal,
+                                             domain::system_domain_t::application,
+                                             core::subsystem_id_t{1}, core::module_id_t{1},
+                                             core::error_number_t{104});
+        plugin_registry_t::instance().notify(fatal_code);
+        EXPECT_EQ(error_plugin.call_count.load(), 2);
+        EXPECT_EQ(fatal_plugin.call_count.load(), 1);
+    }
+
+    TEST_F(code_notify_test_t, deferred_notify_code_buffers_and_flushes) {
+        class code_plugin_t : public i_error_plugin_t {
+            public:
+            std::string_view name() const noexcept override { return "deferred_code"; }
+            void on_error(const core::error_context_t&) noexcept override {}
+            void on_code(core::error_code_t) noexcept override {
+                call_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            std::atomic<int> call_count{0};
+        };
+
+        code_plugin_t plugin;
+        plugin_registry_t::instance().register_plugin_ref(plugin);
+        plugin_registry_t::instance().set_deferred_buffer_size(1024);
+        config::feature_flags_t::set_notify_mode(config::feature_flags_t::notify_mode_t::sync_deferred);
+
+        const auto code = error_code_t(core::error_level_t::error,
+                                       domain::system_domain_t::application,
+                                       core::subsystem_id_t{1}, core::module_id_t{1},
+                                       core::error_number_t{105});
+        plugin_registry_t::instance().notify(code);
+        EXPECT_EQ(plugin.call_count.load(), 0);
+        EXPECT_GE(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
+
+        plugin_registry_t::instance().flush_deferred_notifications();
+        EXPECT_EQ(plugin.call_count.load(), 1);
+        EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 0UL);
+    }
+
+    TEST_F(code_notify_test_t, clear_deferred_drops_code_buffer) {
+        class code_plugin_t : public i_error_plugin_t {
+            public:
+            std::string_view name() const noexcept override { return "clear_code"; }
+            void on_error(const core::error_context_t&) noexcept override {}
+            void on_code(core::error_code_t) noexcept override {
+                call_count.fetch_add(1, std::memory_order_relaxed);
+            }
+            std::atomic<int> call_count{0};
+        };
+
+        code_plugin_t plugin;
+        plugin_registry_t::instance().register_plugin_ref(plugin);
+        plugin_registry_t::instance().set_deferred_buffer_size(1024);
+        config::feature_flags_t::set_notify_mode(config::feature_flags_t::notify_mode_t::sync_deferred);
+
+        const auto code = error_code_t(core::error_level_t::error,
+                                       domain::system_domain_t::application,
+                                       core::subsystem_id_t{1}, core::module_id_t{1},
+                                       core::error_number_t{106});
+        plugin_registry_t::instance().notify(code);
+        EXPECT_GE(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
+
+        plugin_registry_t::instance().clear_deferred_notifications();
+        EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 0UL);
+
+        plugin_registry_t::instance().flush_deferred_notifications();
+        EXPECT_EQ(plugin.call_count.load(), 0);
     }
 
 }  // namespace error_system::plugin

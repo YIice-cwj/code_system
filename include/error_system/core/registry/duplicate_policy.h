@@ -66,6 +66,9 @@ namespace error_system::core {
          * @brief 处理 warn 策略（不持锁调用回调）
          * @details 在锁内拷贝 callback 与 existing，释放锁后再调用回调，
          *          避免在持锁状态下执行用户代码。
+         * @param raw_code 错误码原始值
+         * @param existing 已存在的元数据
+         * @return 是否继续注册流程（warn 返回 false）
          */
         bool handle_duplicate_warn_(code_t raw_code, const error_metadata_t& existing) const noexcept;
 

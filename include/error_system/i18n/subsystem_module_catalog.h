@@ -8,6 +8,7 @@
 
 #include "error_system/i18n/i_subsystem_module_resolver.h"
 #include "error_system/i18n/locale.h"
+#include "error_system/utils/singleton.h"
 
 /**
  * @file subsystem_module_catalog.h
@@ -23,8 +24,8 @@
  *
  *          线程安全（读多写少场景使用 shared_mutex）。
  * @author yiice
- * @version 3.0.0
- * @date 2026-06-28
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::i18n {
@@ -51,7 +52,9 @@ namespace error_system::i18n {
      * auto info = catalog.get_subsystem_module_info(locale_t::en_US, locale_t::zh_CN, 101, 1);
      * @endcode
      */
-    class subsystem_module_catalog_t : public i_subsystem_module_resolver_t {
+    class subsystem_module_catalog_t : public i_subsystem_module_resolver_t,
+                                       public utils::singleton_t<subsystem_module_catalog_t> {
+        friend class utils::singleton_t<subsystem_module_catalog_t>;
     private:
         /**
          * @brief (subsystem_id, module_id) → (locale → 名称) 两级映射
@@ -64,22 +67,9 @@ namespace error_system::i18n {
          */
         mutable std::shared_mutex mutex_;
 
-        /**
-         * @brief 单例初始化一次性标志
-         */
-        static std::once_flag once_flag_;
-
         subsystem_module_catalog_t() noexcept = default;
 
         ~subsystem_module_catalog_t() noexcept = default;
-
-        subsystem_module_catalog_t(const subsystem_module_catalog_t&) = delete;
-
-        subsystem_module_catalog_t& operator=(const subsystem_module_catalog_t&) = delete;
-
-        subsystem_module_catalog_t(subsystem_module_catalog_t&&) = delete;
-
-        subsystem_module_catalog_t& operator=(subsystem_module_catalog_t&&) = delete;
 
     public:
         /**
@@ -179,13 +169,6 @@ namespace error_system::i18n {
             uint16_t module_id) const noexcept override {
             return get_subsystem_module_info(output_locale, fallback_locale, subsystem_id, module_id);
         }
-
-        /**
-         * @brief 获取单例实例
-         * @details 使用 std::call_once + 函数局部静态保证线程安全的单例初始化
-         * @return subsystem_module_catalog_t& 单例引用
-         */
-        static subsystem_module_catalog_t& instance() noexcept;
     };
 
     /**

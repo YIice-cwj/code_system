@@ -150,3 +150,21 @@ TEST_F(log_plugin_test_t, default_stream_is_cerr_when_nullptr_passed) {
     plugin.on_error(make_error_context("cerr output"));
     SUCCEED();
 }
+
+TEST_F(log_plugin_test_t, on_code_writes_raw_code_to_stream) {
+    std::ostringstream output;
+    log_plugin_t plugin("l", error_level_t::debug, log_plugin_t::format_t::text, &output);
+    plugin.on_code(registered_code_);
+    std::string content = output.str();
+    EXPECT_NE(content.find("[ERR:"), std::string::npos);
+    EXPECT_NE(content.find(std::to_string(registered_code_.get_code())), std::string::npos);
+}
+
+TEST_F(log_plugin_test_t, on_code_json_format_also_writes_raw_code) {
+    std::ostringstream output;
+    log_plugin_t plugin("l", error_level_t::debug, log_plugin_t::format_t::json, &output);
+    plugin.on_code(registered_code_);
+    std::string content = output.str();
+    EXPECT_NE(content.find("[ERR:"), std::string::npos);
+    EXPECT_NE(content.find(std::to_string(registered_code_.get_code())), std::string::npos);
+}

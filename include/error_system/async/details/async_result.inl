@@ -3,18 +3,19 @@
 #include "error_system/async/async_result.h"
 
 #include <chrono>
-#include <cstdio>
 #include <future>
 #include <new>
 #include <type_traits>
 #include <utility>
 
+#include "error_system/utils/log.h"
+
 /**
  * @file async_result.inl
  * @brief async_result_t 模板实现
  * @author yiice
- * @version 3.0.0
- * @date 2026-07-04
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::async {
@@ -35,7 +36,7 @@ namespace error_system::async {
                                                              core::error_number_t{0xFFFE})},
                     message};
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[async_result] make_async_exception_context: std::bad_alloc\n");
+                LOG_ERROR("[async_result] make_async_exception_context: std::bad_alloc");
                 static thread_local core::error_context_t fallback{};
                 return fallback.clone();
             }
@@ -56,7 +57,7 @@ namespace error_system::async {
         try {
             return future_.get();
         } catch (...) {
-            std::fprintf(stderr, "[async_result] get: inner future threw exception\n");
+            LOG_ERROR("[async_result] get: inner future threw exception");
             return result_type_t(detail::make_async_exception_context("async get: inner future threw"));
         }
     }
@@ -94,7 +95,7 @@ namespace error_system::async {
                                result_type_t input = captured_future.get();
                                return captured_function(std::move(input));
                            } catch (...) {
-                               std::fprintf(stderr, "[async_result] then: threw exception\n");
+                               LOG_ERROR("[async_result] then: threw exception");
                                return next_result_t(detail::make_async_exception_context("async then: function threw"));
                            }
                        }));
@@ -113,7 +114,7 @@ namespace error_system::async {
                                }
                                return result;
                            } catch (...) {
-                               std::fprintf(stderr, "[async_result] recover: threw exception\n");
+                               LOG_ERROR("[async_result] recover: threw exception");
                                return result_type_t(detail::make_async_exception_context("async recover: threw"));
                            }
                        }));
@@ -130,7 +131,7 @@ namespace error_system::async {
                 try {
                     return captured_function();
                 } catch (...) {
-                    std::fprintf(stderr, "[async_result] make_async: threw exception\n");
+                    LOG_ERROR("[async_result] make_async: threw exception");
                     return invoke_result_t(detail::make_async_exception_context("async make_async: function threw"));
                 }
             }));

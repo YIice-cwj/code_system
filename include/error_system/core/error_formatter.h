@@ -1,17 +1,17 @@
 #pragma once
-#include <cstdio>
 #include <ostream>
 
 #include "error_system/core/error_context.h"
 #include "error_system/core/serializer/error_context_serializer.h"
+#include "error_system/utils/log.h"
 
 /**
  * @file error_formatter.h
  * @brief 错误格式化
  * @details 定义错误格式化相关的函数，包括 error_context_t 的输出流运算符重载
  * @author yiice
- * @version 3.0.0
- * @date 2026-05-06
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
@@ -26,7 +26,7 @@ namespace error_system::core {
     try {
         return stream << error_context_serializer_t::to_string(context);
     } catch (...) {
-        std::fprintf(stderr, "[error_formatter] operator<< threw exception\n");
+        LOG_ERROR("[error_formatter] operator<< threw exception");
         return stream;
     }
 }

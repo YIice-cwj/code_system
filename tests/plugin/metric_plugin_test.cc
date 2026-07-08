@@ -131,3 +131,43 @@ TEST(MetricPluginTest, min_level_filter_via_registry_not_in_plugin) {
     metric_snapshot_t snapshot = plugin.snapshot();
     EXPECT_EQ(snapshot.total_count, 2u);
 }
+
+TEST(MetricPluginTest, on_code_increments_total_count) {
+    metric_plugin_t plugin("m", error_level_t::debug);
+    plugin.on_code(make_error_code(1));
+    plugin.on_code(make_error_code(2));
+    metric_snapshot_t snapshot = plugin.snapshot();
+    EXPECT_EQ(snapshot.total_count, 2u);
+}
+
+TEST(MetricPluginTest, on_code_counts_by_level) {
+    metric_plugin_t plugin("m", error_level_t::debug);
+    plugin.on_code(make_error_code(1, error_level_t::error));
+    plugin.on_code(make_error_code(2, error_level_t::fatal));
+    metric_snapshot_t snapshot = plugin.snapshot();
+    EXPECT_EQ(snapshot.level_counts[3], 1u);
+    EXPECT_EQ(snapshot.level_counts[4], 1u);
+}
+
+TEST(MetricPluginTest, on_code_counts_by_code_and_subsystem) {
+    metric_plugin_t plugin("m", error_level_t::debug);
+    plugin.on_code(make_error_code(100));
+    plugin.on_code(make_error_code(100));
+    plugin.on_code(make_error_code(200));
+    metric_snapshot_t snapshot = plugin.snapshot();
+    const uint64_t code_100 = make_error_code(100).get_code();
+    const uint64_t code_200 = make_error_code(200).get_code();
+    EXPECT_EQ(snapshot.code_counts.at(code_100), 2u);
+    EXPECT_EQ(snapshot.code_counts.at(code_200), 1u);
+    EXPECT_EQ(snapshot.subsystem_counts.at(1), 3u);
+}
+
+TEST(MetricPluginTest, on_code_and_on_error_share_same_count_path) {
+    metric_plugin_t plugin("m", error_level_t::debug);
+    plugin.on_error(make_error_context(1));
+    plugin.on_code(make_error_code(1));
+    metric_snapshot_t snapshot = plugin.snapshot();
+    const uint64_t code_1 = make_error_code(1).get_code();
+    EXPECT_EQ(snapshot.total_count, 2u);
+    EXPECT_EQ(snapshot.code_counts.at(code_1), 2u);
+}

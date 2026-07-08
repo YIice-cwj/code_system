@@ -10,8 +10,8 @@
  *          locale 配置统一由 config::i18n_config_t 管理，本类仅保留消息目录。
  *          线程安全（读多写少场景使用 shared_mutex）。
  * @author yiice
- * @version 3.0.0
- * @date 2026-07-04
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 
@@ -22,24 +22,9 @@
 #include <utility>
 
 #include "error_system/config/i18n_config.h"
+#include "error_system/utils/bad_alloc_handler.h"
 
 namespace error_system::i18n {
-
-    std::once_flag i18n_t::once_flag_;
-
-    /**
-     * @brief 获取单例实例
-     * @details 使用 std::call_once + 函数局部静态保证线程安全的单例初始化
-     * @return 单例引用
-     */
-    i18n_t& i18n_t::instance() noexcept {
-        static i18n_t* instance_ptr = nullptr;
-        std::call_once(once_flag_, [] {
-            static i18n_t instance;
-            instance_ptr = &instance;
-        });
-        return *instance_ptr;
-    }
 
     /**
      * @brief 注册本地化消息
@@ -54,7 +39,7 @@ namespace error_system::i18n {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             catalog_[locale][code.get_identity_code()] = std::string(message);
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[i18n] register_message: std::bad_alloc\n");
+            utils::report_bad_alloc("i18n", "register_message");
         }
     }
 
@@ -77,7 +62,7 @@ namespace error_system::i18n {
             }
             return count;
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[i18n] register_messages: std::bad_alloc\n");
+            utils::report_bad_alloc("i18n", "register_messages");
             return count;
         }
     }
@@ -113,7 +98,7 @@ namespace error_system::i18n {
                 current = parent;
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[i18n] get_message: std::bad_alloc\n");
+            utils::report_bad_alloc("i18n", "get_message");
         }
         return {};
     }
@@ -155,7 +140,7 @@ namespace error_system::i18n {
                 locales.push_back(locale);
             }
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[i18n] get_locales: std::bad_alloc\n");
+            utils::report_bad_alloc("i18n", "get_locales");
         }
         return locales;
     }

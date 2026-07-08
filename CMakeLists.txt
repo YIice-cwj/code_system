@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 
 set(PROJECT_NAME "error_system")
 
-set(VERSION_MAJOR 3)
-set(VERSION_MINOR 0)
+set(VERSION_MAJOR 4)
+set(VERSION_MINOR 4)
 set(VERSION_PATCH 0)
 set(VERSION_STRING ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH})
 
@@ -28,9 +28,9 @@ option(ERROR_SYSTEM_ENABLE_PGO_USE "启用 PGO 使用阶段" OFF)
 option(ERROR_SYSTEM_ENABLE_ASAN "启用地址安全检查器" OFF)
 option(ERROR_SYSTEM_ENABLE_UBSAN "启用未定义行为检测器" OFF)
 option(ERROR_SYSTEM_WARNINGS_AS_ERRORS "将警告视为错误" ON)
-option(ERROR_SYSTEM_BUILD_TESTS "Build tests for error_system" ON)
-option(ERROR_SYSTEM_BUILD_EXAMPLES "Build examples for error_system" ON)
-option(ERROR_SYSTEM_BUILD_PERF_TESTS "Build performance tests" ON)
+option(ERROR_SYSTEM_BUILD_TESTS "构建测试" ON)
+option(ERROR_SYSTEM_BUILD_EXAMPLES "构建示例" ON)
+option(ERROR_SYSTEM_BUILD_PERF_TESTS "构建性能测试" ON)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/error_system_performance.cmake)
 find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -98,7 +98,7 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/config/i18n_config.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/registry/duplicate_policy.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_initializer.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/i_error_notifier.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_exception.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/runtime_block.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/serializer/error_context_serializer_text.cc

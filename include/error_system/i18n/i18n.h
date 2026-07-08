@@ -13,6 +13,7 @@
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_level.h"
 #include "error_system/i18n/locale.h"
+#include "error_system/utils/singleton.h"
 
 /**
  * @file i18n.h
@@ -27,8 +28,8 @@
  *          查询时从 i18n_config_t 读取输出/默认 locale，避免双源配置不同步。
  * @note 本头文件仅含声明，实现见 i18n.cc
  * @author yiice
- * @version 3.0.0
- * @date 2026-07-01
+ * @version 3.0.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::i18n {
@@ -63,7 +64,8 @@ namespace error_system::i18n {
      * auto message = catalog.get_message(ERR_DB_TIMEOUT);
      * @endcode
      */
-    class i18n_t {
+    class i18n_t : public utils::singleton_t<i18n_t> {
+        friend class utils::singleton_t<i18n_t>;
     public:
         using message_t = std::string;
         using code_identity_t = code_t;
@@ -79,22 +81,9 @@ namespace error_system::i18n {
          */
         mutable std::shared_mutex mutex_;
 
-        /**
-         * @brief 单例初始化一次性标志
-         */
-        static std::once_flag once_flag_;
-
         i18n_t() noexcept = default;
 
         ~i18n_t() noexcept = default;
-
-        i18n_t(const i18n_t&) = delete;
-
-        i18n_t& operator=(const i18n_t&) = delete;
-
-        i18n_t(i18n_t&&) = delete;
-
-        i18n_t& operator=(i18n_t&&) = delete;
 
     public:
         /**
@@ -207,12 +196,6 @@ namespace error_system::i18n {
         [[nodiscard]] inline std::optional<locale_t> get_active_locale() const noexcept {
             return config::i18n_config_t::get_output_locale();
         }
-
-        /**
-         * @brief 获取单例实例
-         * @return i18n_t& 单例引用
-         */
-        static i18n_t& instance() noexcept;
     };
 
 }  // namespace error_system::i18n

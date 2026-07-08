@@ -4,16 +4,19 @@
  * @file log_plugin.cc
  * @brief 错误日志插件实现
  * @details 将 error_context_t 格式化后写入目标流，mutex 保护避免多线程交错。
+ *          Lean 路径（on_code）仅输出 raw code，零字符串分配。
  * @author yiice
- * @version 3.0.0
- * @date 2026-07-04
+ * @version 4.4.1
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 
-#include <cstdio>
 #include <iostream>
 #include <new>
 #include <utility>
+
+#include "error_system/utils/bad_alloc_handler.h"
+#include "error_system/utils/log.h"
 
 namespace error_system::plugin {
 
@@ -35,9 +38,19 @@ namespace error_system::plugin {
             (*stream_) << formatted << '\n';
             stream_->flush();
         } catch (const std::bad_alloc&) {
-            std::fprintf(stderr, "[log_plugin] on_error: std::bad_alloc\n");
-        } catch (...) {
-            std::fprintf(stderr, "[log_plugin] on_error: unknown exception\n");
+            utils::report_bad_alloc("log_plugin", "on_error");
+        } catch (const std::exception& e) {
+            LOG_ERROR("[log_plugin] on_error: {}", e.what());
+        }
+    }
+
+    void log_plugin_t::on_code(core::error_code_t code) noexcept {
+        try {
+            std::lock_guard<std::mutex> lock(mutex_);
+            (*stream_) << "[ERR: " << code.get_code() << "]\n";
+            stream_->flush();
+        } catch (const std::exception& e) {
+            LOG_ERROR("[log_plugin] on_code: {}", e.what());
         }
     }
 

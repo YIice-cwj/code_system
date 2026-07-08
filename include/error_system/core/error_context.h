@@ -1,5 +1,4 @@
 #pragma once
-#include <cstdio>
 #include <memory>
 #include <new>
 #include <string>
@@ -7,10 +6,11 @@
 #include <vector>
 
 #include "error_system/core/error_code.h"
-#include "error_system/core/error_context_initializer.h"
 #include "error_system/core/error_level.h"
 #include "error_system/core/registry/error_registry.h"
 #include "error_system/core/runtime_block.h"
+#include "error_system/utils/log.h"
+#include "error_system/utils/object_pool.h"
 #include "error_system/utils/source_location.h"
 #include "error_system/utils/stack_trace_utils.h"
 #include "error_system/utils/string_format.h"
@@ -21,11 +21,12 @@
  * @details 物理布局：8B error_code + 8B runtime_block* + 8B cause* = 24 字节。
  *          动态字段（message/payload/source_location/stack_frames/metadata）全部收拢到
  *          runtime_block_t 堆块中，按需分配（nullptr 表示无动态数据，零开销）。
+ *          runtime_block_t 通过线程本地对象池复用，消除高频错误路径的堆分配开销。
  *          因果链采用 std::unique_ptr<error_context_t> 独占所有权，零引用计数。
  *          类为 Move-Only：禁用拷贝构造/赋值，仅保留移动。
  * @author yiice
- * @version 4.0.0
- * @date 2026-07-06
+ * @version 4.3.2
+ * @date 2026-07-08
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
@@ -70,11 +71,10 @@ namespace error_system::core {
 
     private:
         friend class error_context_serializer_t;
-        friend class error_context_initializer_t;
         friend error_context_t join_errors(std::vector<error_context_t>&& errors) noexcept;
 
         error_code_t code_{};
-        std::unique_ptr<runtime_block_t> block_{};
+        utils::pool_ptr_t<runtime_block_t> block_{};
         std::unique_ptr<error_context_t> cause_{};
 
         /**
@@ -86,12 +86,18 @@ namespace error_system::core {
 
         /**
          * @brief 查找 payload 值指针
+         * @return payload 值指针，未找到时返回 nullptr
          */
         const std::string* find_payload_(const std::string& key) const noexcept;
 
         /**
          * @brief 插入或更新 payload 字段
          * @details 前 4 项写入 payload_small_（SSO），超出后溢出到 payload_overflow_。
+         * @tparam Key 键类型
+         * @tparam V 值类型
+         * @param key 键
+         * @param value 值
+         * @return 自身引用
          */
         template <typename Key, typename V>
         error_context_t& insert_or_update_payload_(Key&& key, V&& value) noexcept;
@@ -99,6 +105,8 @@ namespace error_system::core {
         /**
          * @brief 检测指定对象是否在当前 cause 链中
          * @details 用于 wrap() 自环检测，避免循环引用。
+         * @param target 待检测对象指针
+         * @return 在 cause 链中返回 true，否则 false
          */
         bool has_cause_in_chain_(const error_context_t* target) const noexcept;
 
@@ -107,6 +115,27 @@ namespace error_system::core {
          * @details 反序列化后重新指向 loc_file_storage_，确保生命周期安全。
          */
         void repair_source_location_pointers_() noexcept;
+
+        /**
+         * @brief 校验错误码合法性并修复未注册错误码
+         * @details 查询注册表，若错误码未注册则标记为 fatal 并附加 "[UNREGISTERED CODE]" 前缀。
+         *          仅在 feature_flags_t::is_validation_enabled() 时执行。
+         */
+        void fill_validation_fields_() noexcept;
+
+        /**
+         * @brief 抓取当前线程调用栈
+         * @details 仅在 feature_flags_t::is_stacktrace_enabled() 且错误级别达标时执行。
+         *          堆栈帧以 raw_frames 形式存储，输出时延迟符号化。
+         */
+        void fill_stacktrace_() noexcept;
+
+        /**
+         * @brief 根据 short_filename_enabled 设置 file_name 字段
+         * @details 仅在 feature_flags_t::is_source_location_enabled() 时执行。
+         * @param short_filename_enabled 是否使用短文件名
+         */
+        void fill_source_location_(bool short_filename_enabled) noexcept;
 
     public:
         error_context_t() noexcept = default;
@@ -229,6 +258,14 @@ namespace error_system::core {
         [[nodiscard]] const runtime_block_t* block() const noexcept { return block_.get(); }
 
         /**
+         * @brief 判断是否携带可用的源位置信息
+         * @details 编译期未启用 LOCATION_ENABLED 时返回 false；运行时开关关闭时返回 false；
+         *          动态块未分配或 file_name 为空时返回 false。供序列化器复用，消除重复判断。
+         * @return bool 是否有源位置
+         */
+        [[nodiscard]] bool is_location_available() const noexcept;
+
+        /**
          * @brief 只读访问因果链下游节点
          * @return cause 指针，无因果链时为 nullptr
          */
@@ -242,11 +279,10 @@ namespace error_system::core {
 
         /**
          * @brief 获取错误消息
-         * @return 消息引用，未分配 block_ 时返回空字符串哨兵
+         * @return 消息字符串视图，未分配 block_ 时返回空视图
          */
-        [[nodiscard]] const std::string& get_message() const noexcept {
-            static const std::string empty{};
-            return block_ ? block_->message : empty;
+        [[nodiscard]] std::string_view get_message() const noexcept {
+            return block_ ? std::string_view(block_->message) : std::string_view{};
         }
 
         /**
@@ -264,6 +300,19 @@ namespace error_system::core {
         [[nodiscard]] const utils::source_location_t& get_source_location() const noexcept {
             static const utils::source_location_t empty{};
             return block_ ? block_->source_location : empty;
+        }
+
+        /**
+         * @brief 获取错误码元数据（统一反查入口）
+         * @details 优先复用 block_->metadata（构造时已缓存），
+         *          未缓存时回退到 registry 查询。消除序列化器中的重复反查。
+         * @return 元数据 optional，未注册时为 nullopt
+         */
+        [[nodiscard]] std::optional<error_metadata_t> get_metadata() const noexcept {
+            if (block_ && block_->metadata) {
+                return block_->metadata;
+            }
+            return error_registry_t::instance().get_info_cached(code_);
         }
 
         /**
@@ -326,7 +375,7 @@ namespace error_system::core {
             try {
                 return insert_or_update_payload_(std::string(key), std::string(value));
             } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[error_context] with(string_view): std::bad_alloc\n");
+                LOG_ERROR("[error_context] with(string_view): std::bad_alloc");
                 return *this;
             }
         }
@@ -429,8 +478,8 @@ namespace error_system::core {
 
         /**
          * @brief 构造最小化错误上下文
-         * @details 跳过 validation/stacktrace/notification，不分配 block_。
-         *          仅供 result_t<T, true>（Lean 模式）的读取路径使用。
+         * @details 跳过 validation/stacktrace/notification，通过 ensure_block_() 分配 block_
+         *          仅用于存储 source_location。仅供 result_t<T, true>（Lean 模式）的读取路径使用。
          * @param code 错误码
          * @param location 源位置
          * @return 最小化错误上下文
