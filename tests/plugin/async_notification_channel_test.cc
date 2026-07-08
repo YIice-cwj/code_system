@@ -144,3 +144,75 @@ TEST(AsyncNotificationChannelTest, enqueue_multiple_contexts_processes_all) {
     EXPECT_TRUE(wait_for(call_count, N, 5000));
     EXPECT_EQ(call_count.load(), N);
 }
+
+/**
+ * @brief enqueue_code 唤醒及时性测试
+ * @details 验证无锁队列 push 后 notify_one 能及时唤醒 worker 线程，
+ *          不依赖 100ms 超时兜底。若发生 lost wakeup，延迟会接近 100ms。
+ *          阈值设为 50ms，远小于超时兜底，确保唤醒路径正常。
+ */
+TEST(AsyncNotificationChannelTest, enqueue_code_wakes_worker_promptly) {
+    std::atomic<int> call_count{0};
+    std::atomic<bool> ready{false};
+
+    async_notification_channel_t channel(
+        [](const error_context_t&) {},
+        [&](error_code_t) {
+            call_count.fetch_add(1, std::memory_order_relaxed);
+            ready.store(true, std::memory_order_release);
+        });
+
+    const error_code_t code(error_level_t::error, system_domain_t::application,
+                            subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+
+    ready.store(false);
+    channel.enqueue_code(code);
+
+    const auto start = std::chrono::steady_clock::now();
+    while (!ready.load(std::memory_order_acquire) &&
+           std::chrono::steady_clock::now() - start < std::chrono::milliseconds(200)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start);
+
+    EXPECT_TRUE(ready.load()) << "worker 未在 200ms 内唤醒";
+    EXPECT_LT(elapsed.count(), 50)
+        << "唤醒延迟 " << elapsed.count() << "ms，疑似 lost wakeup（依赖超时兜底）";
+    EXPECT_GE(call_count.load(), 1);
+}
+
+/**
+ * @brief enqueue_code 并发压力测试
+ * @details 多线程并发 enqueue_code，验证无锁队列在高并发下的正确性。
+ *          所有 code 都应被 worker 消费，无丢失。
+ */
+TEST(AsyncNotificationChannelTest, concurrent_enqueue_code_no_loss) {
+    constexpr int THREADS = 8;
+    constexpr int PER_THREAD = 10000;
+    constexpr int TOTAL = THREADS * PER_THREAD;
+
+    std::atomic<int> call_count{0};
+    async_notification_channel_t channel(
+        [](const error_context_t&) {},
+        [&](error_code_t) {
+            call_count.fetch_add(1, std::memory_order_relaxed);
+        });
+
+    const error_code_t code(error_level_t::error, system_domain_t::application,
+                            subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+
+    std::vector<std::thread> threads;
+    threads.reserve(static_cast<size_t>(THREADS));
+    for (int t = 0; t < THREADS; ++t) {
+        threads.emplace_back([&channel, code]() {
+            for (int i = 0; i < PER_THREAD; ++i) {
+                channel.enqueue_code(code);
+            }
+        });
+    }
+    for (auto& th : threads) { th.join(); }
+
+    EXPECT_TRUE(wait_for(call_count, TOTAL, 10000));
+    EXPECT_EQ(call_count.load(), TOTAL);
+}

@@ -33,6 +33,10 @@ namespace error_system::plugin {
 
     /**
      * @brief 入队错误码（无锁队列 + condition_variable 通知）
+     * @details push 本身通过无锁 CAS 完成，无需锁保护。但加锁块用于与 worker 的
+     *          wait_for 建立同步：确保 notify_one 不会在 worker 谓词检查返回 false
+     *          与真正进入 wait 之间发出（lost wakeup）。worker 持锁时谓词可见性
+     *          与 push 的 release 序 CAS 通过 acquire 序 empty() 配合，可见性正确。
      * @param code 错误码
      */
     void async_notification_channel_t::enqueue_code(core::error_code_t code) noexcept {

@@ -8,6 +8,9 @@ namespace error_system::utils {
 
     template <typename T>
     mpsc_queue_t<T>::mpsc_queue_t() noexcept {
+        for (size_t i = 0; i < MAX_HAZARDS; ++i) {
+            hazards_[i].store(nullptr, std::memory_order_relaxed);
+        }
         auto dummy = std::make_unique<node_t>();
         const packed_t init = tagged_t::pack(dummy.get(), 0);
         head_.store(init, std::memory_order_relaxed);
@@ -23,12 +26,25 @@ namespace error_system::utils {
             std::unique_ptr<node_t> owned(curr);
             curr = next;
         }
-        for (size_t i = 0; i < RETIRE_RING_SIZE; ++i) {
-            if (retire_ring_[i] != nullptr) {
-                std::unique_ptr<node_t> owned(retire_ring_[i]);
-                retire_ring_[i] = nullptr;
+        for (size_t i = 0; i < retired_count_; ++i) {
+            std::unique_ptr<node_t> owned(retired_list_[i]);
+        }
+        retired_count_ = 0;
+    }
+
+    template <typename T>
+    size_t mpsc_queue_t<T>::acquire_hazard_slot_(node_t* ptr) noexcept {
+        for (size_t i = 0; i < MAX_HAZARDS; ++i) {
+            node_t* expected = nullptr;
+            if (hazards_[i].compare_exchange_strong(
+                    expected, ptr,
+                    std::memory_order_acq_rel,
+                    std::memory_order_relaxed)) {
+                return i;
             }
         }
+        std::abort();
+        return SIZE_MAX;
     }
 
     template <typename T>
@@ -46,9 +62,18 @@ namespace error_system::utils {
             packed_t tail = tail_.load(std::memory_order_acquire);
             node_t* tail_ptr = tagged_t::get_ptr(tail);
             const typename tagged_t::tag_t tail_tag = tagged_t::get_tag(tail);
+
+            const size_t slot = acquire_hazard_slot_(tail_ptr);
+
+            if (tail != tail_.load(std::memory_order_acquire)) {
+                hazards_[slot].store(nullptr, std::memory_order_release);
+                continue;
+            }
+
             node_t* next = tail_ptr->next.load(std::memory_order_acquire);
 
             if (tail != tail_.load(std::memory_order_acquire)) {
+                hazards_[slot].store(nullptr, std::memory_order_release);
                 continue;
             }
 
@@ -57,6 +82,7 @@ namespace error_system::utils {
                         next, raw,
                         std::memory_order_release,
                         std::memory_order_relaxed)) {
+                    hazards_[slot].store(nullptr, std::memory_order_release);
                     const packed_t new_tail = tagged_t::pack(raw, static_cast<typename tagged_t::tag_t>(tail_tag + 1));
                     tail_.compare_exchange_strong(
                         tail, new_tail,
@@ -64,24 +90,59 @@ namespace error_system::utils {
                         std::memory_order_relaxed);
                     return true;
                 }
-            } else {
-                const packed_t new_tail = tagged_t::pack(next, static_cast<typename tagged_t::tag_t>(tail_tag + 1));
-                tail_.compare_exchange_strong(
-                    tail, new_tail,
-                    std::memory_order_release,
-                    std::memory_order_relaxed);
+                hazards_[slot].store(nullptr, std::memory_order_release);
+                continue;
             }
+
+            hazards_[slot].store(nullptr, std::memory_order_release);
+            const packed_t new_tail = tagged_t::pack(next, static_cast<typename tagged_t::tag_t>(tail_tag + 1));
+            tail_.compare_exchange_strong(
+                tail, new_tail,
+                std::memory_order_release,
+                std::memory_order_relaxed);
         }
     }
 
     template <typename T>
     void mpsc_queue_t<T>::retire_node_(node_t* node) noexcept {
-        node_t* old = retire_ring_[retire_pos_];
-        retire_ring_[retire_pos_] = node;
-        retire_pos_ = (retire_pos_ + 1) % RETIRE_RING_SIZE;
-        if (old != nullptr) {
-            std::unique_ptr<node_t> owned(old);
+        if (retired_count_ < RETIRE_THRESHOLD) {
+            retired_list_[retired_count_++] = node;
+            return;
         }
+        scan_hazards_and_reclaim_();
+        if (retired_count_ < RETIRE_THRESHOLD) {
+            retired_list_[retired_count_++] = node;
+        }
+    }
+
+    template <typename T>
+    void mpsc_queue_t<T>::scan_hazards_and_reclaim_() noexcept {
+        std::array<node_t*, MAX_HAZARDS> hazarded{};
+        size_t haz_count = 0;
+        for (size_t i = 0; i < MAX_HAZARDS; ++i) {
+            node_t* h = hazards_[i].load(std::memory_order_acquire);
+            if (h != nullptr) {
+                hazarded[haz_count++] = h;
+            }
+        }
+
+        size_t write_idx = 0;
+        for (size_t read_idx = 0; read_idx < retired_count_; ++read_idx) {
+            node_t* candidate = retired_list_[read_idx];
+            bool is_hazarded = false;
+            for (size_t i = 0; i < haz_count; ++i) {
+                if (hazarded[i] == candidate) {
+                    is_hazarded = true;
+                    break;
+                }
+            }
+            if (is_hazarded) {
+                retired_list_[write_idx++] = candidate;
+            } else {
+                std::unique_ptr<node_t> owned(candidate);
+            }
+        }
+        retired_count_ = write_idx;
     }
 
     template <typename T>
