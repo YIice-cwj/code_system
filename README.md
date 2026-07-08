@@ -2,7 +2,7 @@
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/std/the-standard)
 [![CMake](https://img.shields.io/badge/CMake-3.15%2B-green.svg)](https://cmake.org)
-[![Tests](https://img.shields.io/badge/Tests-706%20passing-brightgreen.svg)](https://github.com/google/googletest)
+[![Tests](https://img.shields.io/badge/Tests-713%20passing-brightgreen.svg)](https://github.com/google/googletest)
 
 ## 🚀 项目简介
 

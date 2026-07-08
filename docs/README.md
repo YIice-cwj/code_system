@@ -51,8 +51,8 @@ cd build && ctest --output-on-failure
 | 模块 | 文件数 | 用例数 |
 |------|:---:|:---:|
 | Core | 13 | 271 |
-| Plugin | 8 | 115 |
-| Utils | 6 | 140 |
+| Plugin | 8 | 117 |
+| Utils | 6 | 145 |
 | Config | 2 | 27 |
 | Domain | 1 | 12 |
 | i18n | 2 | 43 |
@@ -60,6 +60,6 @@ cd build && ctest --output-on-failure
 | Migration | 1 | 32 |
 | Async | 1 | 18 |
 | Bridge | 2 | 21 |
-| **总计** | **37** | **706** |
+| **总计** | **37** | **713** |
 
 另有 `tests/migration/perf/` 5 个基准文件（Google Benchmark v1.8.3）：错误上下文、i18n、插件、Result Lean、plain_error_code。
