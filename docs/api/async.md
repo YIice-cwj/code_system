@@ -30,7 +30,7 @@
 | `is_ready` | `[[nodiscard]] bool is_ready() const noexcept` | 非阻塞检查是否就绪 |
 | `valid` | `[[nodiscard]] bool valid() const noexcept` | 检查 future 是否有效 |
 | `then` | `[[nodiscard]] auto then(Function&&) &&` | 链式转换：Function 接收 result，返回新 result；始终调用 |
-| `recover` | `[[nodiscard]] async_result_t<T, Lean> recover(Function&&) &&` | 错误恢复：Function 接收 error_context_t，仅错误时调用 |
+| `recover` | `[[nodiscard]] async_result_t<T, Lean> recover(Function&&) &&` | 错误恢复：Function 接收 error_context_t，仅错误时调用。Lean 模式下传入 `make_minimal(code)`（无 file:line） |
 
 ### make_async
 

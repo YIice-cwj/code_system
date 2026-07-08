@@ -2,7 +2,7 @@
 
 命名空间 `error_system::core`。本层提供错误码、错误上下文、结果类型与注册表的纯数据抽象，不依赖任何外部 IO 或日志后端。所有方法 `noexcept`，`std::bad_alloc` 等异常在内部捕获并记录到 `stderr`，对象保持可安全析构状态。
 
-> **v4.0.0 头文件布局**：`core/error_code.h` · `core/error_context.h` · `core/runtime_block.h` · `core/error_context_initializer.h` · `core/error_exception.h` · `core/error_level.h` · `core/error_metadata.h` · `core/error_builder.h` · `core/i_error_notifier.h` · `core/result/result.h` · `core/registry/error_registry.h` · `core/registry/duplicate_policy.h` · `core/serializer/error_context_serializer.h`
+> **v4.0.0 头文件布局**：`core/error_code.h` · `core/error_context.h` · `core/runtime_block.h` · `core/error_exception.h` · `core/error_level.h` · `core/error_metadata.h` · `core/error_builder.h` · `core/i_error_notifier.h` · `core/result/result.h` · `core/registry/error_registry.h` · `core/registry/duplicate_policy.h` · `core/serializer/error_context_serializer.h`
 
 ---
 
@@ -114,7 +114,7 @@ static_assert(all_unique(codes), "Duplicate error codes detected");
 - **动静分离**：静态数据（`error_code`）内联，动态数据（message/payload/stack/source_location/metadata）收拢到 `runtime_block_t` 堆块，按需分配（`block_ == nullptr` 表示无动态数据，零开销）
 - **Move-Only**：禁用拷贝构造/赋值，仅支持移动；如需共享，调用方自行用 `shared_ptr` 包装或调用 `clone()`
 - **因果链**：采用 `std::unique_ptr<error_context_t>` 独占所有权，零引用计数
-- 序列化职责委托给 `error_context_serializer_t`，运行时特性初始化委托给 `error_context_initializer_t`，遵循单一职责原则
+- 序列化职责委托给 `error_context_serializer_t`，运行时特性初始化（校验/堆栈/源位置）内联到 `error_context_t` 私有方法，遵循单一职责原则
 - `source_location` / `file_name` / `stack_frames` 的填充由编译期特性开关（`LOCATION_ENABLED` / `STACKTRACE_ENABLED`）控制，内部使用 `if constexpr` 由编译器死代码消除未启用分支
 
 ### located_code_t
@@ -229,7 +229,7 @@ static_assert(all_unique(codes), "Duplicate error codes detected");
 |------|------|------|
 | `to_string` | `[[nodiscard]] std::string to_string() const noexcept` | 可读文本 |
 | `to_json` | `[[nodiscard]] std::string to_json() const noexcept` | JSON |
-| `to_binary` | `[[nodiscard]] std::string to_binary() const noexcept` | 紧凑二进制 |
+| `to_binary` | `[[nodiscard]] std::string to_binary() const noexcept` | 紧凑二进制（不含栈帧） |
 
 ### 示例
 
@@ -364,13 +364,13 @@ result_t<void> fail = result_t<void>::make_error(ERR_FAIL, "失败");
 |------|------|------|
 | `to_string` | `[[nodiscard]] static std::string to_string(const error_context_t& ctx) noexcept` | 人类可读文本（含 `↳ Caused by:`） |
 | `to_json` | `[[nodiscard]] static std::string to_json(const error_context_t& ctx) noexcept` | JSON（含 cause 递归字段） |
-| `to_binary` | `[[nodiscard]] static std::string to_binary(const error_context_t& ctx) noexcept` | 紧凑二进制（小端序） |
+| `to_binary` | `[[nodiscard]] static std::string to_binary(const error_context_t& ctx) noexcept` | 紧凑二进制（小端序，不含栈帧） |
 
 ### 解码
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `from_binary` | `[[nodiscard]] static std::optional<error_context_t> from_binary(std::string_view data) noexcept` | 校验魔数与版本号，还原完整上下文 |
+| `from_binary` | `[[nodiscard]] static std::optional<error_context_t> from_binary(std::string_view data) noexcept` | 校验魔数与版本号，还原上下文（不含栈帧） |
 | `from_json` | `[[nodiscard]] static std::optional<error_context_t> from_json(std::string_view json) noexcept` | 流式解析，不构建中间 JSON 树 |
 
 ### 配置
@@ -554,25 +554,22 @@ DEFINE_ERROR_CODE(ERR_DB_FAIL, error_level_t::error, system_domain_t::database,
 
 ## i_error_notifier_t
 
-错误通知器抽象接口。解耦 core 层对 plugin 层的反向依赖：core 层通过此接口通知错误事件，plugin 层提供具体实现（如 `plugin_registry_t`）。遵循依赖倒置原则。
+错误通知器抽象接口。解耦 core 层对 plugin 层的反向依赖：core 层通过此接口通知错误事件，plugin 层提供具体实现（如 `plugin_registry_t`）。遵循依赖倒置原则。接口收敛为两个 `notify` 重载：完整上下文（Full 模式）与纯错误码（Lean 模式），通知模式（sync/async_queue/sync_deferred）由实现内部根据 `feature_flags` 分发。
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | 析构 | `virtual ~i_error_notifier_t() noexcept = default` | 虚析构 |
-| `notify_error` | `virtual void notify_error(const error_context_t& context) noexcept = 0` | 同步通知（sync 模式） |
-| `enqueue_notification` | `virtual void enqueue_notification(const error_context_t& context) noexcept = 0` | 异步入队（async_queue 模式） |
-| `enqueue_deferred_notification` | `virtual void enqueue_deferred_notification(const error_context_t& context) noexcept = 0` | 累积到线程本地缓冲，flush 时批量通知（sync_deferred 模式） |
+| `notify`（上下文） | `virtual void notify(const error_context_t& context) noexcept = 0` | Full 模式入口，由 `result_t<T, false>::make_error` 调用 |
+| `notify`（错误码） | `virtual void notify(error_code_t code) noexcept = 0` | Lean 模式入口，由 `result_t<T, true>::make_error` 调用，不构造 `error_context_t` |
+| `set_current` | `static void set_current(i_error_notifier_t* notifier) noexcept` | 注入通知器实现（nullptr 清除），非线程安全，预期初始化阶段调用 |
+| `get_current` | `[[nodiscard]] static i_error_notifier_t* get_current() noexcept` | 获取当前通知器，未设置返回 nullptr |
+| `try_notify`（上下文） | `static void try_notify(const error_context_t& context) noexcept` | 封装 `get_current + nullptr 检查 + notify`，消除调用方重复代码 |
+| `try_notify`（错误码） | `static void try_notify(error_code_t code) noexcept` | Lean 路径同名封装 |
 
-实现类必须保证所有方法 noexcept 安全，插件回调抛出的异常应在实现内部捕获并记录，不向外传播。
+实现类必须保证所有方法 noexcept 安全，插件回调抛出的异常应在实现内部捕获并记录，不向外传播。`plugin_registry_t::instance()` 首次调用时自注册为默认通知器。
 
 ---
 
-## error_context_initializer_t
+## 运行时初始化与通知
 
-错误上下文初始化器。纯静态工具类（构造/拷贝/移动/析构全部 `= delete`）。在 `error_context_t` 构造时根据全局配置完成错误码校验、堆栈捕获、源位置记录和插件通知。通过 `error_context_t` 的 friend 声明访问其私有成员。插件通知通过 `i_error_notifier_t` 抽象接口完成，core 层不直接依赖 plugin 层。
-
-| 方法 | 签名 | 说明 |
-|------|------|------|
-| `set_error_notifier` | `static void set_error_notifier(i_error_notifier_t* notifier) noexcept` | 注入通知器实现（nullptr 清除）。非线程安全，预期在初始化阶段调用 |
-| `get_error_notifier` | `[[nodiscard]] static i_error_notifier_t* get_error_notifier() noexcept` | 获取当前通知器（未设置返回 nullptr） |
-| `initialize` | `static void initialize(error_context_t& context) noexcept` | 执行运行时特性初始化：校验 → 堆栈 → 源位置 → 通知。成功码上下文由调用方自行跳过 |
+`error_context_t` 构造时根据全局配置完成错误码校验、堆栈捕获（私有方法 `fill_stacktrace_()`）、源位置记录，这些逻辑已内联到 `error_context_t` 私有实现中（原 `error_context_initializer_t` 已按 SRP 合并）。插件通知不在 `error_context_t` 构造时触发，而由 `result_t::make_error` 通过 `i_error_notifier_t::try_notify()` 显式发起——core 层经由抽象接口通知，不直接依赖 plugin 层。成功码上下文跳过全部初始化与通知。

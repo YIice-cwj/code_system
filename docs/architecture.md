@@ -8,7 +8,7 @@
 | i18n | `i18n_t` `locale_t` `subsystem_module_catalog_t` |
 | Mapping | `status_mapper_t` `http_status_t` `grpc_status_t` |
 | Migration | `error_migration_registry_t` |
-| Core | `error_code_t` `error_context_t` `error_builder_t` `error_exception_t` `error_context_initializer_t` `registry/error_registry_t` `serializer/error_context_serializer_t` `result/result_t<T>` |
+| Core | `error_code_t` `error_context_t` `error_builder_t` `error_exception_t` `registry/error_registry_t` `serializer/error_context_serializer_t` `result/result_t<T>` |
 | Domain | 6 大系统域枚举 |
 | Plugin | `i_error_plugin_t` `plugin_registry_t` `error_router_plugin_t` `async_notification_channel_t` `error_dedup_sampler_t` `log_plugin_t` `metric_plugin_t` |
 | Utils | `async_queue_t` `string_utils_t` `string_format_t` `json_dict_t` `json_lexer_t` `file_utils_t` `stack_trace_utils_t` `source_location_t` |
@@ -40,8 +40,8 @@
 4. **简化构造 API（v2.0）**：移除 `code_with_location_t`，引入 `located_code_t` 通过隐式转换从 `error_code_t` 构造时自动捕获调用者位置。
 5. **多类型 payload**：`with()` 模板用 `if constexpr` 分派（bool→true/false、算术→to_string、其他→static_cast<string>），字符串优先匹配非模板重载。
 6. **全局单例注册表**：Meyer's singleton + `shared_mutex`；`register_plugin(unique_ptr)` 接管所有权，`register_plugin_ref()` 非持有引用，回调在锁外执行。
-7. **通知模式**：sync（构造时同步，无丢失）/ async_queue（入队后台消费，满时拒绝）/ sync_deferred（显式 flush，满时丢弃），详见 [决策树 · 1](decision_tree.md#1-通知模式选择)。
-8. **result_t<T> 零异常**：`variant` + `get_if` + `thread_local` 哨兵防跨线程污染；`map`/`and_then`/`or_else`/`match` noexcept（match 除外）；拷贝赋值删除，移动赋值 default。
+7. **通知模式**：sync（`make_error` 时同步，无丢失）/ async_queue（入队后台消费，满时拒绝）/ sync_deferred（显式 flush，满时丢弃），详见 [决策树 · 1](decision_tree.md#1-通知模式选择)。
+8. **result_t<T> 零异常**：`union` + `result_state_t` 手写判别式 + `thread_local` 哨兵防跨线程污染（v4.0.0 起替代 `std::variant`，以支持 Move-Only 的 `error_context_t`）；`map`/`and_then`/`or_else`/`match` noexcept（match 除外）；拷贝赋值删除，移动赋值 default。
 9. **子系统索引（v2.1）**：`subsystem_index_` 将 `get_errors_by_subsystem` 从 O(n) 优化为 O(1) 索引 + O(k) 遍历。
 10. **RCU 快照（v2.3）**：`plugin_registry_t` 用 `shared_ptr<const vector>` + `atomic_load/store` 无锁热路径，读者共享所有权避免 use-after-free。
 11. **SSO 小负载（v2.3）**：`error_context_t` 载荷 `array<pair,4>` 栈存储 + `unique_ptr<unordered_map>` 惰性溢出，≤4 项零堆分配。
@@ -66,12 +66,13 @@ void bump_epoch_() noexcept { epoch_counter_.fetch_add(1, std::memory_order_rele
 [[nodiscard]] uint64_t get_epoch() const noexcept { return epoch_counter_.load(std::memory_order_acquire); }
 ```
 
-19. **i18n 多语言设计**：`i18n_t` 两级哈希 `locale → (code identity → message)`，查询路径 active → default → 空；`subsystem_module_catalog_t` 独立存储避免双源不同步。
+19. **i18n 多语言设计**：`i18n_t` 两级哈希 `locale → (code identity → message)`，查询沿 locale parent 链逐级回退至 `en_US`（链终点）；`subsystem_module_catalog_t` 独立存储避免双源不同步。
 20. **错误码迁移与废弃**：`error_migration_registry_t` 分离废弃与迁移两正交维度，`migrate_recursive` 最大深度 16 防栈溢出，环检测后返回当前码。
 21. **constexpr 状态码映射**：`status_mapper_t` 纯函数，retryable/transient 优先映射 503/UNAVAILABLE，详见下表。
 
 22. **Move-Only error_context_t（v4.0.0）**：24 字节紧凑布局，`runtime_block_t` 堆块收拢动态字段（payload 溢出、堆栈、cause 链），禁用拷贝仅保留移动语义。
 23. **union + result_state_t（v4.0.0）**：`result_t<T>` 用 `union` + `result_state_t` 替代 `std::variant`，以支持 Move-Only 的 `error_context_t` 作为错误载荷。
+24. **Lean 存储精简 + 双通道通知（v4.4.0）**：`result_t<T, true>` 的 `error_storage_t` 直接为 `error_code_t`（8B），不再经 `lean_storage_t` 中转，`result_t<int, true>` 从 40B 降至 24B。通知架构新增 `on_code(error_code_t)` 接口与 code-only 通道：`i_error_plugin_t` 默认空实现，`plugin_registry_t::notify(code)` 按 mode 分发到 `on_code`，全程不构造 `error_context_t`。`async_notification_channel_t` 双通道（context + code）独立工作线程；`sync_deferred` 模式维护独立线程本地 `code_buffer`。内置插件（log/metric/router）均实现 `on_code`，其中 `error_router_plugin_t` 新增 `code_handler_t` 独立注册体系，与 `error_handler_t` 互不影响。
 
 | 码特征 | HTTP | gRPC |
 |------|------|------|
@@ -107,13 +108,13 @@ void bump_epoch_() noexcept { epoch_counter_.fetch_add(1, std::memory_order_rele
 
 框架为 GoogleTest v1.14.0（`FetchContent`）+ `gtest_discover_tests` 注册到 CTest；单元测试镜像 `include/` 结构，链接 `error_system::error_system` + `gtest_main`，仅应用警告选项不应用 LTO/PGO/Sanitizer；性能基准 `tests/migration/perf/` 含 5 个基准文件（Google Benchmark v1.8.3，新增 `plain_error_code_benchmark.cc`），基准对比详见 [基准对比](benchmark_comparison.md)；代码生成由 Python3 从 `config/errors/*.json` 产出头文件、O(1) 字典与文档。
 
-> **Debug vs Release 测试数量差异**：5 个 death test（`type_safety_test.cc` 中 2 个、`result_unchecked_test.cc` 中 3 个）使用 `EXPECT_DEATH` 断言，受 `#ifndef NDEBUG` 保护。Debug 构建（`NDEBUG` 未定义）编译 666 个用例，Release 构建（`NDEBUG` 定义）编译 661 个用例。两者都是正确的，文档以 Debug 全量值为准。
+> **Debug vs Release 测试数量差异**：5 个 death test（`type_safety_test.cc` 中 2 个、`result_unchecked_test.cc` 中 3 个）使用 `EXPECT_DEATH` 断言，受 `#ifndef NDEBUG` 保护。Debug 构建（`NDEBUG` 未定义）编译 706 个用例，Release 构建（`NDEBUG` 定义）编译 701 个用例。两者都是正确的，文档以 Debug 全量值为准。
 
 | 模块 | 文件数 | 用例数 |
 |------|:---:|:---:|
-| Core | 13 | 260（Debug 全量） |
-| Plugin | 7 | 89 |
-| Utils | 5 | 137 |
+| Core | 13 | 271（Debug 全量）/ 266（Release） |
+| Plugin | 8 | 115 |
+| Utils | 6 | 140 |
 | Config | 2 | 27 |
 | Domain | 1 | 12 |
 | i18n | 2 | 43 |
@@ -121,4 +122,4 @@ void bump_epoch_() noexcept { epoch_counter_.fetch_add(1, std::memory_order_rele
 | Migration | 1 | 32 |
 | Async | 1 | 18 |
 | Bridge | 2 | 21 |
-| **总计** | **35** | **666**（Debug）/ **661**（Release） |
+| **总计** | **37** | **706**（Debug）/ **701**（Release） |

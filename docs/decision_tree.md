@@ -7,7 +7,7 @@
 何时使用 `sync` / `async_queue` / `sync_deferred`。
 
 ```
-构造时立即通知？
+make_error 时立即通知？
 ├─ 是 → on_error() 可能阻塞？
 │       ├─ 否 → sync              ← 日志、指标
 │       └─ 是 → 可接受丢失？
@@ -18,8 +18,8 @@
 
 | 模式 | 调用时机 | 丢失风险 | 适用场景 |
 |------|----------|:---:|------|
-| `sync` | 构造时同步调用 | 无 | 日志、指标（轻量、非阻塞） |
-| `async_queue` | 构造时入队，后台消费 | 满时拒绝 | 网络上报、持久化（可能阻塞） |
+| `sync` | `make_error` 时同步调用 | 无 | 日志、指标（轻量、非阻塞） |
+| `async_queue` | `make_error` 时入队，后台消费 | 满时拒绝 | 网络上报、持久化（可能阻塞） |
 | `sync_deferred` | 入缓冲，显式 `flush_deferred_notifications()` | 满时丢弃 | 请求批处理、事务边界累积 |
 
 ```cpp
@@ -82,29 +82,32 @@ auto terminal = reg.migrate_recursive(ERR_OLD_DB_POOL);  // 递归到终点
 
 ## 4. i18n 消息查询回退路径
 
-`i18n_t::get_message()` 的 locale 回退顺序。
+`i18n_t::get_message()` 沿 locale parent 链逐级回退，直至 `en_US`（链终点）后返回空。
 
 ```
-get_message(code)（使用 active locale）：
-├─ active locale 有消息 → 返回
-└─ 否 → default locale 有消息 → 返回，否则返回空 string_view
+get_message(locale, code)（显式 locale）：
+└─ locale → parent(locale) → ... → en_US → 空 string
+    （每级查到消息即返回）
 
-get_message(locale, code)（显式指定 locale）：
-└─ 指定 locale 有消息 → 返回，否则回退 default locale（同上路径）
+get_message(code)（单参，使用 i18n_config_t::resolve_output_locale()）：
+└─ resolve_output_locale() 起沿 parent 链回退（同上路径）
+    resolve_output_locale() = output_locale 已设置 ? output_locale : default_locale
 ```
+
+parent 链由 `config::i18n_config_t::get_locale_parent()` 决定，默认按内置 `LOCALE_PARENT_TABLE` 推断（可运行时覆盖）。内置非平凡链仅 `zh_TW → zh_CN`，其余非 `en_US` locale 直接回退 `en_US`。
 
 ```cpp
 using namespace error_system::i18n;
 auto& catalog = i18n_t::instance();
 catalog.set_default_locale(locale_t::zh_CN);
+catalog.register_message(locale_t::zh_CN, ERR_DB_TIMEOUT, "数据库连接超时");
 catalog.register_message(locale_t::en_US, ERR_DB_TIMEOUT, "Database connection timeout");
-catalog.set_active_locale(locale_t::en_US);
-catalog.get_message(ERR_DB_TIMEOUT);                   // → "Database connection timeout"
-catalog.clear_active_locale();                        // 回退到 default
-catalog.get_message(locale_t::fr_FR, ERR_DB_TIMEOUT);  // fr_FR 无 → 回退 zh_CN
+catalog.set_active_locale(locale_t::zh_TW);
+catalog.get_message(ERR_DB_TIMEOUT);                   // zh_TW → parent(zh_CN) → "数据库连接超时"
+catalog.get_message(locale_t::fr_FR, ERR_DB_TIMEOUT);  // fr_FR → parent(en_US) → "Database connection timeout"
 ```
 
-`clear_active_locale()` 表示不用 active locale，直接走 default 回退。详见 [i18n 层 API · i18n_t](api/i18n.md#i18n_t)。
+`clear_active_locale()` 表示不用 active locale，`resolve_output_locale()` 回退到 default_locale。详见 [i18n 层 API · i18n_t](api/i18n.md#i18n_t)。
 
 ## 5. 序列化格式选择
 
@@ -114,14 +117,14 @@ catalog.get_message(locale_t::fr_FR, ERR_DB_TIMEOUT);  // fr_FR 无 → 回退 z
 输出目标？
 ├─ 人类可读日志 / 终端 → to_string()    ← 含因果链 ↳ Caused by:、堆栈、源位置
 ├─ 结构化日志 / Web API → to_json()      ← JSON 对象，code 为字符串，含 cause 递归
-└─ RPC 跨语言 / 持久化   → to_binary()   ← 紧凑二进制，小端序，magic + version 头
+└─ RPC 跨语言 / 持久化   → to_binary()   ← 紧凑二进制，小端序，magic + version 头，不含栈帧
 ```
 
-| 格式 | 体积 | 可读性 | 跨语言 | 因果链 |
-|------|:---:|:---:|:---:|:---:|
-| `to_string()` | 大 | 优 | 否 | 含 |
-| `to_json()` | 中 | 良 | 是（JSON） | 含 |
-| `to_binary()` | 小 | 无 | 需解析器 | 含 |
+| 格式 | 体积 | 可读性 | 跨语言 | 因果链 | 栈帧 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| `to_string()` | 大 | 优 | 否 | 含 | 含 |
+| `to_json()` | 中 | 良 | 是（JSON） | 含 | 含 |
+| `to_binary()` | 小 | 无 | 需解析器 | 含 | 不含 |
 
 ```cpp
 auto ctx = core::error_context_serializer_t::from_binary(bin);   // 校验 magic + version
@@ -137,11 +140,11 @@ if (!ctx) { /* magic/version 不匹配或数据损坏 */ }
 
 ```
 通知模式？
-├─ sync / sync_deferred（on_error 在调用线程执行）
-│   ├─ 需按码/域/模块路由？ → error_router_plugin_t   ← 框架内置路由
+├─ sync / sync_deferred（on_error / on_code 在调用线程执行）
+│   ├─ 需按码/域/模块路由？ → error_router_plugin_t   ← 框架内置路由（Full + Lean 双路径）
 │   ├─ 需去重/采样？        → error_dedup_sampler_t   ← 内置去重+采样
 │   └─ 否                   → 自定义插件
-└─ async_queue（on_error 在后台线程执行）
+└─ async_queue（on_error / on_code 在后台线程执行）
     ├─ 需跨进程/网络转发？ → 自定义插件 + 网络发送（I/O 在后台线程，安全）
     └─ 否                 → 自定义插件
 ```
@@ -149,10 +152,13 @@ if (!ctx) { /* magic/version 不匹配或数据损坏 */ }
 ```cpp
 class my_plugin_t : public i_error_plugin_t {
     core::error_level_t min_level() const noexcept override { return core::error_level_t::error; }
-    void on_error(const core::error_context_t& ctx) noexcept override { /* 仅收到 error+ */ }
+    void on_error(const core::error_context_t& ctx) noexcept override { /* Full 路径：完整上下文 */ }
+    void on_code(core::error_code_t code) noexcept override { /* Lean 路径：仅错误码，默认空实现 */ }
     std::string_view name() const noexcept override { return "my_plugin"; }
 };
 ```
+
+Full 路径与 Lean 路径互斥：`result_t<T, false>` 触发 `on_error`，`result_t<T, true>` 触发 `on_code`。仅需 Full 路径时可省略 `on_code` override（默认空实现）。
 
 详见 [Plugin 层 API · 插件开发指南](api/plugin.md#插件开发指南)。
 
@@ -163,8 +169,8 @@ class my_plugin_t : public i_error_plugin_t {
 ```
 错误传递方式？
 ├─ 异常不可用 / 性能敏感 → result_t<T, Lean>
-│   ├─ 需完整错误上下文 → result_t<T, false>（Full） ← variant + getif + 哨兵值，链式操作
-│   ├─ 热路径仅需错误码 → result_t<T, true>（Lean）  ← 8 字节 error_code_t，零堆分配
+│   ├─ 需完整错误上下文 → result_t<T, false>（Full） ← union + result_state_t，链式操作
+│   ├─ 热路径仅需错误码 → result_t<T, true>（Lean）  ← 8 字节 error_code_t，on_code 通知，零堆分配
 │   └─ 异步链式         → async_result_t              ← then/recover，std::future 包装
 ├─ 需与异常生态集成     → error_exception_t            ← std::exception 子类
 └─ 仅传递错误上下文     → error_context_t              ← 值语义，因果链 wrap
@@ -177,6 +183,8 @@ class my_plugin_t : public i_error_plugin_t {
 | `async_result_t` | 无（回调异常→fatal） | then/recover | 否 | 异步操作链 |
 | `error_exception_t` | 有 | 无 | 是 | 跨异常/非异常边界 |
 | `error_context_t` | 无 | wrap（因果链） | 否 | 简单传递 |
+
+Lean 模式（`result_t<T, true>`）错误存储为 `error_code_t`（8B），`error()` 返回 `make_minimal(code)`（无 file:line），`to_string()` 输出 `[ERR: <raw_code>]`；通知走 `on_code(code)` 路径，不构造 `error_context_t`。
 
 注意：Debug 构建下 `result_t` 析构时若错误未被检查（is_success/is_error/value/error 等），触发 assert 防止吞错误；Release 构建零开销。
 

@@ -10,9 +10,9 @@
 
 ## feature_flags_t
 
-特性开关配置类，管理编译期特性开关与运行时布尔标志位。编译期开关通过 `if constexpr` 消除运行时开销，编译器死代码消除未启用分支。类仅含静态成员，禁止实例化。
+特性开关配置类，管理编译期特性开关、运行时布尔标志位、通知模式、通知通道容量与注册表重复处理策略。编译期开关通过 `if constexpr` 消除运行时开销，编译器死代码消除未启用分支。类仅含静态成员，禁止实例化。
 
-文本/i18n 输出开关已迁移到 `i18n_config_t::set_enable_i18n`，`feature_flags_t` 不再保留 `set_enable_text_output`。
+文本/i18n 输出开关已迁移到 `i18n_config_t::set_enable_i18n`，`feature_flags_t` 不再保留 `set_enable_text_output`。`plugin_registry_t::set_max_queue_size` / `set_deferred_buffer_size` 为转发包装，配置源头在本类。
 
 ### notify_mode_t
 
@@ -41,6 +41,12 @@
 | is_short_filename_enabled | `[[nodiscard]] static bool is_short_filename_enabled() noexcept` | 短文件名模式是否开启 |
 | set_notify_mode | `static void set_notify_mode(notify_mode_t mode) noexcept` | 设置通知模式 |
 | get_notify_mode | `[[nodiscard]] static notify_mode_t get_notify_mode() noexcept` | 获取通知模式 |
+| set_async_queue_max_size | `static void set_async_queue_max_size(size_t max_size) noexcept` | async_queue 队列上限，0 = 无限制（默认） |
+| get_async_queue_max_size | `[[nodiscard]] static size_t get_async_queue_max_size() noexcept` | async_queue 队列上限 |
+| set_deferred_buffer_max_size | `static void set_deferred_buffer_max_size(size_t max_size) noexcept` | sync_deferred 线程本地缓冲上限，0 = 无限制（默认 1024） |
+| get_deferred_buffer_max_size | `[[nodiscard]] static size_t get_deferred_buffer_max_size() noexcept` | sync_deferred 缓冲上限 |
+| set_duplicate_policy | `static void set_duplicate_policy(core::duplicate_policy_t policy) noexcept` | 注册表重复处理策略（默认 `skip`） |
+| get_duplicate_policy | `[[nodiscard]] static core::duplicate_policy_t get_duplicate_policy() noexcept` | 注册表重复处理策略 |
 
 若编译期未启用对应特性，相关 `set_*` 调用无操作，`is_*_enabled()` 始终返回 `false`。
 

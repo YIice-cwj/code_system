@@ -37,14 +37,16 @@ API 细节请查阅 [Config 层 API](api/config.md)；通知模式选择细节�
 
 | 维度 | `result_t<T, true>`（Lean） | `result_t<T, false>`（Full） |
 |------|----------------------------|-----------------------------|
-| 错误存储 | `error_code_t`（8 字节） | `error_context_t`（424~440 字节） |
-| `result_t<int>` 整体大小 | 24 字节 | 432 字节 |
-| 构造开销 | ~10 ns | 63 ns（baseline）/ 20 μs（带栈） |
+| 错误存储 | `error_code_t`（8 字节） | `error_context_t`（24 字节，Move-Only） |
+| `result_t<int>` 整体大小 | 24 字节 | 40 字节 |
+| 构造开销 | 6.9 ns | 76 ns（baseline）/ 178 ns（带栈） |
 | 携带信息 | 仅错误码 | code + message + payload + cause + stack |
-| 可序列化 | ❌ | ✅ JSON / binary |
-| `error()` 返回 | 临时对象（仅 code） | `const error_context_t&` |
-| `context()` / 可变 `error()` | ❌ SFINAE 禁用 | ✅ |
-| 跨进程传输 | ❌ 需显式升级 | ✅ 原生支持 |
+| 通知路径 | `on_code(code)`，不构造 `error_context_t` | `on_error(ctx)`，完整上下文 |
+| 可序列化 | 否 | 是（JSON / binary） |
+| `error()` 返回 | `error_context_t::make_minimal(code)`（无 file:line） | `const error_context_t&` |
+| `to_string()` | `[ERR: <raw_code>]` | 完整文本（含因果链/堆栈/源位置） |
+| `context()` / 可变 `error()` | 否（SFINAE 禁用） | 是 |
+| 跨进程传输 | 否（需显式升级） | 是（原生支持） |
 
 ### 选择决策
 
@@ -70,7 +72,7 @@ if (lean.is_error()) {
 
 ### 关键判断
 
-**绝大多数场景应该用 Full**。Full + `feature_flags` 关闭 stacktrace/source_location/validation 后构造只要 63 ns，比 Lean 只慢 6 倍，但保留了 message/payload/cause 能力，且可运行时打开栈捕获排查问题。Lean 仅在确认的性能瓶颈点使用。
+**绝大多数场景应该用 Full**。Full + `feature_flags` 关闭 stacktrace/source_location/validation 后构造只要 76 ns，比 Lean 慢约 11 倍，但保留了 message/payload/cause 能力，且可运行时打开栈捕获排查问题。Lean 仅在确认的性能瓶颈点使用。
 
 ---
 
@@ -114,7 +116,7 @@ void configure_for_release() {
 显式指定 `result_t<T, true>` 的场景：
 
 - 每秒百万次调用的热路径（网络包解析、高频缓存查询）
-- 嵌入式资源受限环境（24B vs 432B 差异显著）
+- 嵌入式资源受限环境（24B vs 40B 差异显著）
 - 错误本身已足够自描述（简单的 not_found / already_exists）
 
 ---
@@ -150,7 +152,7 @@ es::config::i18n_config_t::set_enable_i18n(true);
 es::config::i18n_config_t::set_default_locale(es::i18n::locale_t::zh_CN);
 ```
 
-- 关闭栈捕获 / 源位置 / 验证，构造降到 63 ns
+- 关闭栈捕获 / 源位置 / 验证，构造降到 76 ns
 - 用 `sync_deferred` 批量通知，单次锁、批量派发
 - 保留 i18n 输出本地化消息
 
@@ -165,9 +167,9 @@ es::config::feature_flags_t::set_enable_validation(false);
 es::config::i18n_config_t::set_enable_i18n(false);  // 输出原始 ID 数字
 ```
 
-- 全部可选特性关闭，构造 63 ns，吞吐 15 M/s
+- 全部可选特性关闭，构造 76 ns，吞吐 13 M/s
 - i18n 关闭，序列化输出数字 ID 省去字符串查找
-- 若仍不够快，热路径函数显式返回 `result_t<T, true>`（Lean），构造降到 10 ns
+- 若仍不够快，热路径函数显式返回 `result_t<T, true>`（Lean），构造降到 7 ns
 
 ### 4. 排障模式（生产临时开启）
 
@@ -216,7 +218,7 @@ void handle_request() {
 }
 ```
 
-- 单次锁、批量派发，比 `sync` 快 4×（55 ns vs 224 ns per error）
+- 单次锁、批量派发，`sync_deferred` 入缓冲 53 ns vs `sync` 即时派发 55 ns；批量 flush 时摊薄优势显著
 - 缓冲满（默认 1024）会丢弃并设置溢出标志
 - 异常退出时用 `clear_deferred_notifications()` 丢弃累积通知
 
@@ -231,10 +233,10 @@ std::vector<uint8_t> binary = ctx.to_binary();
 
 // 接收方
 auto recovered = es::core::error_context_t::from_binary(binary);
-// cause 链、payload、stack 均完整还原
+// cause 链、payload、location 均还原（binary 不含栈帧）
 ```
 
-- 用 binary 序列化（55 ns），比 JSON（4550 ns）快 80×
+- 用 binary 序列化（56 ns），比 JSON（3764 ns）快 67×
 - Lean 模式不支持序列化，跨进程必须用 Full
 
 ### 8. 错误洪水治理
@@ -251,71 +253,71 @@ if (sampler.should_be_forwarded(ctx)) {
 }
 ```
 
-- 去重 + 采样组合，6.87 ns 判定
+- 去重 + 采样组合，7.1 ns 判定
 - 适合告警通道、日志通道等下游易被洪水冲垮的场景
 
 ---
 
 ## 五、性能数据参考
 
-以下数据基于基准测试（DEBUG 构建，10 核 CPU，关闭可选特性），用于配置决策参考。
+以下数据基于基准测试（Release 构建 `-O3 -DNDEBUG`，10 核 CPU，10 次重复取中位数），用于配置决策参考。
 
 ### 错误上下文构造开销
 
 | 配置 | 构造耗时 | 吞吐 | 内存 |
 |------|---------|------|------|
-| Full + 全开（trace+loc+validation） | 20120 ns | 49.78 k/s | 432B |
-| Full + plugin only | 64.0 ns | 15.66 M/s | 432B |
-| Full + baseline（全关） | 62.9 ns | 15.91 M/s | 432B |
-| Lean | ~10 ns | ~100 M/s | 24B |
+| Full + 全开（trace+loc+plugin） | 178 ns | 5.63 M/s | 40B |
+| Full + plugin only | 77.4 ns | 12.97 M/s | 40B |
+| Full + baseline（全关） | 76.1 ns | 13.19 M/s | 40B |
+| Lean | 6.9 ns | 145.9 M/s | 24B |
 
 ### 序列化开销（Full 模式）
 
 | 操作 | baseline | full（带栈） | 倍数 |
 |------|---------|-------------|------|
-| `to_binary()` | 55.8 ns | 80.8 ns | 1.4× |
-| `from_binary()` | 63.0 ns | 87.9 ns | 1.4× |
-| `to_json()` | 198 ns | 4550 ns | 23× |
-| `from_json()` | 358 ns | 6203 ns | 17× |
-| `to_string()` | 141 ns | 434 ns | 3× |
+| `to_binary()` | 56.0 ns | 88.8 ns | 1.6× |
+| `from_binary()` | 46.5 ns | 73.2 ns | 1.6× |
+| `to_json()` | 197 ns | 3764 ns | 19× |
+| `from_json()` | 318 ns | 4293 ns | 13× |
+| `to_string()` | 143 ns | 1029 ns | 7× |
 
-**关键结论**：binary 序列化几乎不受栈影响（55 ns vs 80 ns），JSON 受影响明显（198 ns vs 4550 ns）。跨进程传输首选 binary。
+**关键结论**：`to_binary`/`from_binary` 不序列化栈帧（baseline 与 full 列的差异来自带栈对象的内存布局间接影响，非栈帧处理开销）；`to_json`/`to_string` 受栈帧影响显著（197 ns vs 3764 ns）。跨进程传输首选 binary——栈帧信息丢失是已知权衡，换取稳定且紧凑的体积。
 
 ### 拷贝 / 移动开销
 
 | 操作 | baseline | full（带栈） |
 |------|---------|-------------|
-| 拷贝构造 | 28.8 ns | 263 ns |
-| 移动构造 | 95.4 ns | 20691 ns |
+| 拷贝构造 | 21.0 ns | 21.8 ns |
+| 移动构造 | 83.0 ns | 179 ns |
 
-**关键结论**：带栈时移动构造慢到 20 μs（shared_ptr 原子计数 + 栈字符串拷贝）。高频移动场景务必关闭栈或用 Lean。
+**关键结论**：带栈时移动构造升至 179 ns（shared_ptr 原子计数 + 栈帧共享）。高频移动场景可关闭栈或用 Lean。
 
-### 通知模式开销（单错误）
+### 通知模式开销（单错误，无插件回调）
 
 | 模式 | 耗时 | 说明 |
 |------|------|------|
-| `sync` | 45.3 ns | 即时派发 |
-| `sync_deferred` | 42.9 ns | 入线程本地缓冲 |
-| `async_queue` | 269 ns | 入队 + 唤醒工作线程 |
+| `sync` | 54.5 ns | 即时派发 |
+| `sync_deferred` | 52.6 ns | 入线程本地缓冲 |
+| `async_queue` | 53.1 ns | 入队 + 唤醒工作线程 |
 
 ### 通知模式 × 真实插件矩阵
 
 | 模式 \ 插件 | log | metric | router |
 |-------------|-----|--------|--------|
-| sync | 224 ns | 67.5 ns | 73.5 ns |
-| async_queue | 454 ns | 284 ns | 368 ns |
-| sync_deferred | 55.8 ns | 55.8 ns | 55.8 ns |
+| sync | 75.5 ns | 76.5 ns | 75.7 ns |
+| async_queue | 72.6 ns | 72.9 ns | 70.8 ns |
+| sync_deferred | 75.5 ns | 76.1 ns | 75.6 ns |
 
-**关键结论**：`sync_deferred` 对真实插件摊薄效果最显著，所有插件都在 55.8 ns（批量派发）。
+**关键结论**：三种通知模式在单错误 + 单插件场景下开销接近（70-77 ns），差异在工作线程是否参与：`async_queue` 仅入队（72 ns），实际回调由后台线程异步执行；`sync` / `sync_deferred` 在当前线程同步执行回调。`sync_deferred` 的批量摊薄优势在 `flush_deferred_notifications()` 时体现——单次锁、遍历全部缓冲。
 
 ### 插件注册 / 注销开销
 
 | 插件数 | register | unregister |
 |--------|----------|------------|
-| 1 | 166 ns | 173 ns |
-| 4 | 575 ns | 768 ns |
-| 16 | 2395 ns | 3483 ns |
-| 64 | 15342 ns | 21508 ns |
+| 1 | 207 ns | 212 ns |
+| 4 | 744 ns | 1033 ns |
+| 16 | 3429 ns | 5059 ns |
+| 64 | 21911 ns | 33155 ns |
 
 O(n) 复杂度（写锁 + 快照拷贝），冷启动可接受。
 
@@ -397,21 +399,21 @@ void TearDown() override {
 需要跨进程传输 / 用户可见消息 / 因果链调试？
 ├─ 是 → Full 模式
 │       └─ 是否每秒百万次调用？
-│           ├─ 是 → 关闭 stacktrace/source_location/validation（63 ns）
+│           ├─ 是 → 关闭 stacktrace/source_location/validation（76 ns）
 │           └─ 否 → 按场景开启可选特性
 └─ 否 → 是否每秒百万次调用 / 嵌入式受限？
-        ├─ 是 → Lean 模式（10 ns，24B）
+        ├─ 是 → Lean 模式（7 ns，24B）
         └─ 否 → Full + 关闭可选特性（保留扩展能力）
 
 通知模式选择：
-├─ 请求处理批处理 → sync_deferred（55 ns per error，批量派发）
-├─ 普通业务 → sync（45 ns，即时可见）
-└─ 不能阻塞主线程 → async_queue（269 ns，后台消费）
+├─ 请求处理批处理 → sync_deferred（53 ns 入缓冲，批量 flush 摊薄）
+├─ 普通业务 → sync（55 ns，即时可见）
+└─ 不能阻塞主线程 → async_queue（53 ns 入队，后台消费）
 
 序列化格式选择：
-├─ 跨进程二进制通道 → to_binary（55 ns，cause 链完整）
-├─ 日志 / 人类可读 → to_string（141 ns）
-└─ Web API / 跨语言 → to_json（198 ns baseline，带栈 4550 ns）
+├─ 跨进程二进制通道 → to_binary（56 ns，cause 链完整，不含栈帧）
+├─ 日志 / 人类可读 → to_string（143 ns）
+└─ Web API / 跨语言 → to_json（197 ns baseline，带栈 3764 ns）
 ```
 
 ---
