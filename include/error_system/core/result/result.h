@@ -15,7 +15,8 @@
  * @brief 结果类型 result_t
  * @details 强制错误检查：Debug 构建下析构时若处于错误状态且未被检查（is_error/is_success/
  *          value/error/operator bool/value_pointer/value_or/match 任一未调用）触发 assert；
- *          Release 构建零开销。
+ *          Release 构建零开销。诊断信息中的文件名/行号为 result_t 创建点位置
+ *          （由 Debug-only created_at_ 成员记录，所有构造/工厂函数通过 loc 默认参数捕获）。
  *
  *          存储方案：union + result_state_t 手写判别式替代 std::variant，以支持 Move-Only
  *          的 error_context_t（C++17 std::variant 要求元素可拷贝）。Lean=false 时 result_t
@@ -24,8 +25,8 @@
  *          Lean 模式：error_storage_t 为 error_code_t（8B），零堆开销，体积最小。
  *          通知路径走 on_code(code)，不构造 error_context_t。
  * @author yiice
- * @version 4.4.1
- * @date 2026-07-08
+ * @version 4.5.0
+ * @date 2026-07-18
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
@@ -44,7 +45,13 @@ namespace error_system::core {
     namespace detail {
         constexpr uint16_t FATAL_ERROR_NUMBER = 0xFFFE;
 
-        inline void report_unchecked_result(const char* file, int line) noexcept {
+        /**
+         * @brief 上报未检查错误结果
+         * @param loc 结果创建点位置（由 created_at_ 传入，指向用户代码中构造 result_t 的位置）
+         */
+        inline void report_unchecked_result(const utils::source_location_t& loc) noexcept {
+            const char* file = loc.file_name();
+            int line = static_cast<int>(loc.line());
             ::error_system::utils::log(::error_system::utils::log_level_t::error, file, line,
                                        "[result_t] unchecked error result destroyed at {}:{}\n"
                                        "  call is_error()/is_success()/value()/error()/operator bool/\n"
@@ -100,7 +107,10 @@ namespace error_system::core {
             storage_t() noexcept {}
             ~storage_t() noexcept {}
         } storage_;
+#ifndef NDEBUG
         mutable bool checked_{false};
+        utils::source_location_t created_at_{};
+#endif
 
         /**
          * @brief 析构当前活跃的 union 成员（empty 状态无操作）
@@ -114,12 +124,20 @@ namespace error_system::core {
         void check_on_destroy_() const noexcept;
 
         /**
+         * @brief 标记结果已被检查
+         * @details Debug 下设置 checked_，Release 下空操作（编译器内联消除）
+         */
+        void mark_checked_() const noexcept;
+
+        /**
          * @brief Lean 模式专用私有构造函数
          * @details 仅 Lean 模式启用，直接接受 error_code_t，零堆开销。
          * @param code 错误码
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          */
         template <bool IsLean = Lean, typename = std::enable_if_t<IsLean>>
-        explicit result_t(error_code_t code) noexcept;
+        explicit result_t(error_code_t code,
+                          utils::source_location_t loc = utils::source_location_t::current()) noexcept;
 
         public:
         /**
@@ -138,20 +156,26 @@ namespace error_system::core {
         /**
          * @brief 从成功值构造（左值版本）
          * @param value 成功值
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          */
-        explicit result_t(const value_type_t& value) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>);
+        explicit result_t(const value_type_t& value,
+                          utils::source_location_t loc = utils::source_location_t::current()) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>);
 
         /**
          * @brief 从成功值构造（右值版本）
          * @param value 成功值
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          */
-        explicit result_t(value_type_t&& value) noexcept(std::is_nothrow_move_constructible_v<value_type_t>);
+        explicit result_t(value_type_t&& value,
+                          utils::source_location_t loc = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<value_type_t>);
 
         /**
          * @brief 从错误上下文构造
          * @param context 错误上下文
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          */
-        explicit result_t(error_context_t context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
+        explicit result_t(error_context_t context,
+                          utils::source_location_t loc = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
 
         /**
          * @brief 移动构造
@@ -203,18 +227,22 @@ namespace error_system::core {
         /**
          * @brief 错误构造工厂（从 const error_context_t，完整模式下内部克隆）
          * @param context 错误上下文 const 引用
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          * @return 构造好的错误结果
          */
         [[nodiscard]] static result_t
-        make_error(const error_context_t& context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
+        make_error(const error_context_t& context,
+                   utils::source_location_t loc = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
 
         /**
          * @brief 错误构造工厂（从 error_context_t 右值，无克隆开销）
          * @param context 错误上下文右值
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          * @return 构造好的错误结果
          */
         [[nodiscard]] static result_t
-        make_error(error_context_t&& context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
+        make_error(error_context_t&& context,
+                   utils::source_location_t loc = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
 
         /**
          * @brief 获取成功值
@@ -384,7 +412,7 @@ namespace error_system::core {
          * @return 错误状态返回 true，否则 false
          */
         [[nodiscard]] bool is_error() const noexcept {
-            checked_ = true;
+            mark_checked_();
             return state_ == result_state_t::error;
         }
 
@@ -393,7 +421,7 @@ namespace error_system::core {
          * @return 成功状态返回 true，否则 false
          */
         [[nodiscard]] bool is_success() const noexcept {
-            checked_ = true;
+            mark_checked_();
             return state_ == result_state_t::value;
         }
 
@@ -402,7 +430,7 @@ namespace error_system::core {
          * @return 成功返回 true，错误返回 false
          */
         explicit operator bool() const noexcept {
-            checked_ = true;
+            mark_checked_();
             return state_ == result_state_t::value;
         }
 
@@ -412,7 +440,7 @@ namespace error_system::core {
          * @return 成功值 const 指针，错误时返回 nullptr
          */
         [[nodiscard]] const value_type_t* value_pointer() const noexcept {
-            checked_ = true;
+            mark_checked_();
             if (state_ == result_state_t::value) {
                 return &storage_.value;
             }
@@ -425,7 +453,7 @@ namespace error_system::core {
          * @return 成功值指针，错误时返回 nullptr
          */
         [[nodiscard]] value_type_t* value_pointer() noexcept {
-            checked_ = true;
+            mark_checked_();
             if (state_ == result_state_t::value) {
                 return &storage_.value;
             }
@@ -439,7 +467,7 @@ namespace error_system::core {
          * @return 成功值引用，失败时返回 default_value
          */
         [[nodiscard]] const value_type_t& value_or(const value_type_t& default_value) const noexcept {
-            checked_ = true;
+            mark_checked_();
             if (state_ == result_state_t::value) {
                 return storage_.value;
             }
@@ -487,11 +515,13 @@ namespace error_system::core {
         /**
          * @brief 成功结果工厂
          * @param value 成功值
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          * @return 构造好的成功结果
          */
         [[nodiscard]] static result_t
-        make_success(value_type_t value) noexcept(std::is_nothrow_move_constructible_v<value_type_t>) {
-            return result_t(std::move(value));
+        make_success(value_type_t value,
+                     utils::source_location_t loc = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<value_type_t>) {
+            return result_t(std::move(value), loc);
         }
     };
 
@@ -518,7 +548,10 @@ namespace error_system::core {
             storage_t() noexcept {}
             ~storage_t() noexcept {}
         } storage_;
+#ifndef NDEBUG
         mutable bool checked_{false};
+        utils::source_location_t created_at_{};
+#endif
 
         /**
          * @brief 析构当前活跃的 union 成员（empty 状态无操作）
@@ -532,12 +565,20 @@ namespace error_system::core {
         void check_on_destroy_() const noexcept;
 
         /**
+         * @brief 标记结果已被检查
+         * @details Debug 下设置 checked_，Release 下空操作（编译器内联消除）
+         */
+        void mark_checked_() const noexcept;
+
+        /**
          * @brief Lean 模式专用私有构造函数
          * @details 仅 Lean 模式启用，直接接受 error_code_t，零堆开销。
          * @param code 错误码
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          */
         template <bool IsLean = Lean, typename = std::enable_if_t<IsLean>>
-        explicit result_t(error_code_t code) noexcept;
+        explicit result_t(error_code_t code,
+                          utils::source_location_t loc = utils::source_location_t::current()) noexcept;
 
         public:
         /**
@@ -555,15 +596,18 @@ namespace error_system::core {
 
         /**
          * @brief 默认构造（成功状态）
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          * @return 无返回值（构造函数）
          */
-        result_t() noexcept;
+        result_t(utils::source_location_t loc = utils::source_location_t::current()) noexcept;
 
         /**
          * @brief 从错误上下文构造
          * @param context 错误上下文
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          */
-        explicit result_t(error_context_t context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
+        explicit result_t(error_context_t context,
+                          utils::source_location_t loc = utils::source_location_t::current()) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>);
 
         /**
          * @brief 移动构造
@@ -611,16 +655,22 @@ namespace error_system::core {
         /**
          * @brief 错误构造工厂（从 const error_context_t，完整模式下内部克隆）
          * @param context 错误上下文 const 引用
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          * @return 构造好的错误结果
          */
-        [[nodiscard]] static result_t make_error(const error_context_t& context) noexcept;
+        [[nodiscard]] static result_t
+        make_error(const error_context_t& context,
+                   utils::source_location_t loc = utils::source_location_t::current()) noexcept;
 
         /**
          * @brief 错误构造工厂（从 error_context_t 右值，无克隆开销）
          * @param context 错误上下文右值
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          * @return 构造好的错误结果
          */
-        [[nodiscard]] static result_t make_error(error_context_t&& context) noexcept;
+        [[nodiscard]] static result_t
+        make_error(error_context_t&& context,
+                   utils::source_location_t loc = utils::source_location_t::current()) noexcept;
 
         /**
          * @brief 获取错误上下文
@@ -730,7 +780,7 @@ namespace error_system::core {
          * @return 成功返回 true，错误返回 false
          */
         explicit operator bool() const noexcept {
-            checked_ = true;
+            mark_checked_();
             return state_ == result_state_t::empty;
         }
 
@@ -739,7 +789,7 @@ namespace error_system::core {
          * @return 错误状态返回 true，否则 false
          */
         [[nodiscard]] bool is_error() const noexcept {
-            checked_ = true;
+            mark_checked_();
             return state_ == result_state_t::error;
         }
 
@@ -748,7 +798,7 @@ namespace error_system::core {
          * @return 成功状态返回 true，否则 false
          */
         [[nodiscard]] bool is_success() const noexcept {
-            checked_ = true;
+            mark_checked_();
             return state_ == result_state_t::empty;
         }
 
@@ -763,9 +813,13 @@ namespace error_system::core {
 
         /**
          * @brief 成功结果工厂
+         * @param loc 创建点位置（Debug 用于未检查诊断）
          * @return 构造好的成功结果
          */
-        [[nodiscard]] static result_t make_success() noexcept { return result_t(); }
+        [[nodiscard]] static result_t
+        make_success(utils::source_location_t loc = utils::source_location_t::current()) noexcept {
+            return result_t(loc);
+        }
     };
 
 }  // namespace error_system::core

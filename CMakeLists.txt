@@ -4,7 +4,7 @@ set(PROJECT_NAME "error_system")
 
 set(VERSION_MAJOR 4)
 set(VERSION_MINOR 4)
-set(VERSION_PATCH 0)
+set(VERSION_PATCH 1)
 set(VERSION_STRING ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH})
 
 set(DESCRIPTION_STRING "error_system_v${VERSION_STRING}: c++17 错误码系统，提供错误码的定义和使用")

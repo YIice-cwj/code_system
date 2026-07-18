@@ -78,6 +78,9 @@ namespace {
         for (auto _ : state) {
             auto r = result_t<T, Lean>::make_error(code, "benchmark error");
             benchmark::DoNotOptimize(r);
+#ifndef NDEBUG
+            (void)r.is_error();
+#endif
         }
         state.SetItemsProcessed(state.iterations());
     }
@@ -87,6 +90,9 @@ namespace {
         for (auto _ : state) {
             auto r = result_t<T, Lean>::make_error(ctx);
             benchmark::DoNotOptimize(r);
+#ifndef NDEBUG
+            (void)r.is_error();
+#endif
         }
         state.SetItemsProcessed(state.iterations());
     }
@@ -109,6 +115,9 @@ namespace {
             benchmark::DoNotOptimize(ec);
         }
         state.SetItemsProcessed(state.iterations());
+#ifndef NDEBUG
+        (void)r.is_error();
+#endif
     }
 
     template <typename T, bool Lean>
@@ -137,8 +146,14 @@ namespace {
         for (auto _ : state) {
             auto mapped = r.map([](const T& v) { return v * 2; });
             benchmark::DoNotOptimize(mapped);
+#ifndef NDEBUG
+            (void)mapped.is_error();
+#endif
         }
         state.SetItemsProcessed(state.iterations());
+#ifndef NDEBUG
+        (void)r.is_error();
+#endif
     }
 
     template <typename T, bool Lean>

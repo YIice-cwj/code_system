@@ -16,8 +16,11 @@
  *
  *          小型函数（is_error/is_success/operator bool/value_pointer/value_or/operator->
  *          /make_success）已移至 .h 内联定义。
- * @version 4.4.2
- * @date 2026-07-08
+ *
+ *          Debug 诊断：所有构造函数通过 loc 参数捕获创建点位置存入 created_at_，
+ *          析构时若错误未被检查则输出 created_at_ 指向的用户代码位置（Release 零开销）。
+ * @version 4.5.0
+ * @date 2026-07-18
  */
 
 /**
@@ -135,14 +138,28 @@ namespace error_system::core {
 
     /**
      * @brief 析构前检查未消费错误
-     * @details Debug 模式下若错误未被检查则输出诊断信息；Release 模式整段消除。
+     * @details Debug 模式下若错误未被检查则输出诊断信息（指向 result_t 创建点位置）；
+     *          Release 模式整段消除。
      */
     template <typename T, bool Lean>
     void result_t<T, Lean>::check_on_destroy_() const noexcept {
 #ifndef NDEBUG
         if (!checked_ && state_ == result_state_t::error) {
-            detail::report_unchecked_result(__FILE__, __LINE__);
+            detail::report_unchecked_result(created_at_);
         }
+#else
+        (void)0;
+#endif
+    }
+
+    /**
+     * @brief 标记结果已被检查
+     * @details Debug 下设置 checked_，Release 下空操作（编译器内联消除）
+     */
+    template <typename T, bool Lean>
+    inline void result_t<T, Lean>::mark_checked_() const noexcept {
+#ifndef NDEBUG
+        checked_ = true;
 #else
         (void)0;
 #endif
@@ -152,41 +169,61 @@ namespace error_system::core {
      * @brief Lean 模式专用私有构造函数
      * @details 直接接受 error_code_t，零堆开销。
      * @param code 错误码
+     * @param loc 创建点位置（Debug 用于未检查诊断）
      */
     template <typename T, bool Lean>
     template <bool IsLean, typename>
-    result_t<T, Lean>::result_t(error_code_t code) noexcept
-        : state_(result_state_t::error) {
+    result_t<T, Lean>::result_t(error_code_t code, [[maybe_unused]] utils::source_location_t loc) noexcept
+        : state_(result_state_t::error)
+#ifndef NDEBUG
+        , created_at_(loc)
+#endif
+    {
         new (&storage_.error) error_storage_t(code);
     }
 
     /**
      * @brief 从成功值构造（左值版本）
      * @param value 成功值
+     * @param loc 创建点位置（Debug 用于未检查诊断）
      */
     template <typename T, bool Lean>
-    result_t<T, Lean>::result_t(const value_type_t& value) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>)
-        : state_(result_state_t::value) {
+    result_t<T, Lean>::result_t(const value_type_t& value, [[maybe_unused]] utils::source_location_t loc) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>)
+        : state_(result_state_t::value)
+#ifndef NDEBUG
+        , created_at_(loc)
+#endif
+    {
         new (&storage_.value) value_type_t(value);
     }
 
     /**
      * @brief 从成功值构造（右值版本）
      * @param value 成功值
+     * @param loc 创建点位置（Debug 用于未检查诊断）
      */
     template <typename T, bool Lean>
-    result_t<T, Lean>::result_t(value_type_t&& value) noexcept(std::is_nothrow_move_constructible_v<value_type_t>)
-        : state_(result_state_t::value) {
+    result_t<T, Lean>::result_t(value_type_t&& value, [[maybe_unused]] utils::source_location_t loc) noexcept(std::is_nothrow_move_constructible_v<value_type_t>)
+        : state_(result_state_t::value)
+#ifndef NDEBUG
+        , created_at_(loc)
+#endif
+    {
         new (&storage_.value) value_type_t(std::move(value));
     }
 
     /**
      * @brief 从错误上下文构造
      * @param context 错误上下文
+     * @param loc 创建点位置（Debug 用于未检查诊断）
      */
     template <typename T, bool Lean>
-    result_t<T, Lean>::result_t(error_context_t context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>)
-        : state_(result_state_t::error) {
+    result_t<T, Lean>::result_t(error_context_t context, [[maybe_unused]] utils::source_location_t loc) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>)
+        : state_(result_state_t::error)
+#ifndef NDEBUG
+        , created_at_(loc)
+#endif
+    {
         if constexpr (Lean) {
             new (&storage_.error) error_storage_t(context.get_code());
         } else {
@@ -201,7 +238,11 @@ namespace error_system::core {
     template <typename T, bool Lean>
     result_t<T, Lean>::result_t(result_t&& other) noexcept(std::is_nothrow_move_constructible_v<value_type_t>
                                                             && std::is_nothrow_move_constructible_v<error_storage_t>)
-        : state_(other.state_), checked_(other.checked_) {
+        : state_(other.state_)
+#ifndef NDEBUG
+        , checked_(other.checked_), created_at_(other.created_at_)
+#endif
+    {
         switch (state_) {
             case result_state_t::value:
                 new (&storage_.value) value_type_t(std::move(other.storage_.value));
@@ -213,7 +254,7 @@ namespace error_system::core {
                 break;
         }
         other.destroy_active_();
-        other.checked_ = true;
+        other.mark_checked_();
     }
 
     /**
@@ -228,7 +269,10 @@ namespace error_system::core {
             check_on_destroy_();
             destroy_active_();
             state_ = other.state_;
+#ifndef NDEBUG
             checked_ = other.checked_;
+            created_at_ = other.created_at_;
+#endif
             switch (state_) {
                 case result_state_t::value:
                     new (&storage_.value) value_type_t(std::move(other.storage_.value));
@@ -240,7 +284,7 @@ namespace error_system::core {
                     break;
             }
             other.destroy_active_();
-            other.checked_ = true;
+            other.mark_checked_();
         }
         return *this;
     }
@@ -257,7 +301,8 @@ namespace error_system::core {
 
     /**
      * @brief 错误构造工厂（推荐替代直接构造错误结果，避免重载混淆）
-     * @details 委托 detail::make_error_storage 完成通知与存储构造，消除主模板与 void 特化的重复逻辑
+     * @details 委托 detail::make_error_storage 完成通知与存储构造，消除主模板与 void 特化的重复逻辑。
+     *          location 同时作为 error_context_t 内部位置与 result_t::created_at_。
      * @param code 错误码
      * @param message 错误消息
      * @param location 源位置
@@ -267,7 +312,7 @@ namespace error_system::core {
     result_t<T, Lean> result_t<T, Lean>::make_error(error_code_t code, const std::string& message,
                                                      utils::source_location_t location) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
         assert(!code.is_success_code() && "make_error called with a success code");
-        return result_t(detail::make_error_storage<Lean>(code, message, location));
+        return result_t(detail::make_error_storage<Lean>(code, message, location), location);
     }
 
     /**
@@ -281,27 +326,31 @@ namespace error_system::core {
     result_t<T, Lean> result_t<T, Lean>::make_error(error_code_t code, std::string&& message,
                                                      utils::source_location_t location) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
         assert(!code.is_success_code() && "make_error called with a success code");
-        return result_t(detail::make_error_storage<Lean>(code, std::move(message), location));
+        return result_t(detail::make_error_storage<Lean>(code, std::move(message), location), location);
     }
 
     /**
      * @brief 错误构造工厂（从 const error_context_t，完整模式下内部克隆）
      * @param context 错误上下文 const 引用
+     * @param loc 创建点位置
      * @return 构造好的错误结果
      */
     template <typename T, bool Lean>
-    result_t<T, Lean> result_t<T, Lean>::make_error(const error_context_t& context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
-        return result_t(detail::make_error_storage<Lean>(context));
+    result_t<T, Lean> result_t<T, Lean>::make_error(const error_context_t& context,
+                                                     utils::source_location_t loc) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
+        return result_t(detail::make_error_storage<Lean>(context), loc);
     }
 
     /**
      * @brief 错误构造工厂（从 error_context_t 右值，无克隆开销）
      * @param context 错误上下文右值
+     * @param loc 创建点位置
      * @return 构造好的错误结果
      */
     template <typename T, bool Lean>
-    result_t<T, Lean> result_t<T, Lean>::make_error(error_context_t&& context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
-        return result_t(detail::make_error_storage<Lean>(std::move(context)));
+    result_t<T, Lean> result_t<T, Lean>::make_error(error_context_t&& context,
+                                                     utils::source_location_t loc) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>) {
+        return result_t(detail::make_error_storage<Lean>(std::move(context)), loc);
     }
 
     /**
@@ -314,7 +363,7 @@ namespace error_system::core {
         static_assert(std::is_default_constructible_v<value_type_t>,
                       "result_t::value() requires T to be default-constructible. "
                       "Use value_pointer() for non-default-constructible types.");
-        checked_ = true;
+        mark_checked_();
         assert(state_ == result_state_t::value && "result_t::value() called on an error result");
         if (state_ == result_state_t::value) {
             return storage_.value;
@@ -333,7 +382,7 @@ namespace error_system::core {
         static_assert(std::is_default_constructible_v<value_type_t>,
                       "result_t::value() requires T to be default-constructible. "
                       "Use value_pointer() for non-default-constructible types.");
-        checked_ = true;
+        mark_checked_();
         assert(state_ == result_state_t::value && "result_t::value() called on an error result");
         if (state_ == result_state_t::value) {
             return storage_.value;
@@ -351,7 +400,7 @@ namespace error_system::core {
     template <typename T, bool Lean>
     auto result_t<T, Lean>::error() const noexcept
         -> std::conditional_t<Lean, error_context_t, const error_context_t&> {
-        checked_ = true;
+        mark_checked_();
         assert(state_ == result_state_t::error && "result_t::error() called on a success result");
         if constexpr (Lean) {
             if (state_ == result_state_t::error) {
@@ -375,7 +424,7 @@ namespace error_system::core {
     template <typename T, bool Lean>
     template <bool IsLean, typename>
     error_context_t& result_t<T, Lean>::error() noexcept {
-        checked_ = true;
+        mark_checked_();
         assert(state_ == result_state_t::error && "result_t::error() called on a success result");
         if (state_ == result_state_t::error) {
             return storage_.error;
@@ -391,7 +440,7 @@ namespace error_system::core {
      */
     template <typename T, bool Lean>
     error_code_t result_t<T, Lean>::error_code() const noexcept {
-        checked_ = true;
+        mark_checked_();
         if (state_ == result_state_t::error) {
             if constexpr (Lean) {
                 return storage_.error;
@@ -643,7 +692,7 @@ namespace error_system::core {
         noexcept(std::is_nothrow_invocable_v<SuccessFunction&, const value_type_t&>
                  && std::is_nothrow_invocable_v<ErrorFunction&, const error_context_t&>)
         -> decltype(success_function(std::declval<const value_type_t&>())) {
-        checked_ = true;
+        mark_checked_();
         if (state_ == result_state_t::value) {
             return success_function(storage_.value);
         }
@@ -711,7 +760,7 @@ namespace error_system::core {
      */
     template <typename T, bool Lean>
     std::string result_t<T, Lean>::to_string() const noexcept {
-        checked_ = true;
+        mark_checked_();
         try {
             switch (state_) {
                 case result_state_t::value: {
@@ -761,14 +810,28 @@ namespace error_system::core {
 
     /**
      * @brief 析构前检查未消费错误
-     * @details Debug 模式下若错误未被检查则输出诊断信息；Release 模式整段消除。
+     * @details Debug 模式下若错误未被检查则输出诊断信息（指向 result_t 创建点位置）；
+     *          Release 模式整段消除。
      */
     template <bool Lean>
     inline void result_t<void, Lean>::check_on_destroy_() const noexcept {
 #ifndef NDEBUG
         if (!checked_ && state_ == result_state_t::error) {
-            detail::report_unchecked_result(__FILE__, __LINE__);
+            detail::report_unchecked_result(created_at_);
         }
+#else
+        (void)0;
+#endif
+    }
+
+    /**
+     * @brief 标记结果已被检查
+     * @details Debug 下设置 checked_，Release 下空操作（编译器内联消除）
+     */
+    template <bool Lean>
+    inline void result_t<void, Lean>::mark_checked_() const noexcept {
+#ifndef NDEBUG
+        checked_ = true;
 #else
         (void)0;
 #endif
@@ -778,29 +841,44 @@ namespace error_system::core {
      * @brief Lean 模式专用私有构造函数
      * @details 直接接受 error_code_t，零堆开销。
      * @param code 错误码
+     * @param loc 创建点位置（Debug 用于未检查诊断）
      */
     template <bool Lean>
     template <bool IsLean, typename>
-    inline result_t<void, Lean>::result_t(error_code_t code) noexcept
-        : state_(result_state_t::error) {
+    inline result_t<void, Lean>::result_t(error_code_t code, [[maybe_unused]] utils::source_location_t loc) noexcept
+        : state_(result_state_t::error)
+#ifndef NDEBUG
+        , created_at_(loc)
+#endif
+    {
         new (&storage_.error) error_storage_t(code);
     }
 
     /**
      * @brief 默认构造（成功状态）
+     * @param loc 创建点位置（Debug 用于未检查诊断）
      * @return 无返回值（构造函数）
      */
     template <bool Lean>
-    inline result_t<void, Lean>::result_t() noexcept
-        : state_(result_state_t::empty) {}
+    inline result_t<void, Lean>::result_t([[maybe_unused]] utils::source_location_t loc) noexcept
+        : state_(result_state_t::empty)
+#ifndef NDEBUG
+        , created_at_(loc)
+#endif
+    {}
 
     /**
      * @brief 从错误上下文构造
      * @param context 错误上下文
+     * @param loc 创建点位置（Debug 用于未检查诊断）
      */
     template <bool Lean>
-    inline result_t<void, Lean>::result_t(error_context_t context) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>)
-        : state_(result_state_t::error) {
+    inline result_t<void, Lean>::result_t(error_context_t context, [[maybe_unused]] utils::source_location_t loc) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>)
+        : state_(result_state_t::error)
+#ifndef NDEBUG
+        , created_at_(loc)
+#endif
+    {
         if constexpr (Lean) {
             new (&storage_.error) error_storage_t(context.get_code());
         } else {
@@ -814,12 +892,16 @@ namespace error_system::core {
      */
     template <bool Lean>
     inline result_t<void, Lean>::result_t(result_t&& other) noexcept(std::is_nothrow_move_constructible_v<error_storage_t>)
-        : state_(other.state_), checked_(other.checked_) {
+        : state_(other.state_)
+#ifndef NDEBUG
+        , checked_(other.checked_), created_at_(other.created_at_)
+#endif
+    {
         if (state_ == result_state_t::error) {
             new (&storage_.error) error_storage_t(std::move(other.storage_.error));
         }
         other.destroy_active_();
-        other.checked_ = true;
+        other.mark_checked_();
     }
 
     /**
@@ -833,12 +915,15 @@ namespace error_system::core {
             check_on_destroy_();
             destroy_active_();
             state_ = other.state_;
+#ifndef NDEBUG
             checked_ = other.checked_;
+            created_at_ = other.created_at_;
+#endif
             if (state_ == result_state_t::error) {
                 new (&storage_.error) error_storage_t(std::move(other.storage_.error));
             }
             other.destroy_active_();
-            other.checked_ = true;
+            other.mark_checked_();
         }
         return *this;
     }
@@ -855,7 +940,8 @@ namespace error_system::core {
 
     /**
      * @brief 错误构造工厂
-     * @details 委托 detail::make_error_storage 完成通知与存储构造，与主模板共用同一组助手
+     * @details 委托 detail::make_error_storage 完成通知与存储构造，与主模板共用同一组助手。
+     *          location 同时作为 error_context_t 内部位置与 result_t::created_at_。
      * @param code 错误码
      * @param message 错误消息
      * @param location 源位置
@@ -865,7 +951,7 @@ namespace error_system::core {
     inline result_t<void, Lean> result_t<void, Lean>::make_error(error_code_t code, const std::string& message,
                                                                   utils::source_location_t location) noexcept {
         assert(!code.is_success_code() && "make_error called with a success code");
-        return result_t<void, Lean>(detail::make_error_storage<Lean>(code, message, location));
+        return result_t<void, Lean>(detail::make_error_storage<Lean>(code, message, location), location);
     }
 
     /**
@@ -879,27 +965,31 @@ namespace error_system::core {
     inline result_t<void, Lean> result_t<void, Lean>::make_error(error_code_t code, std::string&& message,
                                                                   utils::source_location_t location) noexcept {
         assert(!code.is_success_code() && "make_error called with a success code");
-        return result_t<void, Lean>(detail::make_error_storage<Lean>(code, std::move(message), location));
+        return result_t<void, Lean>(detail::make_error_storage<Lean>(code, std::move(message), location), location);
     }
 
     /**
      * @brief 错误构造工厂（从 const error_context_t，完整模式下内部克隆）
      * @param context 错误上下文 const 引用
+     * @param loc 创建点位置
      * @return 构造好的错误结果
      */
     template <bool Lean>
-    inline result_t<void, Lean> result_t<void, Lean>::make_error(const error_context_t& context) noexcept {
-        return result_t<void, Lean>(detail::make_error_storage<Lean>(context));
+    inline result_t<void, Lean> result_t<void, Lean>::make_error(const error_context_t& context,
+                                                                  utils::source_location_t loc) noexcept {
+        return result_t<void, Lean>(detail::make_error_storage<Lean>(context), loc);
     }
 
     /**
      * @brief 错误构造工厂（从 error_context_t 右值，无克隆开销）
      * @param context 错误上下文右值
+     * @param loc 创建点位置
      * @return 构造好的错误结果
      */
     template <bool Lean>
-    inline result_t<void, Lean> result_t<void, Lean>::make_error(error_context_t&& context) noexcept {
-        return result_t<void, Lean>(detail::make_error_storage<Lean>(std::move(context)));
+    inline result_t<void, Lean> result_t<void, Lean>::make_error(error_context_t&& context,
+                                                                  utils::source_location_t loc) noexcept {
+        return result_t<void, Lean>(detail::make_error_storage<Lean>(std::move(context)), loc);
     }
 
     /**
@@ -911,7 +1001,7 @@ namespace error_system::core {
     template <bool Lean>
     inline auto result_t<void, Lean>::error() const noexcept
         -> std::conditional_t<Lean, error_context_t, const error_context_t&> {
-        checked_ = true;
+        mark_checked_();
         assert(state_ == result_state_t::error && "result_t<void>::error() called on a success result");
         if constexpr (Lean) {
             if (state_ == result_state_t::error) {
@@ -935,7 +1025,7 @@ namespace error_system::core {
     template <bool Lean>
     template <bool IsLean, typename>
     inline error_context_t& result_t<void, Lean>::error() noexcept {
-        checked_ = true;
+        mark_checked_();
         assert(state_ == result_state_t::error && "result_t<void>::error() called on a success result");
         if (state_ == result_state_t::error) {
             return storage_.error;
@@ -951,7 +1041,7 @@ namespace error_system::core {
      */
     template <bool Lean>
     inline error_code_t result_t<void, Lean>::error_code() const noexcept {
-        checked_ = true;
+        mark_checked_();
         if (state_ == result_state_t::error) {
             if constexpr (Lean) {
                 return storage_.error;
@@ -1163,7 +1253,7 @@ namespace error_system::core {
      */
     template <bool Lean>
     std::string result_t<void, Lean>::to_string() const noexcept {
-        checked_ = true;
+        mark_checked_();
         try {
             if (state_ == result_state_t::error) {
                 if constexpr (Lean) {

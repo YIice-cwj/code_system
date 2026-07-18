@@ -372,7 +372,7 @@ void demo_void_or_else() {
     std::cout << "  恢复后: " << void_recover.is_success() << std::endl;
 }
 
-/** @brief 13.1 Lean 模式：result_t<T, true> 仅存储错误码（24 字节） */
+/** @brief 13.1 Lean 模式：result_t<T, true> 仅存储错误码（Release 16 字节，Debug 48 字节） */
 void demo_lean_construct() {
     section("13.1 Lean 模式：result_t<T, true> 仅存储错误码");
     auto r = result_t<int, true>::make_error(biz::trade_errors::ERR_ORDER_NOT_FOUND, "Lean 错误");

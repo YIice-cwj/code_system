@@ -209,6 +209,9 @@ static void bm_result_propagate_error(benchmark::State& state) {
     for (auto _ : state) {
         auto r = es_propagate(-1);
         benchmark::DoNotOptimize(r);
+#ifndef NDEBUG
+        (void)r.is_error();
+#endif
     }
     state.SetItemsProcessed(state.iterations());
 }
