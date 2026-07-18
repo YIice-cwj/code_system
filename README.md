@@ -54,7 +54,7 @@ ctest --test-dir build --output-on-failure  # 可选
 include(FetchContent)
 FetchContent_Declare(error_system
     GIT_REPOSITORY https://github.com/YIice-cwj/error_system.git
-    GIT_TAG v4.4.0)
+    GIT_TAG v4.4.1)
 FetchContent_MakeAvailable(error_system)
 target_link_libraries(my_app PRIVATE error_system::error_system)
 ```

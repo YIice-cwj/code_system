@@ -4,14 +4,14 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
-## [v4.4.0] - 2026-07-13
+## [v4.4.1] - 2026-07-18
 
 ### Added
 - utils 基础设施组件：log.h / bad_alloc_handler.h / singleton.h / tagged_ptr.h / lock_free_queue.h / object_pool.h / sso_string.h
 - 可观测性插件：metric_plugin_t 与 log_plugin_t
 - 异步 result 链式适配器：std::future<result_t<T>> 支持 then/recover
 - 异步通知通道、通知模式（sync / async_queue / sync_deferred）、去重采样器
-- result_t Lean 模式（result_t<T, bool Lean> 模板参数化），基础类型体积 40B→24B
+- result_t Lean 模式（result_t<T, bool Lean> 模板参数化），Release 下基础类型体积 32B→16B（Debug 64B→48B）
 - error_context_t::make_minimal 静态工厂，供 Lean 路径零副作用构造
 - locale 父链回退机制
 - 类型安全：编译期冲突检测 + make_error 防御性断言
@@ -30,6 +30,9 @@
 - 文档重构为精炼框架（项目简介 / 关键特性 / 兼容依赖 / 快速集成 / 核心示例 / 性能表现）
 - 核心模块注释规范化与实现定义分离（.h 声明 / .cc 实现 / .inl 模板实现）
 - registry / serializer / result 模块文件重定位至对应子目录
+- 文档全量更新至 v4.4.1：sizeof 数据区分 Debug/Release（`result_t<int,false>` 64B/32B、`result_t<int,true>` 48B/16B，因 `#ifndef NDEBUG` 包裹 `checked_` + `created_at_` 共 32B）
+- 基准对比文档补充 Lean vs Full 详细对比章节（Release + Debug 双版本，10 次中位数）
+- 性能数据基于全量重新编译后重新采集（Release 错误构造 61 ns / 错误传播 63 ns / to_string 140 ns / to_json 144 ns）
 
 ### Fixed
 - mpsc_queue_t 引入 hazard pointer 消除 use-after-free 风险
