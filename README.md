@@ -6,7 +6,7 @@
 
 ## 🚀 项目简介
 
-高性能 C++17 错误码管理系统——将完整错误上下文（错误码、消息、负载、因果链、堆栈）压缩进一个 64 位整数与 24 字节的 Move-Only 上下文对象，成功路径近零开销，错误路径一次性付出 ~65 ns 换取结构化诊断信息。
+高性能 C++17 错误码管理系统——将完整错误上下文（错误码、消息、负载、因果链、堆栈）压缩进一个 64 位整数与 24 字节的 Move-Only 上下文对象，成功路径近零开销，错误路径一次性付出 ~61 ns 换取结构化诊断信息。
 
 ## ⚡ 关键特性
 
@@ -120,20 +120,28 @@ plugin::plugin_registry_t::instance().register_plugin_ref(logger);
 
 ## 📊 性能表现
 
-基于 `tests/migration/perf/plain_error_code_benchmark.cc`，对比 plain int / `std::error_code` / error_system。10 次重复取中位数，macOS Apple Silicon 10 核，Release `-O3 -DNDEBUG` / Debug `-g`，全局关闭 validation/stacktrace/location。
+基于 `tests/migration/perf/plain_error_code_benchmark.cc`，对比 plain int / `std::error_code` / error_system。10 次重复取中位数，macOS Apple Silicon 10 核，Release `-O3 -DNDEBUG` / Debug `-g -fsanitize=address,undefined`，全局关闭 validation/stacktrace/location。
 
 | 维度 | plain int | std::error_code | error_system (Release) | error_system (Debug) |
 |------|--------:|--------:|--------:|--------:|
-| 成功构造 | 0.23 ns | 0.23 ns | 0.35 ns | 25.6 ns |
-| 错误构造 | 0.23 ns | 0.23 ns | 65 ns | 1552 ns |
-| 成功传播 | 0.23 ns | — | 0.47 ns | 65.5 ns |
-| 错误传播 | 0.23 ns | — | 71 ns | 1656 ns |
-| `to_string()` | 37 ns (snprintf) | — | 146 ns | 1209 ns |
-| `to_json()` | — | — | 152 ns | 996 ns |
+| 成功构造 | 0.23 ns | 0.23 ns | 0.46 ns | 15.3 ns |
+| 错误构造 | 0.23 ns | 0.23 ns | 61 ns | 590 ns |
+| 成功传播 | 0.23 ns | — | 0.24 ns | 31.9 ns |
+| 错误传播 | 0.23 ns | — | 63 ns | 658 ns |
+| `to_string()` | 36 ns (snprintf) | — | 140 ns | 393 ns |
+| `to_json()` | — | — | 144 ns | 316 ns |
 
-**sizeof 对比**：`int`=4B · `std::error_code`=16B · `error_context_t`=**24B** · `result_t<int>`=40B · `result_t<int, true>`=**24B**
+**sizeof 对比**（Debug / Release 因 `#ifndef NDEBUG` 包裹 `checked_` + `created_at_` 而不同）：
 
-成功路径 Release 下 `result_t` 比 plain int 仅多 0.12 ns，可忽略；错误路径 65 ns 换取消息/位置/负载/因果链/堆栈等 plain int 无法提供的能力。完整对比与运行方法见 [基准对比](docs/benchmark_comparison.md)。
+| 类型 | Release | Debug | 说明 |
+|------|:---:|:---:|------|
+| `int` | 4 B | 4 B | 传统错误码 |
+| `std::error_code` | 16 B | 16 B | 标准库 |
+| `error_context_t` | **24 B** | **24 B** | Move-Only，无 Debug 增量 |
+| `result_t<int, true>` (Lean) | **16 B** | **48 B** | Debug +32B（checked_+created_at_） |
+| `result_t<int, false>` (Full) | **32 B** | **64 B** | Debug +32B（checked_+created_at_） |
+
+成功路径 Release 下 `result_t` 比 plain int 仅多 0.23 ns，可忽略；错误路径 61 ns 换取消息/位置/负载/因果链/堆栈等 plain int 无法提供的能力。完整对比与运行方法见 [基准对比](docs/benchmark_comparison.md)。
 
 ## 文档
 

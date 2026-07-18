@@ -72,7 +72,9 @@ void bump_epoch_() noexcept { epoch_counter_.fetch_add(1, std::memory_order_rele
 
 22. **Move-Only error_context_t（v4.0.0）**：24 字节紧凑布局，`runtime_block_t` 堆块收拢动态字段（payload 溢出、堆栈、cause 链），禁用拷贝仅保留移动语义。
 23. **union + result_state_t（v4.0.0）**：`result_t<T>` 用 `union` + `result_state_t` 替代 `std::variant`，以支持 Move-Only 的 `error_context_t` 作为错误载荷。
-24. **Lean 存储精简 + 双通道通知（v4.4.0）**：`result_t<T, true>` 的 `error_storage_t` 直接为 `error_code_t`（8B），不再经 `lean_storage_t` 中转，`result_t<int, true>` 从 40B 降至 24B。通知架构新增 `on_code(error_code_t)` 接口与 code-only 通道：`i_error_plugin_t` 默认空实现，`plugin_registry_t::notify(code)` 按 mode 分发到 `on_code`，全程不构造 `error_context_t`。`async_notification_channel_t` 双通道（context + code）独立工作线程；`sync_deferred` 模式维护独立线程本地 `code_buffer`。内置插件（log/metric/router）均实现 `on_code`，其中 `error_router_plugin_t` 新增 `code_handler_t` 独立注册体系，与 `error_handler_t` 互不影响。
+24. **Lean 存储精简 + 双通道通知（v4.4.0）**：`result_t<T, true>` 的 `error_storage_t` 直接为 `error_code_t`（8B），不再经 `lean_storage_t` 中转，Release 下 `result_t<int, true>` 从 32B 降至 16B（Debug 下为 48B，因 `#ifndef NDEBUG` 包裹 `checked_` + `created_at_` 共 32B）。通知架构新增 `on_code(error_code_t)` 接口与 code-only 通道：`i_error_plugin_t` 默认空实现，`plugin_registry_t::notify(code)` 按 mode 分发到 `on_code`，全程不构造 `error_context_t`。`async_notification_channel_t` 双通道（context + code）独立工作线程；`sync_deferred` 模式维护独立线程本地 `code_buffer`。内置插件（log/metric/router）均实现 `on_code`，其中 `error_router_plugin_t` 新增 `code_handler_t` 独立注册体系，与 `error_handler_t` 互不影响。
+
+25. **MPSC 无锁队列 + Hazard Pointer（v4.4.1）**：`mpsc_queue_t` 基于 Michael-Scott 算法 + `tagged_ptr_t`（48 位指针 + 16 位版本号）解决 ABA 问题。节点回收采用 hazard pointer 机制替代固定大小 retire_ring——生产者 `push` 时占用 hazard slot 保护 `tail` 节点，消费者 `pop` 回收前扫描所有 slot，被引用节点延迟到下次回收。`head_` / `tail_` 添加 `alignas(cache_line)` 消除生产者/消费者伪共享。该设计支撑 `async_notification_channel_t` 双通道高并发无锁入队。
 
 | 码特征 | HTTP | gRPC |
 |------|------|------|
